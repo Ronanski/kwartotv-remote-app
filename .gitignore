@@ -1,0 +1,11 @@
+bin/
+obj/
+publish/
+dist/
+src/KwartoTV.App/libs/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.log
+node_modules/

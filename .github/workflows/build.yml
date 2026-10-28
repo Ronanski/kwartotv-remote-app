@@ -1,0 +1,140 @@
+name: Test and Build
+
+on:
+  push:
+    branches: [main, "ccr-*", "claude/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  core:
+    name: Core tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: "8.0.x" }
+      - run: dotnet run --project tests/KwartoTV.Tests -c Release
+
+  windows:
+    name: Windows app and installer
+    needs: core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: "8.0.x" }
+
+      - name: Get libmpv (video engine)
+        shell: pwsh
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: ./tools/get-libmpv.ps1
+
+      - name: Publish app (self-contained, so the PC needs no .NET)
+        run: dotnet publish src/KwartoTV.App -c Release -r win-x64 --self-contained true -p:Version=1.0.${{ github.run_number }} -p:DebugType=None -o publish
+
+      - name: Check libmpv is in the package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path publish/libmpv-2.dll)) { throw "libmpv-2.dll missing from publish folder" }
+          Get-ChildItem publish | Measure-Object Length -Sum | ForEach-Object { "{0:N0} MB in publish" -f ($_.Sum / 1MB) }
+
+      - name: Build installer (KwartoTV.exe)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc "/DAppVersion=1.0.${{ github.run_number }}" installer/KwartoTV.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          Get-Item dist/KwartoTV.exe | Select-Object Name, Length
+
+      - name: Install silently, as a user would
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/KwartoTV.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/TASKS=""','/DIR=C:\KwartoTV-test','/LOG=install.log' -Wait -PassThru
+          Get-Content install.log -Tail 25
+          if ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)" }
+          if (-not (Test-Path C:\KwartoTV-test\KwartoTV.exe)) { throw "KwartoTV.exe not installed" }
+          if (-not (Test-Path C:\KwartoTV-test\libmpv-2.dll)) { throw "libmpv-2.dll not installed" }
+          netsh http show urlacl url=http://+:8765/
+          netsh advfirewall firewall show rule name="KwartoTV remote" | Select-String "Rule Name","LocalPort","Enabled"
+          if (-not ((netsh http show urlacl url=http://+:8765/) -match "8765")) { throw "URL reservation was not created" }
+
+      - name: Smoke test the installed app (server, discovery, screenshots)
+        shell: pwsh
+        run: ./tools/smoke-windows.ps1 -Exe C:\KwartoTV-test\KwartoTV.exe -OutDir qa-shots
+
+      - name: Uninstall cleanly
+        shell: pwsh
+        run: |
+          $u = Get-ChildItem C:\KwartoTV-test -Filter "unins*.exe" | Select-Object -First 1
+          Start-Process $u.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait
+          Start-Sleep 3
+          if ((netsh http show urlacl url=http://+:8765/) -match "8765") { throw "URL reservation left behind" }
+
+      - uses: actions/upload-artifact@v4
+        with: { name: KwartoTV-installer, path: dist/KwartoTV.exe, if-no-files-found: error }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: windows-screenshots, path: qa-shots, if-no-files-found: ignore }
+
+  android:
+    name: Android remote (APK)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: android } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Accept SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+        env: { KWARTO_VERSION_CODE: "${{ github.run_number }}" }
+      - name: Lint
+        run: ./gradlew --no-daemon lintRelease
+        env: { KWARTO_VERSION_CODE: "${{ github.run_number }}" }
+      - name: Build signed APK
+        run: ./gradlew --no-daemon assembleRelease
+        env: { KWARTO_VERSION_CODE: "${{ github.run_number }}" }
+      - name: Name the APK
+        run: |
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk ../dist/KwartoTV-Remote.apk
+          ls -la ../dist
+      - name: Check the APK
+        run: |
+          "$ANDROID_HOME"/build-tools/*/aapt2 dump badging ../dist/KwartoTV-Remote.apk | head -8
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs ../dist/KwartoTV-Remote.apk | head -3
+      - uses: actions/upload-artifact@v4
+        with: { name: KwartoTV-Remote-apk, path: dist/KwartoTV-Remote.apk, if-no-files-found: error }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: android-lint, path: android/app/build/reports/lint-results-release.html, if-no-files-found: ignore }
+
+  release:
+    name: Publish the latest build
+    needs: [windows, android]
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/pull/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Publish release "latest"
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          ls -la dist
+          gh release delete latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create latest dist/KwartoTV.exe dist/KwartoTV-Remote.apk --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "KwartoTV (latest build)" \
+            --notes "Built from ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). KwartoTV.exe is the Windows installer. KwartoTV-Remote.apk is the Android remote (allow installs from this source once)."
