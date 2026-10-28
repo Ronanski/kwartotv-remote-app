@@ -100,6 +100,21 @@ Shot "12-home-after-iptv-org"
 Start-Sleep -Seconds 1
 $saved = Get-Content (Join-Path $data "settings.json") -Raw
 Check ($saved -match "iptv-org.github.io/iptv/countries/ph.m3u") "picking Philippines added the iptv-org playlist to the settings"
+# on-screen keyboard: OK on the empty search box opens it, then type with it
+Keys "{F7}"
+Keys "{ENTER}"
+Shot "14-on-screen-keyboard"
+Keys "{ENTER}{ENTER}"
+Shot "15-keyboard-typed"
+Keys "{ESC}"
+Keys "{ESC}"
+Keys "{F8}"
+Shot "16-power-menu"
+Keys "{ESC}"
+Keys "{F4}"
+Keys "{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}"
+Shot "17-settings-updates"
+Keys "{F1}"
 Keys "{F5}"
 Start-Sleep -Seconds 25
 Shot "09-youtube-in-app"
@@ -113,6 +128,9 @@ Start-Sleep -Seconds 2
 Keys "1"
 Start-Sleep -Seconds 6
 Shot "06-live-tv-player"
+# volume rocker: + on the number pad raises the Windows volume and shows the bar
+Keys "{ADD}"
+Shot "18-volume-rocker"
 Keys "{ENTER}"
 Shot "07-mini-guide"
 Keys "{ESC}"

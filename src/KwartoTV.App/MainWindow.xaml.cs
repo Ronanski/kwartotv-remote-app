@@ -304,10 +304,10 @@ public partial class MainWindow : Window, IShell
             e.Handled = true;
             return;
         }
-        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube, F6 Netflix, F7 add iptv-org channels.
-        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or Key.F6 or Key.F7 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube, F6 Netflix, F7 add iptv-org channels, F8 power menu.
+        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or Key.F6 or Key.F7 or Key.F8 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
-            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; case Key.F6: LaunchNetflix(); break; case Key.F7: AddIptvOrgPlaylist(); break; default: ShowSettings(); break; }
+            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; case Key.F6: LaunchNetflix(); break; case Key.F7: AddIptvOrgPlaylist(); break; case Key.F8: Dialogs.PowerMenu(this); break; default: ShowSettings(); break; }
             e.Handled = true;
             return;
         }
