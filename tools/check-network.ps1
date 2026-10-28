@@ -12,7 +12,11 @@ $ip = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.Net
 Say White "This PC's LAN address: $ip"
 $listening = $false
 try { $r = Invoke-RestMethod "http://$($ip):$port/info" -TimeoutSec 5; $listening = $r.app -eq "KwartoTV"; Say Green "OK: KwartoTV answers on http://$($ip):$port ($($r.name))" }
-catch { Say Red "KwartoTV does not answer on http://$($ip):$port. Is the app open? ($($_.Exception.Message))" }
+catch {
+    $running = Get-Process KwartoTV -ErrorAction SilentlyContinue
+    if ($running) { Say Red "KwartoTV is open but its remote server is not answering. Update to the latest KwartoTV.exe (older versions had this bug). ($($_.Exception.Message))" }
+    else { Say Red "KwartoTV is not running. Open it first. ($($_.Exception.Message))" }
+}
 
 Say Cyan "`n== 2. Network type (Public blocks phones) =="
 Get-NetConnectionProfile | ForEach-Object {
@@ -27,12 +31,15 @@ Get-NetFirewallProfile | ForEach-Object {
 }
 Remove-NetFirewallRule -DisplayName "KwartoTV remote", "KwartoTV discovery" 2>$null
 New-NetFirewallRule -DisplayName "KwartoTV remote" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $port -Profile Any | Out-Null
+Remove-NetFirewallRule -DisplayName "KwartoTV app" 2>$null
+$exe = (Get-Process KwartoTV -ErrorAction SilentlyContinue | Select-Object -First 1).Path
+if (-not $exe) { $exe = "$env:ProgramFiles\KwartoTV\KwartoTV.exe" }
+if (Test-Path $exe) { New-NetFirewallRule -DisplayName "KwartoTV app" -Direction Inbound -Action Allow -Program $exe -Profile Any | Out-Null }
 New-NetFirewallRule -DisplayName "KwartoTV discovery" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 5353 -Profile Any | Out-Null
 Say Green "Firewall rules for TCP $port and UDP 5353 re-created (all profiles)."
 $blocks = Get-NetFirewallRule -Direction Inbound -Action Block -Enabled True | Where-Object { ($_ | Get-NetFirewallPortFilter).LocalPort -contains "$port" }
 if ($blocks) { Say Yellow "A rule BLOCKS port $($port): $($blocks.DisplayName -join ', ')" }
 netsh http delete urlacl url=http://+:$port/ | Out-Null
-netsh http add urlacl url=http://+:$port/ sddl="D:(A;;GX;;;BU)" | Out-Null
 
 Say Cyan "`n== 4. Other security software (these ignore Windows Firewall rules) =="
 $fw = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName FirewallProduct
@@ -42,7 +49,7 @@ if ($third) { Say Yellow ("Found: " + ($third -join ", ") + ". Its own firewall 
 else { Say Green "None found (only Microsoft Defender)." }
 
 Say Cyan "`n== Verdict =="
-if (-not $listening) { Say Red "Open KwartoTV first, then run this again." }
+if (-not $listening) { Say Red "Install the latest KwartoTV.exe, open it, then run this again." }
 elseif ($third) { Say Yellow "Try the phone again now. If it still times out, allow KwartoTV in: $($third -join ', ')." }
 else {
     Say Green "The PC side is now open. Try pairing on the phone again with address $ip."

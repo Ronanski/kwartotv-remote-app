@@ -357,6 +357,48 @@ Check(vt.Count(k => k.Vk == HostKeyMap.VkVolumeDown) == 50 && vt.Count(k => k.Vk
     Check(LanAddressPicker.Rank(new[] { vm }).Count == 1, "a PC with only a virtual adapter still gets an address");
 }
 
+// ---- TCP server: prefix parsing, chunked bodies, listening on all cards like the real app
+{
+    Check(RemoteServer.ParsePrefix("http://+:8765/").Equals((IPAddress.Any, 8765)) && RemoteServer.ParsePrefix("http://127.0.0.1:9/").Equals((IPAddress.Loopback, 9)), "server prefix parsing");
+    bool badPrefix = false; try { RemoteServer.ParsePrefix("http://+/"); } catch (ArgumentException) { badPrefix = true; }
+    Check(badPrefix, "server prefix needs a port");
+    Check(RemoteServer.DecodeChunked(Encoding.ASCII.GetBytes("4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n"), out var cb) == 1 && Encoding.ASCII.GetString(cb) == "Wikipedia", "chunked body decodes");
+    Check(RemoteServer.DecodeChunked(Encoding.ASCII.GetBytes("4\r\nWi"), out _) == 0 && RemoteServer.DecodeChunked(Encoding.ASCII.GetBytes("zz\r\n"), out _) == -1, "chunked body: partial waits, garbage rejected");
+    Check(RemoteServer.DecodeChunked(Encoding.ASCII.GetBytes("FFFF\r\n"), out _) == -1, "chunked body size cap");
+
+    int aport = 19400 + Random.Shared.Next(200);
+    var ap = new PairingService(); var al = new ChannelLineup(); al.Load(parsed);
+    await using (var anyServer = new RemoteServer($"http://+:{aport}/", ap, new CommandRouter(al, new FakeHost()), al))
+    {
+        anyServer.Start();
+        using var hc = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{aport}/") };
+        Check((await hc.GetStringAsync("/info")).Contains("KwartoTV"), "server on all cards answers (no URL reservation needed)");
+        var lan = MdnsResponder.LocalAddresses().FirstOrDefault();
+        if (lan is not null)
+        {
+            using var lc = new HttpClient { BaseAddress = new Uri($"http://{lan}:{aport}/"), Timeout = TimeSpan.FromSeconds(5) };
+            Check((await lc.GetStringAsync("/info")).Contains("KwartoTV"), $"server answers on the LAN address {lan}");
+        }
+        var pinA = ap.StartPairing(DateTimeOffset.UtcNow);
+        var body = new StringContent($"{{\"pin\":\"{pinA}\",\"name\":\"Fixed length\"}}", Encoding.UTF8, "application/json");
+        var resp = await hc.PostAsync("/pair", body);
+        Check(resp.IsSuccessStatusCode, "pairing with a Content-Length body (like the Android app)");
+        var big = await hc.PostAsync("/pair", new StringContent(new string('x', 5000), Encoding.UTF8, "application/json"));
+        Check((int)big.StatusCode == 413, "oversized pairing body refused");
+        Check((int)(await hc.GetAsync("/nope")).StatusCode == 404, "unknown path 404");
+        using var raw = new System.Net.Sockets.TcpClient();
+        await raw.ConnectAsync(IPAddress.Loopback, aport);
+        await raw.GetStream().WriteAsync("garbage\r\n\r\n"u8.ToArray());
+        var rb = new byte[64]; int rn = await raw.GetStream().ReadAsync(rb);
+        Check(Encoding.ASCII.GetString(rb, 0, rn).StartsWith("HTTP/1.1 400"), "garbage request gets 400");
+        // the port is now taken: a second server must fail loudly, not silently
+        bool taken = false;
+        await using (var secondServer = new RemoteServer($"http://+:{aport}/", ap, new CommandRouter(al, new FakeHost()), al))
+        { try { secondServer.Start(); } catch (System.Net.Sockets.SocketException) { taken = true; } }
+        Check(taken || !OperatingSystem.IsWindows(), "port already in use is reported");
+    }
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

@@ -38,9 +38,14 @@ function Shot($name) {
 }
 function Keys($k) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep -Milliseconds 900 }
 
-$p = Start-Process -FilePath $Exe -PassThru
-Start-Sleep -Seconds 10
-Check (-not $p.HasExited) "app is running"
+# Start KwartoTV with a normal-user (non-admin) token, like on a real PC. CI runs as Administrator,
+# which once hid a bug where the remote server only worked for admins.
+& runas.exe /trustlevel:0x20000 "`"$Exe`""
+$p = $null
+for ($i = 0; $i -lt 20 -and -not $p; $i++) { Start-Sleep -Seconds 1; $p = Get-Process KwartoTV -ErrorAction SilentlyContinue | Select-Object -First 1 }
+Start-Sleep -Seconds 8
+Check ($null -ne $p -and -not $p.HasExited) "app is running as a normal (non-admin) user"
+if (-not $p) { throw "KwartoTV did not start" }
 
 $base = "http://127.0.0.1:8765"
 try { $info = Invoke-RestMethod "$base/info"; Check ($info.app -eq "KwartoTV") "remote /info answers ($($info.name))" } catch { Check $false "remote /info answers: $_" }

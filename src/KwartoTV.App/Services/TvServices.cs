@@ -84,37 +84,31 @@ public sealed class TvServices : IDisposable
     }
 
     /// <summary>Starts the LAN remote server and mDNS advertising. Never throws; RemoteStatus says what happened.</summary>
-    public async Task StartRemoteAsync()
+    public Task StartRemoteAsync()
     {
         var port = Settings.Port;
         var name = $"KwartoTV on {Environment.MachineName}";
-        for (int attempt = 0; attempt < 2; attempt++)
+        var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name };
+        try
         {
-            var server = new RemoteServer(UrlAcl.Prefix(port), Pairing, Router, Lineup) { ServerName = name };
-            try
-            {
-                server.Start();
-                Server = server;
-                RemoteStatus = $"Ready on port {port}";
-                break;
-            }
-            catch (HttpListenerException ex) when (ex.ErrorCode == 5 && attempt == 0)
-            {
-                await server.DisposeAsync();
-                if (!await Task.Run(() => UrlAcl.RunElevated(port))) { RemoteStatus = "Remote is off: Windows permission was declined."; break; }
-            }
-            catch (Exception ex)
-            {
-                await server.DisposeAsync();
-                RemoteStatus = "Remote is off: " + ex.Message;
-                AppPaths.LogLine("remote: " + ex);
-                break;
-            }
+            server.Start();
+            Server = server;
+            RemoteStatus = $"Remote is on (port {port})";
+            AppPaths.LogLine($"remote: listening on port {port}");
         }
-        if (Server is null) return;
+        catch (Exception ex)
+        {
+            _ = server.DisposeAsync();
+            RemoteStatus = ex is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse or SocketError.AccessDenied }
+                ? $"Remote is OFF: port {port} is used by another program."
+                : "Remote is OFF: " + ex.Message;
+            AppPaths.LogLine("remote: " + ex);
+            return Task.CompletedTask;
+        }
         Mdns = new MdnsResponder(name, Environment.MachineName.ToLowerInvariant(), port);
-        if (!Mdns.Start()) { RemoteStatus += " (auto-discovery unavailable, use the address shown in Settings)"; AppPaths.LogLine("mdns: " + Mdns.Error); }
+        if (!Mdns.Start()) { AppPaths.LogLine("mdns: " + Mdns.Error); }
         else AppPaths.LogLine("mdns: advertising " + string.Join(", ", MdnsResponder.LocalAddresses()));
+        return Task.CompletedTask;
     }
 
     /// <summary>LAN addresses a phone could use, best guess first (real adapter with a gateway, virtual adapters last).</summary>

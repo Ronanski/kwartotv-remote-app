@@ -125,6 +125,8 @@ public static class Dialogs
 
         var right = new StackPanel { Width = 480 };
         right.Children.Add(new TextBlock { Text = "Pair a phone", FontSize = 32, FontWeight = FontWeights.Bold });
+        if (tv.Server is null)
+            right.Children.Add(new TextBlock { Text = "⚠ " + tv.RemoteStatus + " Phones cannot connect until this is fixed.", FontSize = 18, Foreground = UiKit.B("Danger"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 6) });
         right.Children.Add(UiKit.Dimmed("Open the KwartoTV Remote app and scan the QR code, or type this code:", 18));
         right.Children.Add(pinText);
         right.Children.Add(timeText);

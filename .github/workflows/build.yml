@@ -64,9 +64,9 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)" }
           if (-not (Test-Path C:\KwartoTV-test\KwartoTV.exe)) { throw "KwartoTV.exe not installed" }
           if (-not (Test-Path C:\KwartoTV-test\libmpv-2.dll)) { throw "libmpv-2.dll not installed" }
-          netsh http show urlacl url=http://+:8765/
-          netsh advfirewall firewall show rule name="KwartoTV remote" | Select-String "Rule Name","LocalPort","Enabled"
-          if (-not ((netsh http show urlacl url=http://+:8765/) -match "8765")) { throw "URL reservation was not created" }
+          netsh advfirewall firewall show rule name="KwartoTV remote" | Select-String "Rule Name","LocalPort","Enabled","Profiles"
+          if (-not ((netsh advfirewall firewall show rule name="KwartoTV remote") -match "8765")) { throw "Firewall rule for port 8765 was not created" }
+          if (-not ((netsh advfirewall firewall show rule name="KwartoTV app") -match "KwartoTV.exe")) { throw "Firewall rule for the app was not created" }
 
       - name: Smoke test the installed app (server, discovery, screenshots)
         shell: pwsh
@@ -78,7 +78,7 @@ jobs:
           $u = Get-ChildItem C:\KwartoTV-test -Filter "unins*.exe" | Select-Object -First 1
           Start-Process $u.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait
           Start-Sleep 3
-          if ((netsh http show urlacl url=http://+:8765/) -match "8765") { throw "URL reservation left behind" }
+          if ((netsh advfirewall firewall show rule name="KwartoTV remote") -match "8765") { throw "Firewall rule left behind" }
 
       - uses: actions/upload-artifact@v4
         with: { name: KwartoTV-installer, path: dist/KwartoTV.exe, if-no-files-found: error }

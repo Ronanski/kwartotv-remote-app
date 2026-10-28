@@ -4,8 +4,8 @@ using System.Security.Principal;
 namespace KwartoTV.App.Services;
 
 /// <summary>
-/// HttpListener on http://+:PORT/ needs a URL reservation (and the firewall open) for non-admin users.
-/// The installer adds both. If the app starts without them it asks Windows once (UAC prompt) to add them.
+/// Opens Windows Firewall for the phone remote (TCP port, mDNS, and the app itself). The installer does the same;
+/// the "Fix network access" button runs it again elevated. Also removes the old http.sys URL reservation from earlier versions.
 /// </summary>
 public static class UrlAcl
 {
@@ -17,11 +17,12 @@ public static class UrlAcl
         return new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator);
     }
 
-    /// <summary>Commands that reserve the URL for all local users and open the firewall. Also used by the installer script.</summary>
+    /// <summary>Commands that open the firewall for the remote. Mirrors installer\KwartoTV.iss.</summary>
     public static string[] SetupCommands(int port) => new[]
     {
         $"netsh http delete urlacl url=http://+:{port}/",
-        $"netsh http add urlacl url=http://+:{port}/ sddl=D:(A;;GX;;;BU)",
+        $"netsh advfirewall firewall delete rule name=\"KwartoTV app\"",
+        $"netsh advfirewall firewall add rule name=\"KwartoTV app\" dir=in action=allow program=\"{Environment.ProcessPath}\" profile=any",
         $"netsh advfirewall firewall delete rule name=\"KwartoTV remote\"",
         $"netsh advfirewall firewall add rule name=\"KwartoTV remote\" dir=in action=allow protocol=TCP localport={port} profile=any",
         $"netsh advfirewall firewall delete rule name=\"KwartoTV discovery\"",
