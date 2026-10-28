@@ -56,6 +56,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
           Get-Item dist/KwartoTV.exe | Select-Object Name, Length
 
+      - name: Network check script works
+        shell: pwsh
+        run: ./tools/check-iptv.ps1
+
       - name: Install silently, as a user would
         shell: pwsh
         run: |
