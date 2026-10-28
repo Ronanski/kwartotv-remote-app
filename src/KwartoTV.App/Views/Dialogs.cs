@@ -107,6 +107,13 @@ public static class Dialogs
         tabs.Children.Add(TabButton("Countries", true));
         tabs.Children.Add(TabButton("Categories", false));
         filter.TextChanged += (_, _) => Render();
+        // Enter picks the first match; Down moves into the list (a text box would otherwise keep both keys).
+        filter.PreviewKeyDown += (_, e) =>
+        {
+            if (results.Children.Count == 0 || results.Children[0] is not Button first) return;
+            if (e.Key == System.Windows.Input.Key.Enter) { first.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); e.Handled = true; }
+            else if (e.Key == System.Windows.Input.Key.Down) { first.Focus(); e.Handled = true; }
+        };
         panel.Children.Add(tabs);
         panel.Children.Add(new TextBlock { Text = "Type to search (for example: phil)", FontSize = 16, Foreground = UiKit.B("Dim") });
         panel.Children.Add(filter);

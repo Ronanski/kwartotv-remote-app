@@ -92,7 +92,6 @@ Keys "{F7}"
 Shot "10-iptv-org-picker"
 Keys "phil"
 Shot "11-iptv-org-filtered"
-Keys "{DOWN}"
 Keys "{ENTER}"
 Start-Sleep -Seconds 20
 Keys "{F1}"
