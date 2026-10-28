@@ -25,6 +25,7 @@
     <Using Include="System.Threading.Tasks" />
     <Using Include="System.Collections.Generic" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
     <ProjectReference Include="..\KwartoTV.Core\KwartoTV.Core.csproj" />
     <Resource Include="Assets\kwartotv.png" />
     <!-- libmpv is downloaded by the build script into libs\ (see .github/workflows/build.yml and tools/get-libmpv.ps1) -->

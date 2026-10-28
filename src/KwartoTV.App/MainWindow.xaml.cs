@@ -20,6 +20,7 @@ public partial class MainWindow : Window, IShell
     private readonly DispatcherTimer _digits = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly List<Button> _navButtons = new();
     private PlayerWindow? _player;
+    private WebAppWindow? _web;
     private IInputElement? _focusBeforeDialog;
 
     private PageBase? _current;
@@ -57,13 +58,16 @@ public partial class MainWindow : Window, IShell
             if (_tv.Server is not null && _tv.Pairing.Devices.Count == 0) Dialogs.Pair(this);
             await _tv.RefreshChannelsAsync();
         };
-        Closed += (_, _) => { _player?.Close(); _tv.Apps.Close(); _tv.Dispose(); };
+        Closed += (_, _) => { CloseWeb(); _player?.Close(); _tv.Apps.Close(); _tv.Dispose(); };
     }
 
     public TvServices Tv => _tv;
     public IntPtr Handle => new WindowInteropHelper(this).Handle;
     IntPtr IShell.WindowHandle => Handle;
-    public ForegroundKind ForegroundApp => _player is { IsVisible: true } || !_tv.Apps.IsRunning ? ForegroundKind.KwartoTV : _tv.Apps.Kind;
+    public ForegroundKind ForegroundApp =>
+        _player is { IsVisible: true } ? ForegroundKind.KwartoTV
+        : _web is { IsVisible: true } ? _web.Kind
+        : _tv.Apps.IsRunning ? _tv.Apps.Kind : ForegroundKind.KwartoTV;
 
     private void UpdateClock() => Clock.Text = DateTime.Now.ToString("h:mm tt").ToLowerInvariant();
 
@@ -92,25 +96,26 @@ public partial class MainWindow : Window, IShell
     {
         CloseDialog();
         _player?.Hide();
+        CloseWeb();
         _tv.Apps.Close();
         if (_currentName != "Home") Navigate("Home"); else _current?.Refresh();
         Native.BringToFront(Handle);
         Activate();
     }
 
-    public void ShowLibrary() { _tv.Apps.Close(); _player?.Hide(); Navigate("Library"); Native.BringToFront(Handle); }
-    public void ShowSettings() { _tv.Apps.Close(); _player?.Hide(); Navigate("Settings"); Native.BringToFront(Handle); }
+    public void ShowLibrary() { CloseWeb(); _tv.Apps.Close(); _player?.Hide(); Navigate("Library"); Native.BringToFront(Handle); }
+    public void ShowSettings() { CloseWeb(); _tv.Apps.Close(); _player?.Hide(); Navigate("Settings"); Native.BringToFront(Handle); }
 
     public void ShowLiveTv()
     {
         if (_tv.Lineup.Channels.Count == 0) { ShowToast("No channels yet. Add a playlist in Settings."); ShowSettings(); return; }
-        _tv.Apps.Close();
+        CloseWeb(); _tv.Apps.Close();
         var ch = _tv.Lineup.Current ?? _tv.Lineup.TuneNumber(1);
         if (ch is null) return;
         if (_tv.Lineup.Current is not null) OpenPlayerLive(ch);
     }
 
-    private void OnTuned(Channel ch, int number) => Dispatcher.BeginInvoke(() => { _tv.Apps.Close(); OpenPlayerLive(ch); });
+    private void OnTuned(Channel ch, int number) => Dispatcher.BeginInvoke(() => { CloseWeb(); _tv.Apps.Close(); OpenPlayerLive(ch); });
 
     private void OpenPlayerLive(Channel ch)
     {
@@ -122,15 +127,16 @@ public partial class MainWindow : Window, IShell
     public void PlayFiles(IReadOnlyList<LibraryItem> items, int index)
     {
         if (!MpvPlayer.IsAvailable()) { ShowToast("Video engine (libmpv-2.dll) is missing. Reinstall KwartoTV."); return; }
-        _tv.Apps.Close();
+        CloseWeb(); _tv.Apps.Close();
         _player ??= new PlayerWindow(_tv, this);
         _player.PlayFiles(items, index);
     }
 
     public void LaunchYouTube()
     {
-        PrepareExternal();
-        if (_tv.Apps.LaunchYouTube()) ShowToast("Opening YouTube…"); else ShowToast(_tv.Apps.LastError ?? "Could not open YouTube.");
+        // In-app, with a TV browser identity so the sign-in is the phone code flow and the phone's cast button works.
+        OpenWeb(AppLaunchPlans.YouTubeTvUrl, "youtube", ForegroundKind.YouTube, WebAppWindow.TvUserAgent, "YouTube",
+            () => _tv.Apps.LaunchYouTube());
     }
 
     public async void LaunchNetflix()
@@ -145,8 +151,9 @@ public partial class MainWindow : Window, IShell
         if (_tv.Settings.NetflixAppId is null)
         {
             // No Store app on this PC: open the website in its own fullscreen window instead.
-            if (!_tv.Apps.LaunchWeb(new WebTile("netflix", "Netflix", "https://www.netflix.com/browse"))) ShowToast(_tv.Apps.LastError ?? "Could not open Netflix.");
-            else ShowToast("Netflix app not found, opened netflix.com instead.");
+            OpenWeb("https://www.netflix.com/browse", "netflix", ForegroundKind.Netflix, null, "Netflix",
+                () => _tv.Apps.LaunchWeb(new WebTile("netflix", "Netflix", "https://www.netflix.com/browse")));
+            ShowToast("Netflix app not found, opening netflix.com instead.");
             return;
         }
         if (!_tv.Apps.LaunchNetflix(_tv.Settings.NetflixAppId)) ShowToast(_tv.Apps.LastError ?? "Could not open Netflix.");
@@ -154,8 +161,34 @@ public partial class MainWindow : Window, IShell
 
     public void LaunchWeb(WebTile tile)
     {
+        OpenWeb(tile.Url, "web-" + tile.Id, ForegroundKind.Web, null, tile.Name, () => _tv.Apps.LaunchWeb(tile));
+    }
+
+    /// <summary>Opens a site fullscreen inside KwartoTV. If the embedded browser is not available, uses an external browser window.</summary>
+    private void OpenWeb(string url, string profile, ForegroundKind kind, string? userAgent, string name, Func<bool> browserFallback)
+    {
         PrepareExternal();
-        if (_tv.Apps.LaunchWeb(tile)) ShowToast($"Opening {tile.Name}…"); else ShowToast(_tv.Apps.LastError ?? "Could not open the website.");
+        _tv.Apps.Close();
+        CloseWeb();
+        ShowToast($"Opening {name}…");
+        var w = new WebAppWindow(url, profile, kind, userAgent) { Owner = this };
+        w.HomeRequested += GoHome;
+        w.Failed += _ => Dispatcher.BeginInvoke(() =>
+        {
+            if (!ReferenceEquals(_web, w)) return;
+            CloseWeb();
+            if (!browserFallback()) ShowToast(_tv.Apps.LastError ?? $"Could not open {name}.");
+        });
+        _web = w;
+        w.Show();
+        Native.BringToFront(new WindowInteropHelper(w).Handle);
+    }
+
+    private void CloseWeb()
+    {
+        var w = _web; _web = null;
+        if (w is null) return;
+        try { w.Close(); } catch { }
     }
 
     private void PrepareExternal() { CloseDialog(); _player?.Hide(); }
@@ -203,10 +236,10 @@ public partial class MainWindow : Window, IShell
             e.Handled = true;
             return;
         }
-        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings.
-        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube.
+        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
-            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; default: ShowSettings(); break; }
+            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; default: ShowSettings(); break; }
             e.Handled = true;
             return;
         }

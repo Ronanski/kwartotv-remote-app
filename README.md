@@ -19,7 +19,7 @@ Download the latest build from the **Releases** page (`latest`), or from the art
 5. Several phones can be paired and connected at the same time. Block or revoke any of them in Settings.
 
 ### TV app
-- **Home**: Netflix-style rows (apps, favorites, channel groups). YouTube and Netflix tiles; add any https website as a tile.
+- **Home**: Netflix-style rows (apps, favorites, channel groups). YouTube opens inside KwartoTV (Edge WebView2, TV layout: sign in with the code from your phone, and cast from the phone's YouTube app). Netflix uses the Store app. Add any https website as a tile (also opens inside the app). F1 returns Home.
 - **Live TV**: cable-style. Number keys, ▲▼ channel up/down, Back/Tab = last channel, `F` = favorite, OK/◀ = mini guide.
 - **Library**: videos and music from folders you add.
 - **Settings**: playlists, website tiles, paired devices, library folders, start with Windows.

@@ -68,6 +68,11 @@ Shot "04-settings-scrolled"
 Keys "{F3}"
 Shot "05-library"
 Keys "{F1}"
+Keys "{F5}"
+Start-Sleep -Seconds 25
+Shot "09-youtube-in-app"
+Keys "{F1}"
+Start-Sleep -Seconds 2
 Keys "1"
 Start-Sleep -Seconds 6
 Shot "06-live-tv-player"
