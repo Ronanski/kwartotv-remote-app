@@ -234,12 +234,17 @@ public partial class MainWindow : Window, IShell
 
     public bool DialogOpen => Overlay.Visibility == Visibility.Visible;
 
-    public void ShowDialog(UIElement content)
+    /// <summary>Shows a dialog over the page. [focus] is the element that gets the keyboard first (default: the first control).</summary>
+    public void ShowDialog(UIElement content, UIElement? focus = null)
     {
         _focusBeforeDialog = Keyboard.FocusedElement;
         DialogCard.Child = content;
         Overlay.Visibility = Visibility.Visible;
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => content.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)));
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (focus is not null) { focus.Focus(); Keyboard.Focus(focus); }
+            else content.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        });
     }
 
     public void CloseDialog()

@@ -85,7 +85,7 @@ Keys "{F3}"
 Shot "05-library"
 # iptv-org: are the public links the app builds real, and does picking one fill the channel list end to end?
 foreach ($u in "https://iptv-org.github.io/iptv/countries/ph.m3u", "https://iptv-org.github.io/api/countries.json") {
-    try { $r = Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 30; $n = ([regex]::Matches($r.Content, "#EXTINF")).Count; Check ($r.StatusCode -eq 200) "iptv-org reachable: $u ($($r.Content.Length) bytes, $n channels)" }
+    try { $text = Invoke-RestMethod $u -TimeoutSec 30 | Out-String; $n = ([regex]::Matches($text, "#EXTINF")).Count; Check ($text.Length -gt 100) "iptv-org reachable: $u ($($text.Length) chars, $n channels)" }
     catch { Check $false "iptv-org reachable: $u ($_)" }
 }
 Keys "{F7}"

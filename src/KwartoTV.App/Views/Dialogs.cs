@@ -49,7 +49,7 @@ public static class Dialogs
         buttons.Children.Add(UiKit.ActionButton("Cancel", w.CloseDialog));
         panel.Children.Add(buttons);
         foreach (var b in boxes) b.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { Save(); e.Handled = true; } };
-        w.ShowDialog(panel);
+        w.ShowDialog(panel, boxes.FirstOrDefault());
     }
 
     public static void Confirm(MainWindow w, string text, string yesLabel, Action onYes)
@@ -114,8 +114,7 @@ public static class Dialogs
         panel.Children.Add(shown);
         panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0), Children = { UiKit.ActionButton("Cancel", w.CloseDialog) } });
         Render();
-        w.ShowDialog(panel);
-        filter.Focus();
+        w.ShowDialog(panel, focus: filter);
 
         // Use the current country list from iptv-org when online; the built-in list is the fallback.
         _ = Task.Run(async () =>
