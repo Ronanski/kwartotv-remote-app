@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using KwartoTV.App.Services;
 
 namespace KwartoTV.App.Player;
 
@@ -17,6 +18,15 @@ public sealed class MpvPlayer : IDisposable
     [DllImport(Lib)] private static extern IntPtr mpv_get_property_string(IntPtr ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
     [DllImport(Lib)] private static extern int mpv_command(IntPtr ctx, IntPtr[] args);
     [DllImport(Lib)] private static extern void mpv_free(IntPtr data);
+    [DllImport(Lib)] private static extern IntPtr mpv_wait_event(IntPtr ctx, double timeout);
+    [DllImport(Lib)] private static extern int mpv_request_log_messages(IntPtr ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string minLevel);
+    [DllImport(Lib)] private static extern IntPtr mpv_error_string(int error);
+
+    [StructLayout(LayoutKind.Sequential)] private struct MpvEvent { public int EventId; public int Error; public ulong ReplyUserdata; public IntPtr Data; }
+    [StructLayout(LayoutKind.Sequential)] private struct MpvEventLog { public IntPtr Prefix; public IntPtr Level; public IntPtr Text; public int LogLevel; }
+    [StructLayout(LayoutKind.Sequential)] private struct MpvEventEndFile { public int Reason; public int Error; }
+
+    private const int EvLog = 2, EvEndFile = 7, EvFileLoaded = 8, EndReasonError = 4;
 
     /// <summary>Public stream servers often refuse mpv's own name, so identify as a normal browser unless the playlist says otherwise.</summary>
     public const string DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -55,8 +65,53 @@ public sealed class MpvPlayer : IDisposable
         p.Opt("audio-client-name", "KwartoTV");
         p.Opt("user-agent", DefaultUserAgent);
         if (mpv_initialize(p._ctx) < 0) { p.Dispose(); throw new InvalidOperationException("mpv_initialize failed"); }
+        mpv_request_log_messages(p._ctx, "warn");
         return p;
     }
+
+    /// <summary>What mpv reported since the last call: the file opened, or why it failed (HTTP error, bad format, ...).</summary>
+    public readonly record struct PlayEvents(bool Loaded, string? Problem);
+
+    private readonly List<string> _recentLog = new();
+
+    public PlayEvents TakeEvents()
+    {
+        bool loaded = false; string? problem = null;
+        for (int i = 0; i < 64 && _ctx != IntPtr.Zero; i++)
+        {
+            var ptr = mpv_wait_event(_ctx, 0);
+            if (ptr == IntPtr.Zero) break;
+            var ev = Marshal.PtrToStructure<MpvEvent>(ptr);
+            if (ev.EventId == 0) break;
+            switch (ev.EventId)
+            {
+                case EvFileLoaded: loaded = true; _recentLog.Clear(); break;
+                case EvLog when ev.Data != IntPtr.Zero:
+                {
+                    var log = Marshal.PtrToStructure<MpvEventLog>(ev.Data);
+                    var text = Marshal.PtrToStringUTF8(log.Text)?.Trim();
+                    if (!string.IsNullOrEmpty(text)) { _recentLog.Add(text); if (_recentLog.Count > 8) _recentLog.RemoveAt(0); }
+                    break;
+                }
+                case EvEndFile when ev.Data != IntPtr.Zero:
+                {
+                    var end = Marshal.PtrToStructure<MpvEventEndFile>(ev.Data);
+                    if (end.Reason == EndReasonError)
+                    {
+                        var err = Marshal.PtrToStringUTF8(mpv_error_string(end.Error)) ?? "error " + end.Error;
+                        // the most useful warning line (server said 403/404, unsupported format, ...) is usually just before the error
+                        var hint = _recentLog.LastOrDefault(l => l.Contains("HTTP", StringComparison.OrdinalIgnoreCase) || l.Contains("error", StringComparison.OrdinalIgnoreCase) || l.Contains("failed", StringComparison.OrdinalIgnoreCase));
+                        problem = hint is null ? err : $"{err} ({Shorten(hint)})";
+                        AppPaths.LogLine("player: " + problem);
+                    }
+                    break;
+                }
+            }
+        }
+        return new PlayEvents(loaded, problem);
+    }
+
+    private static string Shorten(string s) => s.Length <= 90 ? s : s[..87] + "...";
 
     private void Opt(string name, string value) => mpv_set_option_string(_ctx, name, value);
 

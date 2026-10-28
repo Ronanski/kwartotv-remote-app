@@ -19,6 +19,9 @@ public static class ResilientHttp
             ConnectTimeout = TimeSpan.FromSeconds(30),
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             AutomaticDecompression = DecompressionMethods.All,
+            // Follow the proxy settings Windows uses for the browser (companies, schools, some ISPs).
+            UseProxy = true,
+            DefaultProxyCredentials = CredentialCache.DefaultCredentials,
         };
         var http = new HttpClient(handler) { Timeout = overall ?? TimeSpan.FromSeconds(120) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("KwartoTV/1.0 (+https://github.com/Ronanski/game-dev-era)");
@@ -28,9 +31,23 @@ public static class ResilientHttp
     private static async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext ctx, CancellationToken ct)
     {
         var host = ctx.DnsEndPoint.Host;
-        IPAddress[] addresses;
-        try { addresses = await Dns.GetHostAddressesAsync(host, ct); }
-        catch (SocketException ex) { throw new HttpRequestException($"DNS could not find {host} ({ex.SocketErrorCode}). Check the internet connection or DNS.", ex); }
+        var addresses = new List<IPAddress>();
+        string? dnsProblem = null;
+        if (IPAddress.TryParse(host, out var literal)) addresses.Add(literal);
+        else
+        {
+            // The provider's DNS first, but not for long: if it fails or hangs, ask a public DNS-over-HTTPS service instead.
+            try
+            {
+                using var dnsLimit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                dnsLimit.CancelAfter(TimeSpan.FromSeconds(4));
+                addresses.AddRange(await Dns.GetHostAddressesAsync(host, dnsLimit.Token));
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) { dnsProblem = ex is OperationCanceledException ? "DNS did not answer in 4 seconds" : ex.Message; }
+            if (addresses.Count == 0) addresses.AddRange(await DohResolver.ResolveAsync(host, ct));
+            if (addresses.Count == 0) throw new HttpRequestException($"Could not find {host}: {dnsProblem ?? "no address"}. Check the internet connection or change the DNS to 1.1.1.1 or 8.8.8.8.");
+        }
 
         Exception? last = null;
         foreach (var a in addresses.OrderBy(a => a.AddressFamily == AddressFamily.InterNetwork ? 0 : 1))
@@ -48,6 +65,6 @@ public static class ResilientHttp
                 last = ex; socket.Dispose();
             }
         }
-        throw new HttpRequestException($"Could not connect to {host}:{ctx.DnsEndPoint.Port} ({addresses.Length} address(es) tried): {last?.Message ?? "no address"}", last);
+        throw new HttpRequestException($"Could not connect to {host}:{ctx.DnsEndPoint.Port} ({addresses.Count} address(es) tried): {last?.Message ?? "no address"}", last);
     }
 }

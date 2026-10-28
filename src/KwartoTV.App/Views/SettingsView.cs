@@ -23,11 +23,20 @@ public sealed class SettingsView : PageBase
         Body.Children.Add(UiKit.Heading("Playlists"));
         Body.Children.Add(UiKit.Dimmed("KwartoTV has no built-in channels. Add .m3u / .m3u8 links or files you are allowed to use.", 18));
         foreach (var p in Tv.Settings.Playlists.ToList())
-            Body.Children.Add(ItemRow($"{p.Name}", p.Source, ("Remove", () => { Tv.Settings.RemovePlaylist(p.Id); Tv.SaveSettings(); _ = Tv.RefreshChannelsAsync(); Refresh(); }, true)));
+        {
+            var pl = p;
+            var total = Tv.Library.GetValueOrDefault(pl.Id)?.Count;
+            var chosen = pl.IsStream ? 1 : pl.Selected?.Count ?? total ?? 0;
+            var info = pl.IsStream ? "One stream" : total is null ? "Not downloaded yet" : $"{chosen} of {total} channels in your lineup";
+            var err = Tv.ErrorFor(pl.Id);
+            var actions = new List<(string, Action, bool)>();
+            if (!pl.IsStream) actions.Add(("Choose channels", () => { if (Tv.Library.ContainsKey(pl.Id)) Shell.ShowChannelPicker(pl.Id); else Shell.ShowToast(err is null ? "This playlist is not downloaded yet. Use Reload channels." : "This playlist did not download. Use Reload channels."); }, false));
+            actions.Add(("Remove", () => Dialogs.Confirm(Shell, $"Remove {pl.Name} and its channels?", "Remove", () => { Tv.RemovePlaylist(pl.Id); Refresh(); }), true));
+            Body.Children.Add(ItemRow(pl.Name, err is null ? $"{info}  ·  {pl.Source}" : "⚠ " + err, actions.ToArray()));
+        }
         foreach (var err in Tv.PlaylistErrors) Body.Children.Add(new TextBlock { Text = "⚠ " + err, FontSize = 17, Foreground = UiKit.B("Danger"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
         Body.Children.Add(Buttons(
-            UiKit.ActionButton("Add from iptv-org", Shell.AddIptvOrgPlaylist),
-            UiKit.ActionButton("Add playlist link/file", AddPlaylist),
+            UiKit.ActionButton("Add channels…", Shell.AddChannelsMenu),
             UiKit.ActionButton(Tv.ChannelsLoading ? "Loading…" : $"Reload channels ({Tv.Lineup.Channels.Count})", () => _ = Tv.RefreshChannelsAsync())));
 
         // ---- website tiles
@@ -99,20 +108,6 @@ public sealed class SettingsView : PageBase
         g.Children.Add(btns);
         return new Border { Background = UiKit.B("Surface"), CornerRadius = new CornerRadius(14), Padding = new Thickness(22, 10, 12, 10), Child = g };
     }
-
-    private void AddPlaylist() => Dialogs.Form(Shell, "Add playlist",
-        "Paste an https link to an .m3u / .m3u8 list, or choose a file on this PC.",
-        new[] { new Dialogs.Field("Name (optional)"), new Dialogs.Field("Link or file", "https://", Dialogs.PickPlaylistFile) },
-        "Add", v =>
-        {
-            var err = Tv.Settings.AddPlaylist(v[0], v[1]);
-            if (err is not null) return err;
-            Tv.SaveSettings();
-            _ = Tv.RefreshChannelsAsync();
-            Shell.ShowToast("Playlist added. Loading channels…");
-            Refresh();
-            return null;
-        });
 
     private void AddWebsite() => Dialogs.Form(Shell, "Add website tile",
         "The site opens fullscreen in its own window. Good for any https site that works with a keyboard.",

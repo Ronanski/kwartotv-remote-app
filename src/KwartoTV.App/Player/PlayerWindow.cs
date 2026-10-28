@@ -10,7 +10,15 @@ namespace KwartoTV.App.Player;
 /// <summary>Fullscreen libmpv player for Live TV (cable-style controls) and Library files.</summary>
 public sealed class PlayerWindow : Window
 {
-    private enum Mode { Live, Files }
+    private enum Mode { Live, Files, Preview }
+
+    // Some stream servers refuse one identity and accept another, so a failed channel is retried with the next one.
+    private static readonly string?[] UserAgents = { null, "VLC/3.0.20 LibVLC/3.0.20", "libmpv" };
+    private Channel? _channel;
+    private int _attempt;
+    private string? _problem;
+    private DateTime _streamStarted;
+    private bool _startedLogged;
 
     private readonly TvServices _tv;
     private readonly MainWindow _main;
@@ -96,12 +104,32 @@ public sealed class PlayerWindow : Window
         Present();
         WhenReady(() =>
         {
-            _osd.ShowMessage(null);
-            _mpv!.SetHeaders(ch.Referrer, ch.UserAgent);
-            _mpv.Load(ch.Url); _mpv.Paused = false;
-            _loadedAt = DateTime.UtcNow;
+            StartStream(ch, 0);
             _osd.ShowBanner(ch, number, _tv.Lineup.IsFavorite(ch.Id));
         });
+    }
+
+    /// <summary>Plays a channel that is not in the lineup yet, so the user can check it before choosing it. Back returns to the picker.</summary>
+    public void PlayPreview(Channel ch)
+    {
+        _mode = Mode.Preview; _failed = false; CloseGuide();
+        Present();
+        WhenReady(() =>
+        {
+            StartStream(ch, 0);
+            _osd.ShowBanner(ch, 0, false);
+        });
+    }
+
+    private void StartStream(Channel ch, int attempt)
+    {
+        _channel = ch; _attempt = attempt; _problem = null; _failed = false; _startedLogged = false;
+        _osd.ShowMessage(attempt == 0 ? null : "Trying another way to connect…");
+        var ua = ch.UserAgent ?? UserAgents[Math.Min(attempt, UserAgents.Length - 1)];
+        _mpv!.SetHeaders(ch.Referrer, ua);
+        _mpv.Load(ch.Url); _mpv.Paused = false;
+        _loadedAt = _streamStarted = DateTime.UtcNow;
+        AppPaths.LogLine($"player: opening {ch.Name} (attempt {attempt + 1}) {ch.Url}");
     }
 
     public void PlayFiles(IReadOnlyList<LibraryItem> items, int index)
@@ -133,7 +161,7 @@ public sealed class PlayerWindow : Window
 
     public bool Seek(int seconds)
     {
-        if (_mpv is null || _mode == Mode.Live) return false;
+        if (_mpv is null || _mode != Mode.Files) return false;
         _mpv.Seek(seconds); ShowStatus();
         return true;
     }
@@ -154,6 +182,21 @@ public sealed class PlayerWindow : Window
         if (_mpv is null) return;
         _osd.SetDigits(_tv.Lineup.DigitBuffer);
 
+        if (_mode != Mode.Files && _channel is not null)
+        {
+            var ev = _mpv.TakeEvents();
+            if (ev.Loaded && !_startedLogged)
+            {
+                _startedLogged = true;
+                AppPaths.LogLine($"player: started {_channel.Name} after {(DateTime.UtcNow - _streamStarted).TotalSeconds:0.0}s (attempt {_attempt + 1})");
+            }
+            if (ev.Problem is not null)
+            {
+                _problem = ev.Problem;
+                if (_attempt < UserAgents.Length - 1) { StartStream(_channel, _attempt + 1); return; }
+            }
+        }
+
         var age = DateTime.UtcNow - _loadedAt;
         if (!_failed && age > TimeSpan.FromSeconds(2) && _mpv.Idle)
         {
@@ -165,7 +208,10 @@ public sealed class PlayerWindow : Window
                 return;
             }
             _failed = true;
-            _osd.ShowMessage("Can't play this channel.\nPress ▲ or ▼ for another one.");
+            var why = string.IsNullOrEmpty(_problem) ? "" : "\n" + _problem;
+            _osd.ShowMessage(_mode == Mode.Preview
+                ? "Can't play this stream." + why + "\nPress Back to return."
+                : "Can't play this channel." + why + "\nPress ▲ or ▼ for another one.");
             return;
         }
         if (_failed && !_mpv.Idle) { _failed = false; _osd.ShowMessage(null); }
@@ -187,7 +233,7 @@ public sealed class PlayerWindow : Window
         if (key is Key.OemPlus or Key.Add) { SystemVolume.Change(+5); e.Handled = true; return; }
         if (key is Key.OemMinus or Key.Subtract) { SystemVolume.Change(-5); e.Handled = true; return; }
         if (key is Key.M) { SystemVolume.ToggleMute(); e.Handled = true; return; }
-        e.Handled = _mode == Mode.Live ? LiveKey(key) : FileKey(key);
+        e.Handled = _mode switch { Mode.Live => LiveKey(key), Mode.Preview => PreviewKey(key), _ => FileKey(key) };
     }
 
     private bool LiveKey(Key key)
@@ -225,6 +271,16 @@ public sealed class PlayerWindow : Window
             case Key.Escape or Key.BrowserBack or Key.MediaStop: _main.GoHome(); return true;
         }
         return false;
+    }
+
+    private bool PreviewKey(Key key)
+    {
+        switch (key)
+        {
+            case Key.Enter or Key.Space or Key.MediaPlayPause or Key.P: TogglePause(); return true;
+            case Key.Escape or Key.BrowserBack or Key.MediaStop or Key.Back: _main.ClosePlayer(); return true;
+        }
+        return true;
     }
 
     private bool FileKey(Key key)

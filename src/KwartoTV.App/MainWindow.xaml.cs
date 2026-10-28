@@ -118,6 +118,41 @@ public partial class MainWindow : Window, IShell
         Activate();
     }
 
+    /// <summary>The page where the user ticks which channels of a playlist go into the lineup.</summary>
+    public void ShowChannelPicker(string playlistId)
+    {
+        CloseDialog(); CloseWeb(); _tv.Apps.Close(); _player?.Hide();
+        _currentName = "Picker";
+        _current = new ChannelPickerView(this, playlistId);
+        Page.Content = _current;
+        for (int i = 0; i < _navButtons.Count; i++)
+        {
+            var on = i == 3;
+            ((TextBlock)_navButtons[i].Content).FontWeight = on ? FontWeights.Bold : FontWeights.Normal;
+            ((TextBlock)_navButtons[i].Content).TextDecorations = on ? TextDecorations.Underline : null;
+        }
+        Native.BringToFront(Handle);
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _current?.FocusFirst());
+    }
+
+    /// <summary>Plays a channel from the picker (not yet in the lineup). Back returns to the picker.</summary>
+    public void PreviewChannel(Channel ch)
+    {
+        if (!MpvPlayer.IsAvailable()) { ShowToast("Video engine (libmpv-2.dll) is missing. Reinstall KwartoTV."); return; }
+        CloseWeb(); _tv.Apps.Close();
+        _player ??= new PlayerWindow(_tv, this);
+        _player.PlayPreview(ch);
+    }
+
+    /// <summary>Closes the player and stays on the current page (used when previewing from the picker).</summary>
+    public void ClosePlayer()
+    {
+        _player?.Hide();
+        Native.BringToFront(Handle);
+        Activate();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _current?.FocusFirst());
+    }
+
     public void ShowLibrary() { CloseWeb(); _tv.Apps.Close(); _player?.Hide(); Navigate("Library"); Native.BringToFront(Handle); }
     public void ShowSettings() { CloseWeb(); _tv.Apps.Close(); _player?.Hide(); Navigate("Settings"); Native.BringToFront(Handle); }
 
@@ -213,18 +248,29 @@ public partial class MainWindow : Window, IShell
         try { w.Close(); } catch { }
     }
 
-    /// <summary>Lets the user pick a public iptv-org playlist (country or category) and adds it.</summary>
-    public void AddIptvOrgPlaylist()
+    /// <summary>The "Add channels" menu: link, file, clipboard, one stream, or the public iptv-org lists.</summary>
+    public void AddChannelsMenu() => Dialogs.AddChannels(this);
+
+    public void AddIptvOrgPlaylist() => Dialogs.IptvOrgPicker(this, pick => AddPlaylistSource(pick.Name + " (iptv-org)", pick.Url, false));
+
+    /// <summary>
+    /// Adds a playlist link/file (or one stream), downloads it, and opens the channel picker with everything that was found.
+    /// If the download fails the user sees why and what to try.
+    /// </summary>
+    public async void AddPlaylistSource(string name, string source, bool isStream)
     {
-        Dialogs.IptvOrgPicker(this, pick =>
-        {
-            var err = _tv.Settings.AddPlaylist(pick.Name + " (iptv-org)", pick.Url);
-            if (err is not null) { ShowToast(err); return; }
-            _tv.SaveSettings();
-            _ = _tv.RefreshChannelsAsync();
-            ShowToast($"Loading {pick.Name} channels…");
-            _current?.Refresh();
-        });
+        var err = isStream ? _tv.Settings.AddStream(name, source) : _tv.Settings.AddPlaylist(name, source);
+        if (err is not null) { ShowToast(err); return; }
+        _tv.SaveSettings();
+        var entry = _tv.Settings.Playlists.Last();
+        ShowToast(isStream ? "Adding stream…" : $"Downloading {entry.Name}… this can take a minute");
+        var failure = await _tv.LoadPlaylistAsync(entry);
+        if (failure is not null) { Dialogs.LoadFailed(this, entry, failure); return; }
+        _tv.RebuildLineup();
+        if (isStream) { ShowToast("Stream added. Find it in your channels."); _current?.Refresh(); return; }
+        var count = _tv.Library.GetValueOrDefault(entry.Id)?.Count ?? 0;
+        ShowChannelPicker(entry.Id);
+        ShowToast($"{count} channels found. Choose the ones you want.");
     }
 
     private void PrepareExternal() { CloseDialog(); _player?.Hide(); }
@@ -249,9 +295,11 @@ public partial class MainWindow : Window, IShell
     private TextBox? _oskTarget;
 
     /// <summary>Opens the on-screen keyboard for a text box (press OK on the box).</summary>
-    public void ShowKeyboard(TextBox target)
+    private Action? _oskDone;
+
+    public void ShowKeyboard(TextBox target, Action? onDone = null)
     {
-        _oskTarget = target;
+        _oskTarget = target; _oskDone = onDone;
         var osk = new OnScreenKeyboard(new TextBoxTarget(target), () => HideKeyboard(next: true));
         OskHost.Child = osk;
         OskHost.Visibility = Visibility.Visible;
@@ -266,7 +314,9 @@ public partial class MainWindow : Window, IShell
         OskHost.Visibility = Visibility.Collapsed; OskHost.Child = null;
         DialogCard.VerticalAlignment = VerticalAlignment.Center; DialogCard.Margin = new Thickness(0);
         var box = _oskTarget; _oskTarget = null;
+        var done = _oskDone; _oskDone = null;
         if (box is null) return;
+        if (done is not null) { done(); return; }
         box.Focus(); Keyboard.Focus(box);
         if (next) box.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
     }
@@ -300,14 +350,15 @@ public partial class MainWindow : Window, IShell
         {
             if (KeyboardOpen) HideKeyboard();
             else if (DialogOpen) CloseDialog();
+            else if (_currentName == "Picker") ShowSettings();
             else if (_currentName != "Home") Navigate("Home");
             e.Handled = true;
             return;
         }
-        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube, F6 Netflix, F7 add iptv-org channels, F8 power menu.
-        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or Key.F6 or Key.F7 or Key.F8 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube, F6 Netflix, F7 add channels, F8 power menu, F9 iptv-org lists.
+        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or Key.F6 or Key.F7 or Key.F8 or Key.F9 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
-            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; case Key.F6: LaunchNetflix(); break; case Key.F7: AddIptvOrgPlaylist(); break; case Key.F8: Dialogs.PowerMenu(this); break; default: ShowSettings(); break; }
+            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; case Key.F6: LaunchNetflix(); break; case Key.F7: AddChannelsMenu(); break; case Key.F9: AddIptvOrgPlaylist(); break; case Key.F8: Dialogs.PowerMenu(this); break; default: ShowSettings(); break; }
             e.Handled = true;
             return;
         }

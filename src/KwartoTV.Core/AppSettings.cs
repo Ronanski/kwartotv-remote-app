@@ -3,7 +3,11 @@ using System.Text.Json;
 namespace KwartoTV.Core;
 
 /// <summary>A playlist the user added. Source is an https link or a local .m3u/.m3u8 file path.</summary>
-public sealed record PlaylistEntry(string Id, string Name, string Source);
+/// <summary>
+/// A playlist the user added. Source is an https link or a local file path; for a single stream (IsStream) it is the stream address.
+/// Selected holds the ids of the channels the user chose from the playlist; null means every channel.
+/// </summary>
+public sealed record PlaylistEntry(string Id, string Name, string Source, List<string>? Selected = null, bool IsStream = false);
 
 public sealed record WebTile(string Id, string Name, string Url);
 
@@ -35,8 +39,27 @@ public sealed class AppSettings
             : IsPlaylistFile(source);
         if (!okSource) return "Use an https link or the full path of a .m3u / .m3u8 file.";
         if (Playlists.Any(p => string.Equals(p.Source, source, StringComparison.OrdinalIgnoreCase))) return "That playlist is already added.";
-        Playlists.Add(new PlaylistEntry(Channel.StableId(source), Clean(name, source), source));
+        // Nothing is selected yet: the user chooses the channels (see the channel picker), not the whole list.
+        Playlists.Add(new PlaylistEntry(Channel.StableId(source), Clean(name, source), source, new List<string>()));
         return null;
+    }
+
+    /// <summary>Adds one stream address (an .m3u8 link, rtmp://, ...) as a channel of its own.</summary>
+    public string? AddStream(string name, string url)
+    {
+        url = (url ?? "").Trim();
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || !M3uParser.IsStreamUri(u)) return "Use a stream address that starts with http://, https://, rtmp://, rtsp:// or udp://";
+        if (Playlists.Any(p => string.Equals(p.Source, url, StringComparison.OrdinalIgnoreCase))) return "That stream is already added.";
+        Playlists.Add(new PlaylistEntry(Channel.StableId(url), Clean(name, u.Host), url, null, IsStream: true));
+        return null;
+    }
+
+    public PlaylistEntry? FindPlaylist(string id) => Playlists.FirstOrDefault(p => p.Id == id);
+
+    public void SetSelection(string playlistId, IEnumerable<string> channelIds)
+    {
+        var i = Playlists.FindIndex(p => p.Id == playlistId);
+        if (i >= 0) Playlists[i] = Playlists[i] with { Selected = channelIds.Distinct().ToList() };
     }
 
     public string? AddWebTile(string name, string url)

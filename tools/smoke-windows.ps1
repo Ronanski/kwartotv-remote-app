@@ -7,15 +7,21 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $fail = 0
 function Check($ok, $name) { if ($ok) { Write-Host "PASS $name" } else { Write-Host "FAIL $name"; $script:fail++ } }
 
-# Placeholder channels only (example.invalid never resolves). Seeds a local playlist and a website tile.
+# Seeds a local playlist with two public HLS test streams (made for testing players) and one dead address,
+# plus a website tile. No channel lists from anywhere else are bundled.
 $data = Join-Path $env:APPDATA "KwartoTV"
 New-Item -ItemType Directory -Force -Path $data | Out-Null
 $m3u = Join-Path $data "demo.m3u"
-$lines = @("#EXTM3U")
-$groups = @("News", "Movies", "Kids")
-for ($i = 1; $i -le 18; $i++) { $g = $groups[$i % 3]; $lines += "#EXTINF:-1 group-title=`"$g`",Demo Channel $i"; $lines += "https://example.invalid/demo$i.m3u8" }
+$lines = @(
+  "#EXTM3U",
+  '#EXTINF:-1 group-title="Test",Test Stream 1',
+  "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8",
+  '#EXTINF:-1 group-title="Test",Test Stream 2',
+  "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+  '#EXTINF:-1 group-title="Test",Dead Stream',
+  "https://example.invalid/dead.m3u8")
 Set-Content -Path $m3u -Value $lines -Encoding UTF8
-$settings = @{ playlists = @(@{ id = "demo"; name = "Demo (placeholder)"; source = $m3u }); webTiles = @(@{ id = "ex"; name = "Example"; url = "https://example.com" }); libraryFolders = @(); port = 8765 } | ConvertTo-Json -Depth 5
+$settings = @{ playlists = @(@{ id = "demo"; name = "Test streams"; source = $m3u }); webTiles = @(@{ id = "ex"; name = "Example"; url = "https://example.com" }); libraryFolders = @(); port = 8765 } | ConvertTo-Json -Depth 5
 Set-Content -Path (Join-Path $data "settings.json") -Value $settings -Encoding UTF8
 Remove-Item (Join-Path $data "log.txt") -ErrorAction SilentlyContinue
 
@@ -88,20 +94,24 @@ foreach ($u in "https://iptv-org.github.io/iptv/countries/ph.m3u", "https://iptv
     try { $text = Invoke-RestMethod $u -TimeoutSec 30 | Out-String; $n = ([regex]::Matches($text, "#EXTINF")).Count; Check ($text.Length -gt 100) "iptv-org reachable: $u ($($text.Length) chars, $n channels)" }
     catch { Check $false "iptv-org reachable: $u ($_)" }
 }
-Keys "{F7}"
+# Add channels from iptv-org (Philippines), then choose them in the channel picker
+Keys "{F9}"
 Shot "10-iptv-org-picker"
 Keys "phil"
 Shot "11-iptv-org-filtered"
 Keys "{ENTER}"
-Start-Sleep -Seconds 20
-Keys "{F1}"
-Start-Sleep -Seconds 4
-Shot "12-home-after-iptv-org"
-Start-Sleep -Seconds 1
-$saved = Get-Content (Join-Path $data "settings.json") -Raw
-Check ($saved -match "iptv-org.github.io/iptv/countries/ph.m3u") "picking Philippines added the iptv-org playlist to the settings"
+Start-Sleep -Seconds 25
+Shot "12-channel-picker"
+Keys "{RIGHT}{RIGHT}{ENTER}"
+Shot "12b-picker-all-selected"
+Keys "{RIGHT}{RIGHT}{ENTER}"
+Start-Sleep -Seconds 2
+Shot "12c-settings-after-pick"
+$cfg = Get-Content (Join-Path $data "settings.json") -Raw | ConvertFrom-Json
+$ph = $cfg.playlists | Where-Object { $_.source -match "countries/ph.m3u" }
+Check ($null -ne $ph -and @($ph.selected).Count -gt 0) "iptv-org Philippines was downloaded and its channels were chosen in the picker ($(@($ph.selected).Count) selected)"
 # on-screen keyboard: OK on the empty search box opens it, then type with it
-Keys "{F7}"
+Keys "{F9}"
 Keys "{ENTER}"
 Shot "14-on-screen-keyboard"
 Keys "{ENTER}{ENTER}"
@@ -125,14 +135,25 @@ Start-Sleep -Seconds 25
 Shot "13-netflix-in-app"
 Keys "{F1}"
 Start-Sleep -Seconds 2
+# channel 1 is a real public HLS test stream: libmpv must actually play it
 Keys "1"
-Start-Sleep -Seconds 6
+Start-Sleep -Seconds 18
 Shot "06-live-tv-player"
+$logText = Get-Content (Join-Path $data "log.txt") -Raw
+Check ($logText -match "player: started Test Stream 1") "channel 1 (public HLS test stream) was opened and played by libmpv"
 # volume rocker: + on the number pad raises the Windows volume and shows the bar
 Keys "{ADD}"
 Shot "18-volume-rocker"
 Keys "{ENTER}"
 Shot "07-mini-guide"
+Keys "{ESC}"
+# a dead channel must say so (and have tried the other ways to connect)
+Keys "{F1}"
+Keys "3"
+Start-Sleep -Seconds 20
+Shot "06b-dead-channel"
+$logText = Get-Content (Join-Path $data "log.txt") -Raw
+Check ($logText -match "opening Dead Stream \(attempt 3\)") "a dead channel is retried the other ways before giving up"
 Keys "{ESC}"
 Keys "{ESC}"
 Start-Sleep -Seconds 1

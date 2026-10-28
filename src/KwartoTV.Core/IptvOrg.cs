@@ -12,6 +12,7 @@ public static class IptvOrg
 {
     public const string Home = "https://github.com/iptv-org/iptv";
     public const string CountriesApi = "https://iptv-org.github.io/api/countries.json";
+    public const string LanguagesApi = "https://iptv-org.github.io/api/languages.json";
     private const string Base = "https://iptv-org.github.io/iptv/";
 
     /// <summary>
@@ -32,6 +33,23 @@ public static class IptvOrg
     }
 
     public static string CountryUrl(string code) => $"{Base}countries/{code.ToLowerInvariant()}.m3u";
+    public static string LanguageUrl(string code) => $"{Base}languages/{code.ToLowerInvariant()}.m3u";
+
+    /// <summary>Every channel of the project in one list (large). Pick the channels you want in the channel picker.</summary>
+    public static readonly PlaylistSuggestion AllChannels = new("All channels (everything)", Base + "index.m3u");
+
+    public static readonly IReadOnlyList<(string Code, string Name)> BuiltInLanguages = new (string, string)[]
+    {
+        ("eng", "English"), ("spa", "Spanish"), ("fra", "French"), ("deu", "German"), ("por", "Portuguese"), ("rus", "Russian"),
+        ("ara", "Arabic"), ("hin", "Hindi"), ("zho", "Chinese"), ("jpn", "Japanese"), ("kor", "Korean"), ("ind", "Indonesian"),
+        ("tha", "Thai"), ("vie", "Vietnamese"), ("tur", "Turkish"), ("ita", "Italian"), ("tgl", "Tagalog"), ("fil", "Filipino"),
+    };
+
+    public static IReadOnlyList<PlaylistSuggestion> LanguageSuggestions(IEnumerable<(string Code, string Name)> languages) =>
+        languages.Where(l => l.Code.Length is >= 2 and <= 3 && l.Code.All(char.IsAsciiLetter))
+            .OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(l => new PlaylistSuggestion(l.Name, LanguageUrl(l.Code))).ToList();
+
     public static string CategoryUrl(string id) => $"{Base}categories/{id.ToLowerInvariant()}.m3u";
 
     /// <summary>Used when the live list cannot be downloaded.</summary>

@@ -7,7 +7,15 @@ public static class M3uParser
 {
     private static readonly Regex Attr = new("([A-Za-z0-9_-]+)=\"([^\"]*)\"", RegexOptions.Compiled);
 
-    public static IReadOnlyList<Channel> Parse(string text)
+    /// <summary>Schemes a stream address may use. Everything else (file:, javascript:, ...) is dropped.</summary>
+    public static bool IsStreamUri(Uri uri) =>
+        uri.Scheme is "http" or "https" or "rtmp" or "rtmps" or "rtsp" or "udp" or "rtp";
+
+    /// <summary>True when the text is itself one HLS stream (a master or media playlist), not a list of channels.</summary>
+    public static bool LooksLikeSingleStream(string text) =>
+        text.Contains("#EXT-X-STREAM-INF", StringComparison.Ordinal) || text.Contains("#EXT-X-TARGETDURATION", StringComparison.Ordinal);
+
+    public static IReadOnlyList<Channel> Parse(string text, Uri? baseUri = null)
     {
         var result = new List<Channel>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -55,8 +63,16 @@ public static class M3uParser
 
             if (line.StartsWith('#')) continue;
 
-            if (!Uri.TryCreate(line, UriKind.Absolute, out var uri) ||
-                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            Uri? uri;
+            // "/path" counts as an absolute file path on Linux/macOS, so treat a leading slash as relative to the playlist link first.
+            bool rootRelative = baseUri is not null && line.StartsWith('/') && !line.StartsWith("//");
+            if (rootRelative) uri = null;
+            if (rootRelative || (!Uri.TryCreate(line, UriKind.Absolute, out uri) && baseUri is not null && !line.Contains(':')))
+            {
+                // a relative address in a playlist that came from a link
+                if (Uri.TryCreate(baseUri, line, out uri) && uri.IsAbsoluteUri) line = uri.AbsoluteUri;
+            }
+            if (uri is null || !uri.IsAbsoluteUri || !IsStreamUri(uri))
             { pending = false; referrer = userAgent = null; continue; }
             if (!seen.Add(line)) { pending = false; referrer = userAgent = null; continue; }
 

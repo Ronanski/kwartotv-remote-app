@@ -65,7 +65,7 @@ public static class Dialogs
         w.ShowDialog(panel);
     }
 
-    private static readonly HttpClient Web = new() { Timeout = TimeSpan.FromSeconds(8) };
+    private static readonly HttpClient Web = ResilientHttp.Create(TimeSpan.FromSeconds(12));
 
     /// <summary>
     /// Pick a public playlist from iptv-org (github.com/iptv-org/iptv) by country or category. Type to filter.
@@ -75,7 +75,10 @@ public static class Dialogs
     {
         var countries = IptvOrg.CountrySuggestions(IptvOrg.BuiltInCountries);
         var categories = IptvOrg.CategorySuggestions();
-        bool showCountries = true;
+        var languages = IptvOrg.LanguageSuggestions(IptvOrg.BuiltInLanguages);
+        var everything = new List<PlaylistSuggestion> { IptvOrg.AllChannels };
+        int tab = 0;   // 0 countries, 1 categories, 2 languages, 3 everything
+        IReadOnlyList<PlaylistSuggestion> Current() => tab switch { 0 => countries, 1 => categories, 2 => languages, _ => everything };
 
         var panel = new StackPanel { Width = 820 };
         panel.Children.Add(new TextBlock { Text = "Add channels from iptv-org", FontSize = 32, FontWeight = FontWeights.Bold });
@@ -89,7 +92,7 @@ public static class Dialogs
         void Render()
         {
             results.Children.Clear();
-            var matches = IptvOrg.Filter(showCountries ? countries : categories, filter.Text);
+            var matches = IptvOrg.Filter(Current(), filter.Text);
             foreach (var m in matches.Take(8))
             {
                 var pick = m;
@@ -101,13 +104,11 @@ public static class Dialogs
             shown.Text = matches.Count == 0 ? "Nothing matches. Check the spelling." : matches.Count > 8 ? $"Showing 8 of {matches.Count}. Type more letters to narrow it down." : "";
         }
 
-        Button TabButton(string label, bool countriesTab)
-        {
-            var b = UiKit.ActionButton(label, () => { showCountries = countriesTab; filter.Clear(); Render(); });
-            return b;
-        }
-        tabs.Children.Add(TabButton("Countries", true));
-        tabs.Children.Add(TabButton("Categories", false));
+        Button TabButton(string label, int index) => UiKit.ActionButton(label, () => { tab = index; filter.Clear(); Render(); });
+        tabs.Children.Add(TabButton("Countries", 0));
+        tabs.Children.Add(TabButton("Categories", 1));
+        tabs.Children.Add(TabButton("Languages", 2));
+        tabs.Children.Add(TabButton("Everything", 3));
         filter.TextChanged += (_, _) => Render();
         // Enter picks the first match; Down moves into the list (a text box would otherwise keep both keys).
         filter.PreviewKeyDown += (_, e) =>
@@ -137,7 +138,13 @@ public static class Dialogs
             {
                 var json = await Web.GetStringAsync(IptvOrg.CountriesApi);
                 var live = IptvOrg.ParseCountries(json);
-                if (live.Count > 20) { var s = IptvOrg.CountrySuggestions(live); await panel.Dispatcher.InvokeAsync(() => { countries = s; if (showCountries) Render(); }); }
+                if (live.Count > 20) { var s = IptvOrg.CountrySuggestions(live); await panel.Dispatcher.InvokeAsync(() => { countries = s; if (tab == 0) Render(); }); }
+            }
+            catch { }
+            try
+            {
+                var liveLang = IptvOrg.ParseCountries(await Web.GetStringAsync(IptvOrg.LanguagesApi));
+                if (liveLang.Count > 20) { var s = IptvOrg.LanguageSuggestions(liveLang); await panel.Dispatcher.InvokeAsync(() => { languages = s; if (tab == 2) Render(); }); }
             }
             catch { }
         });
@@ -190,6 +197,73 @@ public static class Dialogs
         });
         buttons.Children.Add(installBtn);
         buttons.Children.Add(UiKit.ActionButton("Later", w.CloseDialog));
+        panel.Children.Add(buttons);
+        w.ShowDialog(panel);
+    }
+
+    /// <summary>One place to add channels: a link, a file, the clipboard, one stream, or the public iptv-org lists.</summary>
+    public static void AddChannels(MainWindow w)
+    {
+        var panel = new StackPanel { Width = 720 };
+        panel.Children.Add(new TextBlock { Text = "Add channels", FontSize = 32, FontWeight = FontWeights.Bold });
+        panel.Children.Add(UiKit.Dimmed("KwartoTV finds the channels in what you add, and you choose which ones to keep.", 18));
+        void Option(string label, Action act)
+        {
+            var b = UiKit.ActionButton(label, () => { w.CloseDialog(); act(); });
+            b.HorizontalContentAlignment = HorizontalAlignment.Left; b.Margin = new Thickness(0, 10, 0, 0);
+            panel.Children.Add(b);
+        }
+        Option("🌐  Playlist link (https://…)", () => Form(w, "Playlist link", "Paste or type the address of an .m3u / .m3u8 playlist.",
+            new[] { new Field("Name (optional)"), new Field("Link", "https://") }, "Add", v => { w.AddPlaylistSource(v[0], v[1], false); return null; }));
+        Option("📁  Playlist file (.m3u / .m3u8) on this PC", () => { var f = PickPlaylistFile(); if (f is not null) w.AddPlaylistSource(Path.GetFileNameWithoutExtension(f), f, false); });
+        Option("📋  Paste from the clipboard (link or playlist text)", () => AddFromClipboard(w));
+        Option("📺  One stream link (.m3u8, rtmp://, …)", () => Form(w, "One stream", "The address of a single live stream.",
+            new[] { new Field("Channel name"), new Field("Stream link", "https://") }, "Add", v => { w.AddPlaylistSource(v[0], v[1], true); return null; }));
+        Option("📚  iptv-org public lists (countries, categories, languages)", w.AddIptvOrgPlaylist);
+        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 20, 0, 0), Children = { UiKit.ActionButton("Cancel", w.CloseDialog) } });
+        w.ShowDialog(panel);
+    }
+
+    /// <summary>A copied link is added as a playlist; copied playlist text is saved as a file and added. Works even when downloading from the PC is blocked.</summary>
+    public static void AddFromClipboard(MainWindow w)
+    {
+        string? text = null;
+        try { text = Clipboard.GetText()?.Trim(); } catch { }
+        if (string.IsNullOrEmpty(text)) { w.ShowToast("The clipboard is empty. Copy a playlist link or the playlist text first."); return; }
+        var firstLine = text.Split('\n')[0].Trim();
+        if (!text.Contains('\n') && Uri.TryCreate(firstLine, UriKind.Absolute, out var u) && u.Scheme is "http" or "https") { w.AddPlaylistSource("", firstLine, false); return; }
+        if (text.Contains("#EXTM3U", StringComparison.OrdinalIgnoreCase) || text.Contains("#EXTINF", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                Directory.CreateDirectory(AppPaths.PastedPlaylists);
+                var file = Path.Combine(AppPaths.PastedPlaylists, $"pasted-{DateTime.Now:yyyyMMdd-HHmmss}.m3u");
+                File.WriteAllText(file, text);
+                w.AddPlaylistSource("Pasted playlist", file, false);
+            }
+            catch (Exception ex) { w.ShowToast("Could not save the pasted playlist: " + ex.Message); }
+            return;
+        }
+        w.ShowToast("The clipboard has no playlist link or playlist text.");
+    }
+
+    /// <summary>Shown when a playlist cannot be downloaded: says why, and offers the ways around it.</summary>
+    public static void LoadFailed(MainWindow w, PlaylistEntry entry, string reason)
+    {
+        var panel = new StackPanel { Width = 820 };
+        panel.Children.Add(new TextBlock { Text = "Could not load this playlist", FontSize = 32, FontWeight = FontWeights.Bold });
+        panel.Children.Add(new TextBlock { Text = reason, FontSize = 18, Foreground = UiKit.B("Danger"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 10) });
+        panel.Children.Add(UiKit.Dimmed("What to try:\n• Try again in a minute.\n• Set the PC's DNS to 1.1.1.1 or 8.8.8.8 (Windows Settings → Network → your Wi-Fi → DNS). Some providers block or slow down certain sites.\n• Open the link in a browser on any device, copy it (or save the .m3u file), then use Add channels → Paste from the clipboard / Playlist file.", 17));
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 18, 0, 0) };
+        buttons.Children.Add(UiKit.ActionButton("Try again", async () =>
+        {
+            w.CloseDialog(); w.ShowToast("Trying again…");
+            var again = await w.Tv.LoadPlaylistAsync(entry);
+            if (again is null) { w.Tv.RebuildLineup(); w.ShowChannelPicker(entry.Id); } else LoadFailed(w, entry, again);
+        }));
+        buttons.Children.Add(UiKit.ActionButton("Paste from clipboard", () => { w.CloseDialog(); w.Tv.RemovePlaylist(entry.Id); AddFromClipboard(w); }));
+        buttons.Children.Add(UiKit.ActionButton("Remove", () => { w.CloseDialog(); w.Tv.RemovePlaylist(entry.Id); w.ShowSettings(); }, danger: true));
+        buttons.Children.Add(UiKit.ActionButton("Close", w.CloseDialog));
         panel.Children.Add(buttons);
         w.ShowDialog(panel);
     }

@@ -263,8 +263,10 @@ using (var ls = new HttpListener())
     var lib = LibraryScanner.Scan(new[] { dir, Path.Combine(dir, "missing") });
     Check(lib.Count == 2 && lib[0].Title == "a" && lib.All(i => i.Path.EndsWith(".mp4") || i.Path.EndsWith(".mkv")), "library finds media only, recursively");
     Check(ChannelCatalog.LoadFile(Path.Combine(dir, "list.m3u")).Count == 4, "catalog loads local m3u");
-    var cat = await ChannelCatalog.LoadAllAsync(new[] { new PlaylistEntry("1", "Local", Path.Combine(dir, "list.m3u")), new PlaylistEntry("2", "Gone", Path.Combine(dir, "nope.m3u")) }, new HttpClient());
-    Check(cat.Channels.Count == 4 && cat.Errors.Count == 1 && cat.Errors[0].StartsWith("Gone"), "catalog keeps good playlists when one fails");
+    var gone = new PlaylistEntry("2", "Gone", Path.Combine(dir, "nope.m3u"));
+    bool goneFailed = false; try { await ChannelCatalog.LoadOneAsync(gone, new HttpClient()); } catch (FileNotFoundException) { goneFailed = true; }
+    var localLoaded = await ChannelCatalog.LoadOneAsync(new PlaylistEntry("1", "Local", Path.Combine(dir, "list.m3u")), new HttpClient());
+    Check(localLoaded.Count == 4 && goneFailed, "catalog loads a local playlist and reports a missing one");
     Directory.Delete(dir, true);
 
     var link = PairLink.Build("192.168.1.20", 8765, "012345");
@@ -487,6 +489,49 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(IptvOrg.Mirrors("https://example.com/a.m3u").Count == 1, "other playlists have no mirrors");
     ml.Stop();
 }
+
+// ---- the user chooses channels: selection, single streams, relative links, other schemes
+{
+    var all = M3uParser.Parse(Sample);
+    var pl = new PlaylistEntry("p1", "One", "https://example.invalid/one.m3u", new List<string> { all[1].Id, all[3].Id });
+    var pl2 = new PlaylistEntry("p2", "Two", "https://example.invalid/two.m3u", null);   // null = every channel
+    var loaded = new Dictionary<string, IReadOnlyList<Channel>> { ["p1"] = all, ["p2"] = all.Take(2).ToList() };
+    var lineupList = ChannelCatalog.BuildLineup(new[] { pl, pl2 }, loaded);
+    Check(lineupList.Count == 3 && lineupList[0].Id == all[1].Id && lineupList[1].Id == all[3].Id && lineupList[2].Id == all[0].Id, "lineup has only the selected channels, then all of a playlist with no selection, no duplicates");
+    Check(ChannelCatalog.BuildLineup(new[] { pl with { Selected = new List<string>() } }, loaded).Count == 0, "an empty selection gives no channels (the user has not chosen yet)");
+    Check(ChannelCatalog.BuildLineup(new[] { pl }, new Dictionary<string, IReadOnlyList<Channel>>()).Count == 0, "playlist that is not loaded yet adds nothing");
+
+    var st = new AppSettings();
+    Check(st.AddPlaylist("L", "https://example.invalid/l.m3u") is null && st.Playlists[0].Selected is { Count: 0 }, "a new playlist starts with nothing selected");
+    st.SetSelection(st.Playlists[0].Id, new[] { "a", "b", "a" });
+    Check(st.Playlists[0].Selected!.SequenceEqual(new[] { "a", "b" }), "selection is saved without duplicates");
+    var sj = Path.Combine(Path.GetTempPath(), "kwsel-" + Guid.NewGuid().ToString("N") + ".json");
+    JsonFile.Save(sj, st);
+    Check(JsonFile.LoadOrNew<AppSettings>(sj).Playlists[0].Selected!.SequenceEqual(new[] { "a", "b" }), "selection survives saving and loading"); File.Delete(sj);
+    Check(st.AddStream("News", "https://example.invalid/live/stream.m3u8") is null && st.Playlists[1].IsStream && st.Playlists[1].Name == "News", "a single stream link can be added");
+    Check(st.AddStream("x", "file:///c:/a.mp4") is not null && st.AddStream("x", "javascript:alert(1)") is not null && st.AddStream("x", "https://example.invalid/live/stream.m3u8") is not null, "single stream rejects bad schemes and duplicates");
+    Check(st.AddStream("R", "rtmp://example.invalid/live/ch1") is null, "rtmp stream links are accepted");
+    var one = await ChannelCatalog.LoadOneAsync(st.Playlists[1], new HttpClient());
+    Check(one.Count == 1 && one[0].Url == "https://example.invalid/live/stream.m3u8", "a stream entry loads as one channel without downloading");
+
+    var withSchemes = M3uParser.Parse("#EXTM3U\n#EXTINF:-1,R\nrtmp://example.invalid/a\n#EXTINF:-1,S\nrtsp://example.invalid/b\n#EXTINF:-1,U\nudp://@239.0.0.1:1234\n#EXTINF:-1,F\nfile:///etc/passwd\n#EXTINF:-1,J\njavascript:alert(1)\n");
+    Check(withSchemes.Count == 3 && withSchemes.All(c => c.Url.Contains("example.invalid") || c.Url.StartsWith("udp:")), "parser accepts rtmp, rtsp and udp and still drops file: and javascript:");
+    var rel = M3uParser.Parse("#EXTM3U\n#EXTINF:-1,Rel\nstreams/ch1.m3u8\n#EXTINF:-1,Abs\n/live/ch2.m3u8\n", new Uri("https://example.invalid/lists/all.m3u"));
+    Check(rel.Count == 2 && rel[0].Url == "https://example.invalid/lists/streams/ch1.m3u8" && rel[1].Url == "https://example.invalid/live/ch2.m3u8", "relative stream addresses are resolved against the playlist link");
+
+    const string hlsMaster = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\nlow/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2000000\nhigh/index.m3u8\n";
+    var asStream = PlaylistLoader.Interpret(hlsMaster, new Uri("https://example.invalid/live/news/master.m3u8"));
+    Check(asStream.Count == 1 && asStream[0].Name == "master" && asStream[0].Url == "https://example.invalid/live/news/master.m3u8", "a link that is itself an HLS stream becomes one channel");
+    Check(PlaylistLoader.Interpret(Sample, new Uri("https://example.invalid/x.m3u")).Count == 4, "a normal channel list is still a list");
+
+    var viaFallback = await PlaylistLoader.LoadAsync("https://127.0.0.1:1/never.m3u", new HttpClient { Timeout = TimeSpan.FromSeconds(3) }, _ => new[] { "https://127.0.0.1:1/never.m3u" }, TimeSpan.FromSeconds(2), default, (u, ct) => Task.FromResult<string?>(Sample));
+    Check(viaFallback.Count == 4, "when direct download fails the system download fallback is used");
+
+    Check(IptvOrg.AllChannels.Url.EndsWith("/index.m3u") && IptvOrg.LanguageUrl("ENG").EndsWith("/languages/eng.m3u") && IptvOrg.LanguageSuggestions(IptvOrg.BuiltInLanguages).Any(l => l.Name == "Tagalog"), "iptv-org: all channels and languages");
+}
+
+Check(DohResolver.ParseAnswer("{\"Status\":0,\"Answer\":[{\"name\":\"x\",\"type\":5,\"data\":\"y.\"},{\"name\":\"x\",\"type\":1,\"data\":\"185.199.108.153\"},{\"type\":1,\"data\":\"bad\"}]}").Select(i => i.ToString()).SequenceEqual(new[] { "185.199.108.153" }), "DNS-over-HTTPS answer keeps only valid A records");
+Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk").Count == 0, "DNS-over-HTTPS garbage gives no addresses");
 
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;

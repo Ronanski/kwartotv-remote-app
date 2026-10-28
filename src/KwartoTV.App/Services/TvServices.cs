@@ -33,8 +33,9 @@ public sealed class TvServices : IDisposable
         try { if (File.Exists(AppPaths.Devices)) Pairing.Import(File.ReadAllText(AppPaths.Devices)); } catch (Exception ex) { AppPaths.LogLine("devices: " + ex.Message); }
         Pairing.Changed += SaveDevices;
 
-        var cached = JsonFile.LoadOrNew<List<Channel>>(AppPaths.ChannelCache);
-        Lineup.Load(cached);
+        // Start with what was loaded last time, so the channels are there even before (or without) the internet.
+        foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, List<Channel>>>(AppPaths.PlaylistCache)) Library[kv.Key] = kv.Value;
+        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library));
         Lineup.Restore(Settings.Lineup);
         Lineup.Tuned += (_, _) => SaveSettingsSoon();
         Lineup.FavoritesChanged += SaveSettingsSoon;
@@ -59,36 +60,99 @@ public sealed class TvServices : IDisposable
         try { AppPaths.Ensure(); File.WriteAllText(AppPaths.Devices, Pairing.Export()); } catch (Exception ex) { AppPaths.LogLine("save devices: " + ex.Message); }
     }
 
-    /// <summary>Downloads and parses every playlist the user added. Keeps the old list if nothing could be loaded.</summary>
+    // ---------- playlists and the channels the user chose
+
+    /// <summary>Every channel of every playlist (what the channel picker shows). The lineup holds only the selected ones.</summary>
+    public Dictionary<string, IReadOnlyList<Channel>> Library { get; } = new();
+    private readonly Dictionary<string, string> _errors = new();
+
+    public string? ErrorFor(string playlistId) => _errors.GetValueOrDefault(playlistId);
+
+    /// <summary>The numbered lineup again, from the playlists and the user's selection. No download.</summary>
+    public void RebuildLineup()
+    {
+        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library));
+        if (Lineup.Current is null && Lineup.Channels.Count > 0) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites });
+        ChannelsChanged?.Invoke();
+    }
+
+    private void SaveLibraryCache()
+    {
+        try { JsonFile.Save(AppPaths.PlaylistCache, Library.ToDictionary(k => k.Key, k => k.Value.ToList())); } catch (Exception ex) { AppPaths.LogLine("cache: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// Downloads one playlist and keeps all its channels for the channel picker. Returns an error text, or null on success.
+    /// Tries the direct download, then public DNS, then mirrors, then the system's own web client (the same settings as the browser).
+    /// </summary>
+    public async Task<string?> LoadPlaylistAsync(PlaylistEntry p)
+    {
+        try
+        {
+            var list = await ChannelCatalog.LoadOneAsync(p, Http, SystemDownload);
+            Library[p.Id] = list;
+            _errors.Remove(p.Id);
+            SaveLibraryCache();
+            AppPaths.LogLine($"playlist: {p.Name}: {list.Count} channels");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _errors[p.Id] = ex.Message;
+            AppPaths.LogLine($"playlist: {p.Name}: {ex.Message}");
+            return ex.Message;
+        }
+    }
+
+    /// <summary>Reloads every playlist. A playlist that fails keeps its old channels.</summary>
     public async Task RefreshChannelsAsync()
     {
         if (Settings.Playlists.Count == 0)
         {
-            Lineup.Load(Array.Empty<Channel>());
-            PlaylistErrors = Array.Empty<string>();
-            ChannelsChanged?.Invoke();
+            Library.Clear(); _errors.Clear(); PlaylistErrors = Array.Empty<string>();
+            RebuildLineup();
             return;
         }
         ChannelsLoading = true; ChannelsChanged?.Invoke();
         try
         {
-            var result = await ChannelCatalog.LoadAllAsync(Settings.Playlists, Http);
-            PlaylistErrors = result.Errors;
-            if (result.Channels.Count > 0 || result.Errors.Count == 0)
-            {
-                Lineup.Load(result.Channels);
-                if (Lineup.Current is null) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites });
-                try { JsonFile.Save(AppPaths.ChannelCache, result.Channels); } catch { }
-            }
+            foreach (var p in Settings.Playlists.ToList()) await LoadPlaylistAsync(p);
+            PlaylistErrors = Settings.Playlists.Where(p => _errors.ContainsKey(p.Id)).Select(p => $"{p.Name}: {_errors[p.Id]}").ToList();
         }
-        catch (Exception ex) { PlaylistErrors = new[] { ex.Message }; }
-        finally { ChannelsLoading = false; ChannelsChanged?.Invoke(); }
+        finally { ChannelsLoading = false; }
+        RebuildLineup();
         // The network may simply be slow to wake up (just started, Wi-Fi joining): try again once and then every few minutes.
-        if (PlaylistErrors.Count > 0 && Lineup.Channels.Count == 0 && ++_retries <= 6)
+        if (PlaylistErrors.Count > 0 && Library.Count < Settings.Playlists.Count && ++_retries <= 6)
         {
             _ = Task.Run(async () => { await Task.Delay(TimeSpan.FromSeconds(_retries == 1 ? 15 : 120)); await RefreshChannelsAsync(); });
         }
         else if (PlaylistErrors.Count == 0) _retries = 0;
+    }
+
+    public void RemovePlaylist(string id)
+    {
+        Settings.RemovePlaylist(id);
+        Library.Remove(id); _errors.Remove(id);
+        SaveSettings(); SaveLibraryCache(); RebuildLineup();
+    }
+
+    /// <summary>Same download as the browser would do (Windows proxy settings, certificates): used when our own download fails.</summary>
+    private static async Task<string?> SystemDownload(string url, CancellationToken ct)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe",
+                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.Encoding]::UTF8; $r=Invoke-WebRequest -UseBasicParsing -Uri $env:KW_URL -TimeoutSec 60; if ($r.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($r.Content) } else { $r.Content }\"")
+            { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true, StandardOutputEncoding = System.Text.Encoding.UTF8 };
+            psi.Environment["KW_URL"] = url;
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc is null) return null;
+            var read = proc.StandardOutput.ReadToEndAsync(ct);
+            if (!await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(75), ct)).ContinueWith(x => x.Result == read)) { try { proc.Kill(); } catch { } return null; }
+            return await read;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { AppPaths.LogLine("system download: " + ex.Message); return null; }
     }
 
     /// <summary>The port the remote server is actually listening on (may differ from the preferred one).</summary>

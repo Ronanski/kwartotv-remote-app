@@ -63,14 +63,15 @@ public sealed class HomeView : PageBase
             empty.Children.Add(UiKit.Dimmed(tv.ChannelsLoading
                 ? "Loading your channels…"
                 : tv.Settings.Playlists.Count == 0
-                    ? "No channels yet. KwartoTV comes with no channel list: add a playlist (.m3u link or file) you have the right to use."
-                    : "Your playlists have no playable channels. Check them in Settings.", 22));
+                    ? "No channels yet. KwartoTV comes with no channel list: add a playlist link or file (or one stream), then choose the channels you want."
+                    : tv.Library.Count > 0 ? "You have not chosen any channels yet. Open Settings and press Choose channels on a playlist."
+                    : "Your playlists have not been downloaded. Check them in Settings.", 22));
             if (!tv.ChannelsLoading && tv.PlaylistErrors.Count > 0)
             {
                 empty.Children.Add(new TextBlock { Text = "⚠ " + tv.PlaylistErrors[0], FontSize = 18, Foreground = UiKit.B("Danger"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) });
                 empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0), Children = { UiKit.ActionButton("Try again", () => _ = tv.RefreshChannelsAsync()) } });
             }
-            if (!tv.ChannelsLoading) empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 18, 0, 0), Children = { UiKit.ActionButton("Add channels from iptv-org", Shell.AddIptvOrgPlaylist), UiKit.ActionButton("Add a playlist", Shell.ShowSettings) } });
+            if (!tv.ChannelsLoading) empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 18, 0, 0), Children = { UiKit.ActionButton("Add channels", Shell.AddChannelsMenu) } });
             Body.Children.Add(empty);
         }
     }
@@ -95,7 +96,7 @@ public sealed class HomeView : PageBase
         col.Children.Add(UiKit.Dimmed(sub, 22));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 22, 0, 0) };
         if (count > 0) buttons.Children.Add(UiKit.ActionButton(current is not null ? "▶  Resume" : "▶  Watch", Shell.ShowLiveTv));
-        else buttons.Children.Add(UiKit.ActionButton("Add channels (iptv-org)", Shell.AddIptvOrgPlaylist));
+        else buttons.Children.Add(UiKit.ActionButton("Add channels", Shell.AddChannelsMenu));
         buttons.Children.Add(UiKit.ActionButton(Shell.Tv.Pairing.Devices.Count == 0 ? "Pair your phone" : "Pair another phone", () => Dialogs.Pair(Shell)));
         col.Children.Add(buttons);
         box.Child = col;
