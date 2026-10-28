@@ -63,6 +63,7 @@ public sealed class MpvPlayer : IDisposable
         p.Opt("demuxer-max-bytes", "64MiB");
         p.Opt("sub-auto", "fuzzy");
         p.Opt("audio-client-name", "KwartoTV");
+        p.Opt("ytdl", "no");   // YouTube is handled by the in-app browser; the youtube-dl hook only slows down and confuses live streams
         p.Opt("user-agent", DefaultUserAgent);
         if (mpv_initialize(p._ctx) < 0) { p.Dispose(); throw new InvalidOperationException("mpv_initialize failed"); }
         mpv_request_log_messages(p._ctx, "warn");
@@ -100,7 +101,8 @@ public sealed class MpvPlayer : IDisposable
                     {
                         var err = Marshal.PtrToStringUTF8(mpv_error_string(end.Error)) ?? "error " + end.Error;
                         // the most useful warning line (server said 403/404, unsupported format, ...) is usually just before the error
-                        var hint = _recentLog.LastOrDefault(l => l.Contains("HTTP", StringComparison.OrdinalIgnoreCase) || l.Contains("error", StringComparison.OrdinalIgnoreCase) || l.Contains("failed", StringComparison.OrdinalIgnoreCase));
+                        var hint = _recentLog.LastOrDefault(l => !l.Contains("ytdl", StringComparison.OrdinalIgnoreCase) && !l.Contains("youtube-dl", StringComparison.OrdinalIgnoreCase)
+                            && (l.Contains("HTTP", StringComparison.OrdinalIgnoreCase) || l.Contains("error", StringComparison.OrdinalIgnoreCase) || l.Contains("failed", StringComparison.OrdinalIgnoreCase)));
                         problem = hint is null ? err : $"{err} ({Shorten(hint)})";
                         AppPaths.LogLine("player: " + problem);
                     }

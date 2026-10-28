@@ -97,7 +97,7 @@
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Border x:Name="Frame" CornerRadius="24" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="2" BorderBrush="Transparent">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="Tag" Value="action">

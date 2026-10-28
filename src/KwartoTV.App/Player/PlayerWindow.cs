@@ -208,7 +208,8 @@ public sealed class PlayerWindow : Window
                 return;
             }
             _failed = true;
-            var why = string.IsNullOrEmpty(_problem) ? "" : "\n" + _problem;
+            // "loading failed" alone says little: the usual causes are an offline address, a country block, or a login requirement.
+            var why = string.IsNullOrEmpty(_problem) ? "" : "\n" + (_problem.StartsWith("loading failed") ? _problem + "\nThe stream may be offline, blocked in your country, or need a login." : _problem);
             _osd.ShowMessage(_mode == Mode.Preview
                 ? "Can't play this stream." + why + "\nPress Back to return."
                 : "Can't play this channel." + why + "\nPress ▲ or ▼ for another one.");
