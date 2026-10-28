@@ -14,6 +14,23 @@ public static class IptvOrg
     public const string CountriesApi = "https://iptv-org.github.io/api/countries.json";
     private const string Base = "https://iptv-org.github.io/iptv/";
 
+    /// <summary>
+    /// The same playlist from other servers, tried when the main address does not answer (some networks cannot reach github.io).
+    /// Only iptv-org playlist addresses have mirrors.
+    /// </summary>
+    public static IReadOnlyList<string> Mirrors(string url)
+    {
+        if (!url.StartsWith(Base, StringComparison.Ordinal)) return new[] { url };
+        var path = url[Base.Length..];
+        return new[]
+        {
+            url,
+            $"https://cdn.jsdelivr.net/gh/iptv-org/iptv@gh-pages/{path}",
+            $"https://raw.githubusercontent.com/iptv-org/iptv/gh-pages/{path}",
+            $"https://fastly.jsdelivr.net/gh/iptv-org/iptv@gh-pages/{path}",
+        };
+    }
+
     public static string CountryUrl(string code) => $"{Base}countries/{code.ToLowerInvariant()}.m3u";
     public static string CategoryUrl(string id) => $"{Base}categories/{id.ToLowerInvariant()}.m3u";
 

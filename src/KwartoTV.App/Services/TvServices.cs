@@ -9,7 +9,7 @@ namespace KwartoTV.App.Services;
 /// <summary>Everything the TV shell shares: settings, channel lineup, pairing, remote server and discovery.</summary>
 public sealed class TvServices : IDisposable
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly HttpClient Http = ResilientHttp.Create(TimeSpan.FromMinutes(4));
 
     public AppSettings Settings { get; private set; }
     public ChannelLineup Lineup { get; } = new();
@@ -22,6 +22,7 @@ public sealed class TvServices : IDisposable
     public string RemoteStatus { get; private set; } = "Starting…";
     public IReadOnlyList<string> PlaylistErrors { get; private set; } = Array.Empty<string>();
     public bool ChannelsLoading { get; private set; }
+    private int _retries;
 
     public event Action? ChannelsChanged;
 
@@ -82,6 +83,12 @@ public sealed class TvServices : IDisposable
         }
         catch (Exception ex) { PlaylistErrors = new[] { ex.Message }; }
         finally { ChannelsLoading = false; ChannelsChanged?.Invoke(); }
+        // The network may simply be slow to wake up (just started, Wi-Fi joining): try again once and then every few minutes.
+        if (PlaylistErrors.Count > 0 && Lineup.Channels.Count == 0 && ++_retries <= 6)
+        {
+            _ = Task.Run(async () => { await Task.Delay(TimeSpan.FromSeconds(_retries == 1 ? 15 : 120)); await RefreshChannelsAsync(); });
+        }
+        else if (PlaylistErrors.Count == 0) _retries = 0;
     }
 
     /// <summary>The port the remote server is actually listening on (may differ from the preferred one).</summary>

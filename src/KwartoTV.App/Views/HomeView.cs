@@ -65,6 +65,11 @@ public sealed class HomeView : PageBase
                 : tv.Settings.Playlists.Count == 0
                     ? "No channels yet. KwartoTV comes with no channel list: add a playlist (.m3u link or file) you have the right to use."
                     : "Your playlists have no playable channels. Check them in Settings.", 22));
+            if (!tv.ChannelsLoading && tv.PlaylistErrors.Count > 0)
+            {
+                empty.Children.Add(new TextBlock { Text = "⚠ " + tv.PlaylistErrors[0], FontSize = 18, Foreground = UiKit.B("Danger"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) });
+                empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0), Children = { UiKit.ActionButton("Try again", () => _ = tv.RefreshChannelsAsync()) } });
+            }
             if (!tv.ChannelsLoading) empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 18, 0, 0), Children = { UiKit.ActionButton("Add channels from iptv-org", Shell.AddIptvOrgPlaylist), UiKit.ActionButton("Add a playlist", Shell.ShowSettings) } });
             Body.Children.Add(empty);
         }

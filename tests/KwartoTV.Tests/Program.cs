@@ -446,6 +446,48 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Directory.Delete(dir, true);
 }
 
+// ---- resilient download: mirrors, timeouts, readable errors
+{
+    int mport = 19700 + Random.Shared.Next(200);
+    using var ml = new HttpListener();
+    ml.Prefixes.Add($"http://127.0.0.1:{mport}/");
+    ml.Start();
+    _ = Task.Run(async () =>
+    {
+        while (ml.IsListening)
+        {
+            HttpListenerContext c;
+            try { c = await ml.GetContextAsync(); } catch { break; }
+            _ = Task.Run(async () =>
+            {
+                var path = c.Request.Url!.AbsolutePath;
+                if (path == "/slow.m3u") { await Task.Delay(5000); try { c.Response.Close(); } catch { } return; }
+                if (path == "/mirror.m3u") { var b = Encoding.UTF8.GetBytes(Sample); await c.Response.OutputStream.WriteAsync(b); }
+                else if (path == "/empty.m3u") { }
+                else c.Response.StatusCode = 503;
+                c.Response.Close();
+            });
+        }
+    });
+    using var rh = ResilientHttp.Create(TimeSpan.FromSeconds(30));
+    string Main(string p) => $"http://127.0.0.1:{mport}{p}";
+
+    var viaMirror = await PlaylistLoader.LoadAsync(Main("/slow.m3u"), rh, _ => new[] { Main("/slow.m3u"), Main("/down.m3u"), Main("/mirror.m3u") }, TimeSpan.FromMilliseconds(700));
+    Check(viaMirror.Count == 4, "download falls back to the next address when the first one hangs or fails");
+
+    string err = "";
+    try { await PlaylistLoader.LoadAsync(Main("/slow.m3u"), rh, _ => new[] { Main("/slow.m3u"), Main("/down.m3u"), Main("/empty.m3u") }, TimeSpan.FromMilliseconds(500)); } catch (HttpRequestException ex) { err = ex.Message; }
+    Check(err.Contains("no answer in") && err.Contains("server said 503") && err.Contains("the list is empty") && err.Contains("127.0.0.1"), "download error says what happened at every address: " + err);
+
+    var direct = await PlaylistLoader.LoadAsync(Main("/mirror.m3u"), rh);
+    Check(direct.Count == 4, "download works straight away from the main address");
+
+    var mirrors = IptvOrg.Mirrors(IptvOrg.CountryUrl("PH"));
+    Check(mirrors[0] == IptvOrg.CountryUrl("PH") && mirrors.Count >= 3 && mirrors.Skip(1).All(m => m.StartsWith("https://") && m.EndsWith("countries/ph.m3u")), "iptv-org playlists have https mirrors");
+    Check(IptvOrg.Mirrors("https://example.com/a.m3u").Count == 1, "other playlists have no mirrors");
+    ml.Stop();
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 
