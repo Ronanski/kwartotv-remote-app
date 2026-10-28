@@ -122,6 +122,7 @@ public static class Dialogs
         right.Children.Add(timeText);
         right.Children.Add(new TextBlock { Text = "Address", FontSize = 16, Foreground = UiKit.B("Dim"), Margin = new Thickness(0, 22, 0, 2) });
         right.Children.Add(new TextBlock { Text = $"{host}:{port}", FontSize = 26, FontFamily = new System.Windows.Media.FontFamily("Consolas") });
+        if (addrs.Count > 1) right.Children.Add(UiKit.Dimmed("Other addresses of this PC: " + string.Join(", ", addrs.Skip(1)), 15));
         right.Children.Add(UiKit.Dimmed($"No app? Open http://{host}:{port} in any phone or PC browser on this Wi-Fi.", 16));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 24, 0, 0) };
         buttons.Children.Add(UiKit.ActionButton("New code", () => { NewCode(); Tick(); }));

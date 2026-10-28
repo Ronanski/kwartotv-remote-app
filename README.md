@@ -50,6 +50,6 @@ The Windows app, installer and smoke test build on GitHub Actions (`.github/work
 
 ## Security notes
 - Pairing needs a short-lived 6-digit code (5 tries). Each phone gets its own token, stored only as a hash on the TV.
-- The remote speaks plain HTTP/WebSocket on your home network only (firewall rule is for Private/Domain profiles). Do not expose port 8765 to the internet.
+- The remote speaks plain HTTP/WebSocket on your home network only (the installer opens port 8765 on all network profiles, because Windows often marks home Wi-Fi as Public; pairing still needs the on-screen code). Do not expose port 8765 to the internet.
 - Blocking or revoking a phone disconnects it immediately.
 - The Android APK is signed with a fixed sideload key committed in `android/keystore` so updates install over older builds. It is not a store key.

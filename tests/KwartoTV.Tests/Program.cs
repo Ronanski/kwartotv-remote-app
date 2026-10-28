@@ -346,6 +346,17 @@ Check(HostKeyMap.Seek(-30).Count == 3 && HostKeyMap.Seek(-30)[0].Vk == HostKeyMa
 var vt = HostKeyMap.VolumeTo(40);
 Check(vt.Count(k => k.Vk == HostKeyMap.VkVolumeDown) == 50 && vt.Count(k => k.Vk == HostKeyMap.VkVolumeUp) == 20 && HostKeyMap.VolumeTo(500).Count(k => k.Vk == HostKeyMap.VkVolumeUp) == 50, "volume to target");
 
+// ---- LAN address picking (virtual adapters last)
+{
+    var vm = new LanAddressPicker.Candidate("VMware Network Adapter VMnet1", "VMware Virtual Ethernet Adapter", IPAddress.Parse("192.168.164.1"), false);
+    var wifi = new LanAddressPicker.Candidate("Wi-Fi", "Intel(R) Wi-Fi 6 AX201", IPAddress.Parse("192.168.1.45"), true);
+    var wsl = new LanAddressPicker.Candidate("vEthernet (WSL)", "Hyper-V Virtual Ethernet Adapter", IPAddress.Parse("172.29.64.1"), false);
+    var apipa = new LanAddressPicker.Candidate("Ethernet", "Realtek", IPAddress.Parse("169.254.3.4"), false);
+    var ranked = LanAddressPicker.Rank(new[] { vm, wsl, apipa, wifi });
+    Check(ranked[0].ToString() == "192.168.1.45" && ranked.Count == 3 && ranked.Last().ToString() != "169.254.3.4", "real Wi-Fi address is listed before VMware/WSL, link-local dropped");
+    Check(LanAddressPicker.Rank(new[] { vm }).Count == 1, "a PC with only a virtual adapter still gets an address");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

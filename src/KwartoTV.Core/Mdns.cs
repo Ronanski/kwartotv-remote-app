@@ -165,14 +165,22 @@ public sealed class MdnsResponder : IDisposable
         _addresses = addresses ?? LocalAddresses;
     }
 
-    public static IReadOnlyList<IPAddress> LocalAddresses() =>
-        NetworkInterface.GetAllNetworkInterfaces()
-            .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
-                        && n.Supports(NetworkInterfaceComponent.IPv4))
-            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-            .Select(a => a.Address)
-            .Where(a => a.AddressFamily == AddressFamily.InterNetwork && !a.ToString().StartsWith("169.254."))
-            .ToList();
+    /// <summary>This PC's LAN addresses, the one a phone can most likely reach first. Virtual adapters (VMware, Hyper-V, WSL, VPN) come last.</summary>
+    public static IReadOnlyList<IPAddress> LocalAddresses()
+    {
+        var found = new List<LanAddressPicker.Candidate>();
+        foreach (var n in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (n.OperationalStatus != OperationalStatus.Up || n.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel) continue;
+            IPInterfaceProperties props;
+            try { props = n.GetIPProperties(); } catch { continue; }
+            bool gateway = props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any));
+            foreach (var a in props.UnicastAddresses)
+                if (a.Address.AddressFamily == AddressFamily.InterNetwork)
+                    found.Add(new LanAddressPicker.Candidate(n.Name, n.Description, a.Address, gateway));
+        }
+        return LanAddressPicker.Rank(found);
+    }
 
     /// <summary>Reply to a query packet, or null when the packet is not about this service.</summary>
     public byte[]? Respond(byte[] query)

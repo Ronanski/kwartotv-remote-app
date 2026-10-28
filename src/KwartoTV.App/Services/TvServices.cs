@@ -117,17 +117,8 @@ public sealed class TvServices : IDisposable
         else AppPaths.LogLine("mdns: advertising " + string.Join(", ", MdnsResponder.LocalAddresses()));
     }
 
-    /// <summary>LAN addresses a phone could use, best guess first (private ranges before anything else).</summary>
-    public static IReadOnlyList<string> LanAddresses() =>
-        MdnsResponder.LocalAddresses()
-            .OrderBy(a => IsPrivate(a) ? 0 : 1)
-            .Select(a => a.ToString()).ToList();
-
-    private static bool IsPrivate(IPAddress a)
-    {
-        var b = a.GetAddressBytes();
-        return b[0] == 10 || (b[0] == 172 && b[1] is >= 16 and <= 31) || (b[0] == 192 && b[1] == 168);
-    }
+    /// <summary>LAN addresses a phone could use, best guess first (real adapter with a gateway, virtual adapters last).</summary>
+    public static IReadOnlyList<string> LanAddresses() => MdnsResponder.LocalAddresses().Select(a => a.ToString()).ToList();
 
     public void Dispose()
     {

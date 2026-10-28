@@ -41,13 +41,14 @@ Name: "{autodesktop}\KwartoTV"; Filename: "{app}\KwartoTV.exe"; Tasks: desktopic
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "KwartoTV"; ValueData: """{app}\KwartoTV.exe"""; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
-; Let the app serve the phone remote without administrator rights, and open the Wi-Fi ports (home/work networks only).
+; Let the app serve the phone remote without administrator rights, and open the ports on any network profile
+; (Windows often marks home Wi-Fi as Public). Pairing still needs the code shown on the TV screen.
 Filename: "{sys}\netsh.exe"; Parameters: "http delete urlacl url=http://+:8765/"; Flags: runhidden; StatusMsg: "Preparing the remote…"
 Filename: "{sys}\netsh.exe"; Parameters: "http add urlacl url=http://+:8765/ sddl=D:(A;;GX;;;BU)"; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV remote"""; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV remote"" dir=in action=allow protocol=TCP localport=8765 profile=private,domain"; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV remote"" dir=in action=allow protocol=TCP localport=8765 profile=any"; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV discovery"" dir=in action=allow protocol=UDP localport=5353 profile=private,domain"; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV discovery"" dir=in action=allow protocol=UDP localport=5353 profile=any"; Flags: runhidden
 Filename: "{app}\KwartoTV.exe"; Description: "Start KwartoTV"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]

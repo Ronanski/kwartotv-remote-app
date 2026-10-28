@@ -23,9 +23,9 @@ public static class UrlAcl
         $"netsh http delete urlacl url=http://+:{port}/",
         $"netsh http add urlacl url=http://+:{port}/ sddl=D:(A;;GX;;;BU)",
         $"netsh advfirewall firewall delete rule name=\"KwartoTV remote\"",
-        $"netsh advfirewall firewall add rule name=\"KwartoTV remote\" dir=in action=allow protocol=TCP localport={port} profile=private,domain",
+        $"netsh advfirewall firewall add rule name=\"KwartoTV remote\" dir=in action=allow protocol=TCP localport={port} profile=any",
         $"netsh advfirewall firewall delete rule name=\"KwartoTV discovery\"",
-        $"netsh advfirewall firewall add rule name=\"KwartoTV discovery\" dir=in action=allow protocol=UDP localport=5353 profile=private,domain",
+        $"netsh advfirewall firewall add rule name=\"KwartoTV discovery\" dir=in action=allow protocol=UDP localport=5353 profile=any",
     };
 
     /// <summary>Runs the setup elevated. Returns false if the user declined the prompt or it failed.</summary>
