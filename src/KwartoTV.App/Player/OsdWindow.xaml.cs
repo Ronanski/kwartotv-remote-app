@@ -43,7 +43,7 @@ public partial class OsdWindow : Window
     public void ShowMessage(string? text)
     {
         MessageText.Text = text ?? "";
-        MessageBox.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+        MessageBox.Visibility = string.IsNullOrEmpty(text) || Guide.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     public void ShowGuide(IReadOnlyList<(int Number, Channel Channel, bool Favorite)> rows, int selected)
@@ -72,6 +72,7 @@ public partial class OsdWindow : Window
             });
         }
         Guide.Visibility = Visibility.Visible;
+        MessageBox.Visibility = Visibility.Collapsed;
     }
 
     public void HideGuide() => Guide.Visibility = Visibility.Collapsed;
