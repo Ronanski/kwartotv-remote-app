@@ -4,7 +4,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>KwartoTV</AssemblyName>
     <RootNamespace>KwartoTV.App</RootNamespace>
     <ApplicationIcon>Assets\kwartotv.ico</ApplicationIcon>
@@ -16,7 +16,14 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The WPF SDK drops some of the usual implicit usings (System.IO, System.Net.Http, ...), so list them. -->
+    <Using Include="System" />
+    <Using Include="System.IO" />
+    <Using Include="System.Linq" />
     <Using Include="System.Net.Http" />
+    <Using Include="System.Threading" />
+    <Using Include="System.Threading.Tasks" />
+    <Using Include="System.Collections.Generic" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
     <ProjectReference Include="..\KwartoTV.Core\KwartoTV.Core.csproj" />
     <Resource Include="Assets\kwartotv.png" />
