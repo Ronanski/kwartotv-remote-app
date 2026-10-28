@@ -1,0 +1,137 @@
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Text.Json;
+using KwartoTV.Core;
+
+namespace KwartoTV.App.Services;
+
+/// <summary>Everything the TV shell shares: settings, channel lineup, pairing, remote server and discovery.</summary>
+public sealed class TvServices : IDisposable
+{
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+
+    public AppSettings Settings { get; private set; }
+    public ChannelLineup Lineup { get; } = new();
+    public PairingService Pairing { get; } = new();
+    public ExternalApps Apps { get; } = new();
+    public CommandRouter Router { get; private set; } = null!;
+    public RemoteServer? Server { get; private set; }
+    public MdnsResponder? Mdns { get; private set; }
+    public string RemoteStatus { get; private set; } = "Starting…";
+    public IReadOnlyList<string> PlaylistErrors { get; private set; } = Array.Empty<string>();
+    public bool ChannelsLoading { get; private set; }
+
+    public event Action? ChannelsChanged;
+
+    public TvServices(IHostActions host)
+    {
+        AppPaths.Ensure();
+        Settings = JsonFile.LoadOrNew<AppSettings>(AppPaths.Settings);
+        try { if (File.Exists(AppPaths.Devices)) Pairing.Import(File.ReadAllText(AppPaths.Devices)); } catch (Exception ex) { AppPaths.LogLine("devices: " + ex.Message); }
+        Pairing.Changed += SaveDevices;
+
+        var cached = JsonFile.LoadOrNew<List<Channel>>(AppPaths.ChannelCache);
+        Lineup.Load(cached);
+        Lineup.Restore(Settings.Lineup);
+        Lineup.Tuned += (_, _) => SaveSettingsSoon();
+        Lineup.FavoritesChanged += SaveSettingsSoon;
+        Router = new CommandRouter(Lineup, host);
+    }
+
+    private int _saveQueued;
+    public void SaveSettingsSoon()
+    {
+        if (Interlocked.Exchange(ref _saveQueued, 1) == 1) return;
+        _ = Task.Run(async () => { await Task.Delay(800); Interlocked.Exchange(ref _saveQueued, 0); SaveSettings(); });
+    }
+
+    public void SaveSettings()
+    {
+        try { Settings.Lineup = Lineup.Export(); JsonFile.Save(AppPaths.Settings, Settings); }
+        catch (Exception ex) { AppPaths.LogLine("save settings: " + ex.Message); }
+    }
+
+    private void SaveDevices()
+    {
+        try { AppPaths.Ensure(); File.WriteAllText(AppPaths.Devices, Pairing.Export()); } catch (Exception ex) { AppPaths.LogLine("save devices: " + ex.Message); }
+    }
+
+    /// <summary>Downloads and parses every playlist the user added. Keeps the old list if nothing could be loaded.</summary>
+    public async Task RefreshChannelsAsync()
+    {
+        if (Settings.Playlists.Count == 0)
+        {
+            Lineup.Load(Array.Empty<Channel>());
+            PlaylistErrors = Array.Empty<string>();
+            ChannelsChanged?.Invoke();
+            return;
+        }
+        ChannelsLoading = true; ChannelsChanged?.Invoke();
+        try
+        {
+            var result = await ChannelCatalog.LoadAllAsync(Settings.Playlists, Http);
+            PlaylistErrors = result.Errors;
+            if (result.Channels.Count > 0 || result.Errors.Count == 0)
+            {
+                Lineup.Load(result.Channels);
+                if (Lineup.Current is null) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites });
+                try { JsonFile.Save(AppPaths.ChannelCache, result.Channels); } catch { }
+            }
+        }
+        catch (Exception ex) { PlaylistErrors = new[] { ex.Message }; }
+        finally { ChannelsLoading = false; ChannelsChanged?.Invoke(); }
+    }
+
+    /// <summary>Starts the LAN remote server and mDNS advertising. Never throws; RemoteStatus says what happened.</summary>
+    public async Task StartRemoteAsync()
+    {
+        var port = Settings.Port;
+        var name = $"KwartoTV on {Environment.MachineName}";
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            var server = new RemoteServer(UrlAcl.Prefix(port), Pairing, Router, Lineup) { ServerName = name };
+            try
+            {
+                server.Start();
+                Server = server;
+                RemoteStatus = $"Ready on port {port}";
+                break;
+            }
+            catch (HttpListenerException ex) when (ex.ErrorCode == 5 && attempt == 0)
+            {
+                await server.DisposeAsync();
+                if (!await Task.Run(() => UrlAcl.RunElevated(port))) { RemoteStatus = "Remote is off: Windows permission was declined."; break; }
+            }
+            catch (Exception ex)
+            {
+                await server.DisposeAsync();
+                RemoteStatus = "Remote is off: " + ex.Message;
+                AppPaths.LogLine("remote: " + ex);
+                break;
+            }
+        }
+        if (Server is null) return;
+        Mdns = new MdnsResponder(name, Environment.MachineName.ToLowerInvariant(), port);
+        if (!Mdns.Start()) RemoteStatus += " (auto-discovery unavailable, use the address shown in Settings)";
+    }
+
+    /// <summary>LAN addresses a phone could use, best guess first (private ranges before anything else).</summary>
+    public static IReadOnlyList<string> LanAddresses() =>
+        MdnsResponder.LocalAddresses()
+            .OrderBy(a => IsPrivate(a) ? 0 : 1)
+            .Select(a => a.ToString()).ToList();
+
+    private static bool IsPrivate(IPAddress a)
+    {
+        var b = a.GetAddressBytes();
+        return b[0] == 10 || (b[0] == 172 && b[1] is >= 16 and <= 31) || (b[0] == 192 && b[1] == 168);
+    }
+
+    public void Dispose()
+    {
+        SaveSettings();
+        Mdns?.Dispose();
+        if (Server is not null) Server.DisposeAsync().AsTask().Wait(2000);
+    }
+}

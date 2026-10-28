@@ -1,0 +1,138 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using KwartoTV.App.Services;
+using KwartoTV.App.Ui;
+using KwartoTV.Core;
+using QRCoder;
+
+namespace KwartoTV.App.Views;
+
+/// <summary>Modal forms shown over any page. Text fields accept the phone remote's keyboard.</summary>
+public static class Dialogs
+{
+    public sealed record Field(string Label, string Initial = "", Func<string?>? Browse = null);
+
+    /// <summary>Generic form. onSave returns an error message to keep the dialog open, or null to close it.</summary>
+    public static void Form(MainWindow w, string title, string hint, IReadOnlyList<Field> fields, string saveLabel, Func<string[], string?> onSave)
+    {
+        var panel = new StackPanel { Width = 760 };
+        panel.Children.Add(new TextBlock { Text = title, FontSize = 32, FontWeight = FontWeights.Bold });
+        panel.Children.Add(UiKit.Dimmed(hint, 18));
+        var boxes = new List<TextBox>();
+        foreach (var f in fields)
+        {
+            panel.Children.Add(new TextBlock { Text = f.Label, FontSize = 18, Foreground = UiKit.B("Dim"), Margin = new Thickness(0, 18, 0, 6) });
+            var row = new DockPanel();
+            var box = new TextBox { Text = f.Initial, Style = (Style)Application.Current.FindResource("Field") };
+            box.CaretIndex = box.Text.Length;
+            if (f.Browse is not null)
+            {
+                var b = UiKit.ActionButton("Browse…", () => { var p = f.Browse(); if (p is not null) box.Text = p; });
+                DockPanel.SetDock(b, Dock.Right); b.Margin = new Thickness(12, 0, 0, 0);
+                row.Children.Add(b);
+            }
+            row.Children.Add(box);
+            boxes.Add(box);
+            panel.Children.Add(row);
+        }
+        var error = new TextBlock { FontSize = 18, Foreground = UiKit.B("Danger"), Margin = new Thickness(0, 14, 0, 0), TextWrapping = TextWrapping.Wrap };
+        panel.Children.Add(error);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 22, 0, 0) };
+        void Save()
+        {
+            var err = onSave(boxes.Select(b => b.Text).ToArray());
+            if (err is null) w.CloseDialog(); else error.Text = err;
+        }
+        buttons.Children.Add(UiKit.ActionButton(saveLabel, Save));
+        buttons.Children.Add(UiKit.ActionButton("Cancel", w.CloseDialog));
+        panel.Children.Add(buttons);
+        foreach (var b in boxes) b.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { Save(); e.Handled = true; } };
+        w.ShowDialog(panel);
+    }
+
+    public static void Confirm(MainWindow w, string text, string yesLabel, Action onYes)
+    {
+        var panel = new StackPanel { Width = 640 };
+        panel.Children.Add(new TextBlock { Text = text, FontSize = 28, TextWrapping = TextWrapping.Wrap });
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 26, 0, 0) };
+        buttons.Children.Add(UiKit.ActionButton("Cancel", w.CloseDialog));
+        buttons.Children.Add(UiKit.ActionButton(yesLabel, () => { w.CloseDialog(); onYes(); }, danger: true));
+        panel.Children.Add(buttons);
+        w.ShowDialog(panel);
+    }
+
+    public static string? PickFolder()
+    {
+        var d = new Microsoft.Win32.OpenFolderDialog { Title = "Choose a folder" };
+        return d.ShowDialog() == true ? d.FolderName : null;
+    }
+
+    public static string? PickPlaylistFile()
+    {
+        var d = new Microsoft.Win32.OpenFileDialog { Title = "Choose a playlist", Filter = "Playlists (*.m3u;*.m3u8)|*.m3u;*.m3u8|All files|*.*" };
+        return d.ShowDialog() == true ? d.FileName : null;
+    }
+
+    /// <summary>Shows a PIN and a QR code. Closes by itself when a phone completes pairing.</summary>
+    public static void Pair(MainWindow w)
+    {
+        var tv = w.Tv;
+        var addrs = TvServices.LanAddresses();
+        var host = addrs.FirstOrDefault() ?? Environment.MachineName;
+        int port = tv.Settings.Port;
+        int knownDevices = tv.Pairing.Devices.Count;
+
+        var pinText = new TextBlock { FontSize = 76, FontWeight = FontWeights.Bold, Foreground = UiKit.B("Accent"), FontFamily = new System.Windows.Media.FontFamily("Consolas") };
+        var timeText = UiKit.Dimmed("", 20);
+        var qr = new Image { Width = 300, Height = 300 };
+        var qrBox = new Border { Background = System.Windows.Media.Brushes.White, CornerRadius = new CornerRadius(14), Padding = new Thickness(10), Child = qr, Margin = new Thickness(0, 0, 40, 0), VerticalAlignment = VerticalAlignment.Top };
+        DateTimeOffset expiry = default;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+
+        void NewCode()
+        {
+            var pin = tv.Pairing.StartPairing(DateTimeOffset.UtcNow);
+            expiry = DateTimeOffset.UtcNow + PairingService.PinLifetime;
+            pinText.Text = pin.Insert(3, " ");
+            using var gen = new QRCodeGenerator();
+            using var data = gen.CreateQrCode(PairLink.Build(host, port, pin), QRCodeGenerator.ECCLevel.M);
+            var png = new PngByteQRCode(data).GetGraphic(10);
+            var bmp = new BitmapImage();
+            bmp.BeginInit(); bmp.StreamSource = new MemoryStream(png); bmp.CacheOption = BitmapCacheOption.OnLoad; bmp.EndInit();
+            qr.Source = bmp;
+        }
+        void Tick()
+        {
+            if (!w.DialogOpen) { timer.Stop(); return; }
+            var left = expiry - DateTimeOffset.UtcNow;
+            timeText.Text = left > TimeSpan.Zero ? $"Code valid for {(int)left.TotalMinutes}:{left.Seconds:D2}" : "Code expired. Press New code.";
+            if (tv.Pairing.Devices.Count > knownDevices)
+            {
+                timer.Stop(); w.CloseDialog();
+                w.ShowToast($"{tv.Pairing.Devices.Last().Name} is now paired");
+            }
+        }
+
+        var right = new StackPanel { Width = 480 };
+        right.Children.Add(new TextBlock { Text = "Pair a phone", FontSize = 32, FontWeight = FontWeights.Bold });
+        right.Children.Add(UiKit.Dimmed("Open the KwartoTV Remote app and scan the QR code, or type this code:", 18));
+        right.Children.Add(pinText);
+        right.Children.Add(timeText);
+        right.Children.Add(new TextBlock { Text = "Address", FontSize = 16, Foreground = UiKit.B("Dim"), Margin = new Thickness(0, 22, 0, 2) });
+        right.Children.Add(new TextBlock { Text = $"{host}:{port}", FontSize = 26, FontFamily = new System.Windows.Media.FontFamily("Consolas") });
+        right.Children.Add(UiKit.Dimmed($"No app? Open http://{host}:{port} in any phone or PC browser on this Wi-Fi.", 16));
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 24, 0, 0) };
+        buttons.Children.Add(UiKit.ActionButton("New code", () => { NewCode(); Tick(); }));
+        buttons.Children.Add(UiKit.ActionButton("Close", () => { timer.Stop(); w.CloseDialog(); }));
+        right.Children.Add(buttons);
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(qrBox); row.Children.Add(right);
+        NewCode(); Tick();
+        timer.Tick += (_, _) => Tick();
+        timer.Start();
+        w.ShowDialog(row);
+    }
+}

@@ -337,6 +337,15 @@ using (var ls = new HttpListener())
     Check(changed, "pairing raises Changed");
 }
 
+// ---- Host key map
+Check(HostKeyMap.Navigation("nav.back", ForegroundKind.YouTube)![0].Vk == HostKeyMap.VkEscape && HostKeyMap.Navigation("nav.back", ForegroundKind.KwartoTV)![0].Vk == HostKeyMap.VkEscape, "back is Esc in YouTube and in the app");
+Check(HostKeyMap.Navigation("nav.back", ForegroundKind.Netflix)![0] is { Vk: HostKeyMap.VkLeft, Alt: true } && HostKeyMap.Navigation("nav.back", ForegroundKind.Web)![0].Alt, "back is Alt+Left in Netflix and websites");
+Check(HostKeyMap.Navigation("nav.up", ForegroundKind.KwartoTV)![0] is { Vk: HostKeyMap.VkUp, Extended: true } && HostKeyMap.Navigation("nav.ok", ForegroundKind.KwartoTV)![0].Vk == HostKeyMap.VkReturn, "arrows are extended keys");
+Check(HostKeyMap.Navigation("media.mute", ForegroundKind.KwartoTV) is null && HostKeyMap.Media("media.mute")![0].Vk == HostKeyMap.VkVolumeMute && HostKeyMap.Media("media.next")![0].Vk == HostKeyMap.VkMediaNext, "media key mapping");
+Check(HostKeyMap.Seek(-30).Count == 3 && HostKeyMap.Seek(-30)[0].Vk == HostKeyMap.VkLeft && HostKeyMap.Seek(5).Count == 1 && HostKeyMap.Seek(3600).Count == 30, "seek presses");
+var vt = HostKeyMap.VolumeTo(40);
+Check(vt.Count(k => k.Vk == HostKeyMap.VkVolumeDown) == 50 && vt.Count(k => k.Vk == HostKeyMap.VkVolumeUp) == 20 && HostKeyMap.VolumeTo(500).Count(k => k.Vk == HostKeyMap.VkVolumeUp) == 50, "volume to target");
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

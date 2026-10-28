@@ -1,0 +1,37 @@
+<Window x:Class="KwartoTV.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KwartoTV" WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
+        Background="{StaticResource Bg}" Foreground="{StaticResource TextBrush}" FontFamily="Segoe UI" Cursor="None"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+
+    <Grid Margin="56,28,56,6">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+        <Image Source="/Assets/kwartotv.png" Width="40" Height="40" Margin="0,0,12,0"/>
+        <TextBlock Text="KwartoTV" FontSize="28" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,40,0"/>
+        <StackPanel x:Name="Nav" Orientation="Horizontal" VerticalAlignment="Center"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <TextBlock x:Name="RemoteDot" Text="●" FontSize="14" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBlock x:Name="Clock" FontSize="26" Foreground="{StaticResource Dim}"/>
+      </StackPanel>
+    </Grid>
+
+    <ContentControl x:Name="Page" Grid.Row="1" IsTabStop="False"/>
+
+    <Grid x:Name="Overlay" Grid.RowSpan="2" Visibility="Collapsed" Background="#D0060810">
+      <Border x:Name="DialogCard" Background="{StaticResource Surface}" CornerRadius="22" BorderBrush="{StaticResource Line}" BorderThickness="2"
+              HorizontalAlignment="Center" VerticalAlignment="Center" Padding="40,32" MinWidth="720" MaxWidth="1100"/>
+    </Grid>
+
+    <Border x:Name="Toast" Grid.Row="1" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,44"
+            Background="{StaticResource Surface2}" BorderBrush="{StaticResource Accent}" BorderThickness="2" CornerRadius="16" Padding="26,14">
+      <TextBlock x:Name="ToastText" FontSize="22" TextAlignment="Center"/>
+    </Border>
+  </Grid>
+</Window>

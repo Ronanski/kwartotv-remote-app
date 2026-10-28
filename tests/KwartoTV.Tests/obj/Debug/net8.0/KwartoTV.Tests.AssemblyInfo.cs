@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("KwartoTV.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+272404b1541465cfb783809971cf088f4e1dc189")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d9e3051d535919f904e81f8ca5fa1ae9766154be")]
 [assembly: System.Reflection.AssemblyProductAttribute("KwartoTV.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("KwartoTV.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

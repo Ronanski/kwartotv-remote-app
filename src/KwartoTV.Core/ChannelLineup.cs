@@ -15,6 +15,8 @@ public sealed class ChannelLineup
     private DateTimeOffset _lastDigit;
 
     public event Action<Channel, int>? Tuned;
+    /// <summary>Raised after a favorite is added or removed, so the shell can save.</summary>
+    public event Action? FavoritesChanged;
 
     public IReadOnlyList<Channel> Channels { get { lock (_gate) return _channels.ToList(); } }
     public Channel? Current { get { lock (_gate) return At(_current); } }
@@ -95,14 +97,21 @@ public sealed class ChannelLineup
         return int.TryParse(d, out var n) ? TuneNumber(n) : null;
     }
 
+    /// <summary>Returns true when the channel is now a favorite, false when it was removed (or does not exist).</summary>
     public bool ToggleFavorite(string id)
     {
+        bool nowFavorite;
         lock (_gate)
         {
             if (_channels.All(c => c.Id != id)) return false;
-            return _favorites.Add(id) || !_favorites.Remove(id);
+            nowFavorite = _favorites.Add(id);
+            if (!nowFavorite) _favorites.Remove(id);
         }
+        FavoritesChanged?.Invoke();
+        return nowFavorite;
     }
+
+    public bool IsFavorite(string id) { lock (_gate) return _favorites.Contains(id); }
 
     public IReadOnlyList<Channel> Favorites { get { lock (_gate) return _channels.Where(c => _favorites.Contains(c.Id)).ToList(); } }
     public IReadOnlyList<string> Groups { get { lock (_gate) return _channels.Select(c => c.Group).Distinct().OrderBy(g => g).ToList(); } }
