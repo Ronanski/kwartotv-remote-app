@@ -41,8 +41,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         client.connect(tv)
     }
 
-    suspend fun pair(host: String, port: Int, pin: String): Result<SavedTv> = runCatching {
-        val tv = client.pair(host, port, pin, phoneName)
+    init {
+        client.onTvMoved = { moved ->
+            val list = tvs.value.map { if (it.deviceId == moved.deviceId) moved else it }
+            tvs.value = list
+            store.save(list)
+        }
+    }
+
+    /** Pairs with the TV. When [port] is null (only an address was typed) the app searches the TV's ports first. */
+    suspend fun pair(host: String, port: Int?, pin: String): Result<SavedTv> = runCatching {
+        val p = port ?: client.findPort(host)
+            ?: throw com.kwartotv.remote.net.PairException("KwartoTV did not answer at $host. Check the address on the TV screen, that KwartoTV is open, and that the phone is on the same Wi-Fi.")
+        val tv = client.pair(host, p, pin, phoneName)
         val list = tvs.value.filterNot { it.deviceId == tv.deviceId || (it.host == tv.host && it.port == tv.port) } + tv
         tvs.value = list
         store.save(list)

@@ -37,6 +37,15 @@ public sealed class RemoteServer : IAsyncDisposable
     private readonly Func<DateTimeOffset> _clock;
     private Task? _loop;
 
+    /// <summary>
+    /// Ports tried in order when the preferred one is taken. Windows reserves changing blocks of ports for Hyper-V/WSL,
+    /// so a fixed port is not always free. The phone app probes the same list (keep both in sync).
+    /// </summary>
+    public static readonly int[] CandidatePorts = { 8765, 8766, 8767, 8768, 8769, 18765, 28765, 38765, 48765, 58765 };
+
+    /// <summary>Preferred port first (the one used last time), then the standard list.</summary>
+    public static IReadOnlyList<int> PortsToTry(int preferred) => new[] { preferred }.Concat(CandidatePorts).Distinct().ToList();
+
     /// <summary>Shown to phones in /info (and used as the mDNS instance name by the shell).</summary>
     public string ServerName { get; set; } = "KwartoTV";
 

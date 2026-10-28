@@ -106,14 +106,20 @@ fun commandJson(id: String, cmd: String, arg: String?): String {
     return o.toString()
 }
 
-/** Splits "192.168.1.20:8765" (port optional) into host and port. */
-fun parseHostPort(text: String, defaultPort: Int = 8765): Pair<String, Int>? {
-    val t = text.trim().removePrefix("http://").removeSuffix("/")
+/**
+ * Ports the TV may be listening on, in order. Windows reserves changing port blocks for Hyper-V/WSL,
+ * so the TV falls back to the next free one. Same list as RemoteServer.CandidatePorts on the TV.
+ */
+val CANDIDATE_PORTS = listOf(8765, 8766, 8767, 8768, 8769, 18765, 28765, 38765, 48765, 58765)
+
+/** Splits "192.168.1.20:8765" into host and port. The port is null when not typed (then the app searches for it). */
+fun parseHostPort(text: String): Pair<String, Int?>? {
+    val t = text.trim().removePrefix("http://").removePrefix("https://").removeSuffix("/")
     if (t.isEmpty()) return null
     val i = t.lastIndexOf(':')
     if (i > 0 && !t.endsWith("]") && t.count { it == ':' } == 1) {
         val port = t.substring(i + 1).toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
         return t.substring(0, i) to port
     }
-    return t to defaultPort
+    return t to null
 }

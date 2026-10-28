@@ -38,6 +38,10 @@ function Shot($name) {
 }
 function Keys($k) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep -Milliseconds 900 }
 
+# Take port 8765 first, the way Hyper-V/WSL or another program can on a real PC. KwartoTV must move to the next port.
+$blocker = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 8765)
+$blocker.Start()
+
 # Start KwartoTV with a normal-user (non-admin) token, like on a real PC. CI runs as Administrator,
 # which once hid a bug where the remote server only worked for admins.
 & runas.exe /trustlevel:0x20000 "`"$Exe`""
@@ -47,7 +51,12 @@ Start-Sleep -Seconds 8
 Check ($null -ne $p -and -not $p.HasExited) "app is running as a normal (non-admin) user"
 if (-not $p) { throw "KwartoTV did not start" }
 
-$base = "http://127.0.0.1:8765"
+$base = $null
+foreach ($port in 8765, 8766, 8767, 8768, 8769, 18765) {
+    try { $i = Invoke-RestMethod "http://127.0.0.1:$port/info" -TimeoutSec 2; if ($i.app -eq "KwartoTV") { $base = "http://127.0.0.1:$port"; break } } catch { }
+}
+Check ($base -and $base -ne "http://127.0.0.1:8765") "port 8765 was taken, KwartoTV moved to $base"
+if (-not $base) { $base = "http://127.0.0.1:8766" }
 try { $info = Invoke-RestMethod "$base/info"; Check ($info.app -eq "KwartoTV") "remote /info answers ($($info.name))" } catch { Check $false "remote /info answers: $_" }
 try { $page = Invoke-WebRequest "$base/" -UseBasicParsing; Check ($page.Content -match "KwartoTV Remote") "browser remote page is served" } catch { Check $false "browser remote page: $_" }
 try { Invoke-WebRequest "$base/pair" -Method Post -Body '{"pin":"000000","name":"x"}' -ContentType "application/json" -UseBasicParsing | Out-Null; Check $false "wrong pin is refused" }
@@ -95,5 +104,6 @@ $log = Join-Path $data "log.txt"
 if (Test-Path $log) { Write-Host "---- app log ----"; Get-Content $log; Check (-not (Select-String -Path $log -Pattern "UI error|Fatal|Task error" -Quiet)) "no errors in the app log" } else { Check $true "no errors in the app log (no log file)" }
 
 Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+$blocker.Stop()
 if ($fail -gt 0) { throw "$fail smoke check(s) failed" }
 Write-Host "Smoke test passed"

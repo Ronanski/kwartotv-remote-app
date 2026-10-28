@@ -46,9 +46,9 @@ public sealed class SettingsView : PageBase
                 (dev.Blocked ? "Unblock" : "Block", () => { Tv.Pairing.SetBlocked(dev.Id, !dev.Blocked); Refresh(); }, false),
                 ("Revoke", () => Dialogs.Confirm(Shell, $"Remove {dev.Name}? It will need a new code to connect again.", "Revoke", () => { Tv.Pairing.Revoke(dev.Id); Refresh(); }), true)));
         }
-        Body.Children.Add(Buttons(UiKit.ActionButton("Pair new device", () => Dialogs.Pair(Shell)), UiKit.ActionButton("Fix network access", () => Dialogs.FixNetwork(Shell, Tv.Settings.Port))));
+        Body.Children.Add(Buttons(UiKit.ActionButton("Pair new device", () => Dialogs.Pair(Shell)), UiKit.ActionButton("Fix network access", () => Dialogs.FixNetwork(Shell, Tv.ActivePort > 0 ? Tv.ActivePort : Tv.Settings.Port))));
         var addr = TvServices.LanAddresses().FirstOrDefault();
-        Body.Children.Add(UiKit.Dimmed($"{Tv.RemoteStatus}" + (addr is null ? "" : $"  ·  Browser remote: http://{addr}:{Tv.Settings.Port}"), 17));
+        Body.Children.Add(UiKit.Dimmed($"{Tv.RemoteStatus}" + (addr is null ? "" : $"  ·  Browser remote: http://{addr}:{Tv.ActivePort}"), 17));
 
         // ---- library
         Body.Children.Add(UiKit.Heading("Library folders"));

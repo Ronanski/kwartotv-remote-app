@@ -49,7 +49,7 @@ fun PairScreen(vm: AppViewModel, canCancel: Boolean) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    fun pairWith(host: String, port: Int, code: String) {
+    fun pairWith(host: String, port: Int?, code: String) {
         if (busy) return
         busy = true; error = null
         scope.launch {

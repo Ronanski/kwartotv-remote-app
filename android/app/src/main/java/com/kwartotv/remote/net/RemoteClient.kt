@@ -47,6 +47,11 @@ class RemoteClient {
     /** Last "not done" message from the TV, e.g. "no such channel". Cleared by the UI after showing. */
     val lastError: StateFlow<String?> = _lastError
 
+    private val probeHttp = http.newBuilder().connectTimeout(1500, TimeUnit.MILLISECONDS).readTimeout(2, TimeUnit.SECONDS).build()
+
+    /** Called (on a worker thread) when the TV turned up on a different port; the caller saves the new port. */
+    var onTvMoved: ((SavedTv) -> Unit)? = null
+
     private var socket: WebSocket? = null
     private var tv: SavedTv? = null
     private var generation = 0
@@ -105,8 +110,36 @@ class RemoteClient {
         _conn.value = Conn.Retrying
         val delay = minOf(1000L shl minOf(retry, 3), 8000L)
         retry++
+        if (retry == 3) {
+            // The PC may have restarted on another port (Windows reserves port ranges): look for it once.
+            val target = tv
+            Thread {
+                val found = target?.let { findPortBlocking(it.host, it.port) }
+                if (found != null && target != null && found != target.port && gen == generation) {
+                    val moved = target.copy(port = found)
+                    tv = moved
+                    onTvMoved?.invoke(moved)
+                }
+            }.start()
+        }
         main.postDelayed({ open(gen) }, delay)
     }
+
+    /** Finds the port KwartoTV answers on at [host] (tries [preferred] first), or null. Blocking; call off the main thread. */
+    fun findPortBlocking(host: String, preferred: Int? = null): Int? {
+        val ports = (listOfNotNull(preferred) + com.kwartotv.remote.CANDIDATE_PORTS).distinct()
+        for (p in ports) {
+            try {
+                val req = Request.Builder().url("http://${com.kwartotv.remote.hostForUrl(host)}:$p/info").build()
+                probeHttp.newCall(req).execute().use { r ->
+                    if (r.isSuccessful && JSONObject(r.body?.string() ?: "{}").optString("app") == "KwartoTV") return p
+                }
+            } catch (_: Exception) { }
+        }
+        return null
+    }
+
+    suspend fun findPort(host: String, preferred: Int? = null): Int? = withContext(Dispatchers.IO) { findPortBlocking(host, preferred) }
 
     fun send(cmd: String, arg: String? = null): Boolean {
         val s = socket ?: return false

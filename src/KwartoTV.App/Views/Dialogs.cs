@@ -89,7 +89,7 @@ public static class Dialogs
         var tv = w.Tv;
         var addrs = TvServices.LanAddresses();
         var host = addrs.FirstOrDefault() ?? Environment.MachineName;
-        int port = tv.Settings.Port;
+        int port = tv.ActivePort > 0 ? tv.ActivePort : tv.Settings.Port;
         int knownDevices = tv.Pairing.Devices.Count;
 
         var pinText = new TextBlock { FontSize = 76, FontWeight = FontWeights.Bold, Foreground = UiKit.B("Accent"), FontFamily = new System.Windows.Media.FontFamily("Consolas") };

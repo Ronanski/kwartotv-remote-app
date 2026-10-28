@@ -24,7 +24,7 @@ public static class UrlAcl
         $"netsh advfirewall firewall delete rule name=\"KwartoTV app\"",
         $"netsh advfirewall firewall add rule name=\"KwartoTV app\" dir=in action=allow program=\"{Environment.ProcessPath}\" profile=any",
         $"netsh advfirewall firewall delete rule name=\"KwartoTV remote\"",
-        $"netsh advfirewall firewall add rule name=\"KwartoTV remote\" dir=in action=allow protocol=TCP localport={port} profile=any",
+        $"netsh advfirewall firewall add rule name=\"KwartoTV remote\" dir=in action=allow protocol=TCP localport={string.Join(",", KwartoTV.Core.RemoteServer.PortsToTry(port))} profile=any",
         $"netsh advfirewall firewall delete rule name=\"KwartoTV discovery\"",
         $"netsh advfirewall firewall add rule name=\"KwartoTV discovery\" dir=in action=allow protocol=UDP localport=5353 profile=any",
     };

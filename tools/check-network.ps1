@@ -11,12 +11,22 @@ Say Cyan "`n== 1. Is KwartoTV listening? =="
 $ip = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq "Up" } | Select-Object -First 1).IPv4Address.IPAddress
 Say White "This PC's LAN address: $ip"
 $listening = $false
-try { $r = Invoke-RestMethod "http://$($ip):$port/info" -TimeoutSec 5; $listening = $r.app -eq "KwartoTV"; Say Green "OK: KwartoTV answers on http://$($ip):$port ($($r.name))" }
-catch {
-    $running = Get-Process KwartoTV -ErrorAction SilentlyContinue
-    if ($running) { Say Red "KwartoTV is open but its remote server is not answering. Update to the latest KwartoTV.exe (older versions had this bug). ($($_.Exception.Message))" }
-    else { Say Red "KwartoTV is not running. Open it first. ($($_.Exception.Message))" }
+foreach ($p in 8765, 8766, 8767, 8768, 8769, 18765, 28765, 38765, 48765, 58765) {
+    try { $r = Invoke-RestMethod "http://$($ip):$p/info" -TimeoutSec 2; if ($r.app -eq "KwartoTV") { $listening = $true; $port = $p; Say Green "OK: KwartoTV answers on http://$($ip):$p ($($r.name))"; break } } catch { }
 }
+if (-not $listening) {
+    $running = Get-Process KwartoTV -ErrorAction SilentlyContinue
+    if ($running) { Say Red "KwartoTV is open but its remote server is not answering. Update to the latest KwartoTV.exe (older versions had this bug)." }
+    else { Say Red "KwartoTV is not running. Open it first." }
+}
+
+Say Cyan "`n== 1b. Ports Windows keeps for Hyper-V/WSL (KwartoTV cannot use these) =="
+$ex = netsh int ipv4 show excludedportrange protocol=tcp | Select-String '^\s*\d+\s+\d+'
+$hit = $false
+foreach ($l in $ex) { $a, $b = ($l.ToString().Trim() -split '\s+')[0..1]; if ([int]$a -le $port -and $port -le [int]$b) { $hit = $true; Say Yellow "Port $port is reserved by Windows (range $a-$b). The latest KwartoTV picks another port automatically." } }
+if (-not $hit) { Say Green "Port $port is not reserved." }
+$owner = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($owner) { Say White ("Port $port is used by: " + (Get-Process -Id $owner.OwningProcess).ProcessName) }
 
 Say Cyan "`n== 2. Network type (Public blocks phones) =="
 Get-NetConnectionProfile | ForEach-Object {
@@ -30,7 +40,7 @@ Get-NetFirewallProfile | ForEach-Object {
     if ($_.AllowInboundRules -eq "False") { Set-NetFirewallProfile -Name $_.Name -AllowInboundRules True; Say Green "  -> 'Block all incoming connections' was ON, turned it off" }
 }
 Remove-NetFirewallRule -DisplayName "KwartoTV remote", "KwartoTV discovery" 2>$null
-New-NetFirewallRule -DisplayName "KwartoTV remote" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $port -Profile Any | Out-Null
+New-NetFirewallRule -DisplayName "KwartoTV remote" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765,8766,8767,8768,8769,18765,28765,38765,48765,58765 -Profile Any | Out-Null
 Remove-NetFirewallRule -DisplayName "KwartoTV app" 2>$null
 $exe = (Get-Process KwartoTV -ErrorAction SilentlyContinue | Select-Object -First 1).Path
 if (-not $exe) { $exe = "$env:ProgramFiles\KwartoTV\KwartoTV.exe" }

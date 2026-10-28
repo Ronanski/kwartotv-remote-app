@@ -83,29 +83,44 @@ public sealed class TvServices : IDisposable
         finally { ChannelsLoading = false; ChannelsChanged?.Invoke(); }
     }
 
-    /// <summary>Starts the LAN remote server and mDNS advertising. Never throws; RemoteStatus says what happened.</summary>
+    /// <summary>The port the remote server is actually listening on (may differ from the preferred one).</summary>
+    public int ActivePort { get; private set; }
+
+    /// <summary>
+    /// Starts the LAN remote server and mDNS advertising. Never throws; RemoteStatus says what happened.
+    /// If the port is taken or reserved by Windows (Hyper-V/WSL), the next free port from the list is used.
+    /// </summary>
     public Task StartRemoteAsync()
     {
-        var port = Settings.Port;
         var name = $"KwartoTV on {Environment.MachineName}";
-        var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name };
-        try
+        var failures = new List<string>();
+        foreach (var port in RemoteServer.PortsToTry(Settings.Port))
         {
-            server.Start();
+            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name };
+            try
+            {
+                server.Start();
+            }
+            catch (Exception ex)
+            {
+                _ = server.DisposeAsync();
+                failures.Add($"{port}: " + (ex is SocketException se ? se.SocketErrorCode.ToString() : ex.Message));
+                continue;
+            }
             Server = server;
+            ActivePort = port;
             RemoteStatus = $"Remote is on (port {port})";
-            AppPaths.LogLine($"remote: listening on port {port}");
+            AppPaths.LogLine($"remote: listening on port {port}" + (failures.Count > 0 ? " (not free: " + string.Join(", ", failures) + ")" : ""));
+            if (Settings.Port != port) { Settings.Port = port; SaveSettings(); }
+            break;
         }
-        catch (Exception ex)
+        if (Server is null)
         {
-            _ = server.DisposeAsync();
-            RemoteStatus = ex is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse or SocketError.AccessDenied }
-                ? $"Remote is OFF: port {port} is used by another program."
-                : "Remote is OFF: " + ex.Message;
-            AppPaths.LogLine("remote: " + ex);
+            RemoteStatus = "Remote is OFF: no free port (" + string.Join(", ", failures) + ").";
+            AppPaths.LogLine("remote: " + RemoteStatus);
             return Task.CompletedTask;
         }
-        Mdns = new MdnsResponder(name, Environment.MachineName.ToLowerInvariant(), port);
+        Mdns = new MdnsResponder(name, Environment.MachineName.ToLowerInvariant(), ActivePort);
         if (!Mdns.Start()) { AppPaths.LogLine("mdns: " + Mdns.Error); }
         else AppPaths.LogLine("mdns: advertising " + string.Join(", ", MdnsResponder.LocalAddresses()));
         return Task.CompletedTask;

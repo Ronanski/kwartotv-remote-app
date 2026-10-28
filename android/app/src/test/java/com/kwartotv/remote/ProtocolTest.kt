@@ -28,9 +28,11 @@ class ProtocolTest {
     }
 
     @Test fun hostPortParsing() {
-        assertEquals("192.168.1.20" to 8765, parseHostPort("192.168.1.20"))
+        assertEquals("192.168.1.20" to null, parseHostPort("192.168.1.20"))
         assertEquals("192.168.1.20" to 9000, parseHostPort(" http://192.168.1.20:9000/ "))
-        assertEquals("kwarto-pc.local" to 8765, parseHostPort("kwarto-pc.local"))
+        assertEquals("192.168.1.20" to 18765, parseHostPort("https://192.168.1.20:18765"))
+        assertEquals("kwarto-pc.local" to null, parseHostPort("kwarto-pc.local"))
+        assertEquals(8765, CANDIDATE_PORTS.first())
         assertNull(parseHostPort(""))
         assertNull(parseHostPort("host:99999"))
         assertNull(parseHostPort("host:abc"))

@@ -399,6 +399,8 @@ Check(vt.Count(k => k.Vk == HostKeyMap.VkVolumeDown) == 50 && vt.Count(k => k.Vk
     }
 }
 
+Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 8767, 8768, 8769, 28765, 38765, 48765, 58765 }) && RemoteServer.PortsToTry(8765).First() == 8765 && RemoteServer.PortsToTry(8765).Distinct().Count() == RemoteServer.PortsToTry(8765).Count, "port fallback order: last used first, no duplicates");
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 
