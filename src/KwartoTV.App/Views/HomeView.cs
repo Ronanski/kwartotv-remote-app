@@ -85,6 +85,7 @@ public sealed class HomeView : PageBase
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 22, 0, 0) };
         if (count > 0) buttons.Children.Add(UiKit.ActionButton(current is not null ? "▶  Resume" : "▶  Watch", Shell.ShowLiveTv));
         else buttons.Children.Add(UiKit.ActionButton("Add a playlist", Shell.ShowSettings));
+        buttons.Children.Add(UiKit.ActionButton(Shell.Tv.Pairing.Devices.Count == 0 ? "Pair your phone" : "Pair another phone", () => Dialogs.Pair(Shell)));
         col.Children.Add(buttons);
         box.Child = col;
         return box;

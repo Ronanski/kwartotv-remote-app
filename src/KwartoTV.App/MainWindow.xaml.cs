@@ -53,6 +53,8 @@ public partial class MainWindow : Window, IShell
             await _tv.StartRemoteAsync();
             RemoteDot.Foreground = _tv.Server is null ? (System.Windows.Media.Brush)FindResource("Danger") : (System.Windows.Media.Brush)FindResource("Accent");
             _current?.Refresh();
+            // First run: nothing is paired yet, so show the pairing code straight away (no need to find Settings).
+            if (_tv.Server is not null && _tv.Pairing.Devices.Count == 0) Dialogs.Pair(this);
             await _tv.RefreshChannelsAsync();
         };
         Closed += (_, _) => { _player?.Close(); _tv.Apps.Close(); _tv.Dispose(); };
