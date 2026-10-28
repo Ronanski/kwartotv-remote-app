@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0f14">
+<title>KwartoTV Remote</title>
+<style>
+:root{--bg:#0d0f14;--card:#171a22;--card2:#1f2330;--line:#2a2f3d;--text:#eef1f7;--dim:#8d96aa;--accent:#ff7a45;--accent2:#ffb36b;--ok:#4cd08a;--bad:#ff5c6c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:flex;flex-direction:column;max-width:520px;margin:0 auto;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+header{display:flex;align-items:center;gap:10px;padding:14px 0 8px}
+header h1{font-size:18px;margin:0;flex:1;letter-spacing:.3px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--bad)}.dot.on{background:var(--ok)}
+.now{background:var(--card);border-radius:14px;padding:10px 14px;margin:4px 0 10px;display:flex;align-items:baseline;gap:10px;min-height:48px}
+.now b{font-size:22px;color:var(--accent2);min-width:2ch}.now span{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+nav{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px}
+nav button{background:var(--card);border:0;color:var(--dim);border-radius:12px;padding:10px 0;font-size:13px}
+nav button[aria-selected=true]{background:var(--card2);color:var(--text);box-shadow:inset 0 -3px 0 var(--accent)}
+main{flex:1;overflow:auto;padding-bottom:16px}
+section{display:none}section.on{display:block}
+button{font:inherit;color:var(--text)}
+.btn{background:var(--card2);border:0;border-radius:16px;min-height:56px;font-size:20px;display:flex;align-items:center;justify-content:center;gap:6px;user-select:none}
+.btn:active,.btn.press{background:var(--accent);color:#1a0d05}
+.btn small{font-size:12px;color:var(--dim)}
+.grid{display:grid;gap:10px}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.dpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 14px}
+.dpad .btn{min-height:68px;font-size:26px}.dpad .ok{background:var(--accent);color:#1a0d05;font-weight:700;font-size:20px}
+.pad{height:250px;border-radius:22px;background:radial-gradient(circle at 50% 40%,var(--card2),var(--card));border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;touch-action:none;user-select:none;margin:6px 0 14px;padding:12px}
+.seg{display:flex;background:var(--card);border-radius:12px;padding:3px;margin-bottom:8px}.seg button{flex:1;border:0;background:none;border-radius:10px;padding:8px;color:var(--dim)}.seg button.on{background:var(--card2);color:var(--text)}
+h2{font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin:18px 0 8px;font-weight:600}
+input[type=text],input[type=tel]{width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;color:var(--text);padding:14px;font-size:18px}
+input:focus{outline:2px solid var(--accent);border-color:transparent}
+.pair{display:flex;flex-direction:column;gap:12px;padding-top:20px}.pair p{color:var(--dim);margin:0}
+.pin{letter-spacing:.5em;text-align:center;font-size:28px!important}
+.primary{background:var(--accent);color:#1a0d05;font-weight:700}
+.danger{background:#3a1d24;color:#ffb3bb}.danger:active{background:var(--bad);color:#2a0409}
+.msg{min-height:22px;color:var(--bad);font-size:14px}
+dialog{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:18px;padding:20px;max-width:340px}
+dialog::backdrop{background:#000a}
+.row{display:flex;gap:10px;margin-top:16px}.row .btn{flex:1}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--card2);padding:10px 16px;border-radius:12px;opacity:0;transition:opacity .2s;pointer-events:none}.toast.on{opacity:1}
+.hidden{display:none!important}
+@media (max-height:640px){.pad{height:170px}.dpad .btn{min-height:56px}}
+</style>
+</head>
+<body>
+<header><h1>KwartoTV</h1><span id="status" style="color:var(--dim);font-size:13px">offline</span><div class="dot" id="dot"></div></header>
+
+<div id="pairView" class="pair hidden">
+  <h2 style="margin-top:0">Connect to your TV</h2>
+  <p>On the TV open <b>Settings → Paired devices → Pair new device</b> and type the 6-digit code here.</p>
+  <input id="pin" class="pin" type="tel" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" aria-label="Pairing code">
+  <input id="devname" type="text" maxlength="40" placeholder="Name of this device" aria-label="Device name">
+  <button class="btn primary" id="pairBtn">Pair</button>
+  <div class="msg" id="pairMsg" role="alert"></div>
+</div>
+
+<div id="remoteView" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+  <div class="now" aria-live="polite"><b id="chNum">–</b><span id="chName">No channel yet</span></div>
+  <nav role="tablist">
+    <button role="tab" data-tab="nav" aria-selected="true">Remote</button>
+    <button role="tab" data-tab="media">Media</button>
+    <button role="tab" data-tab="chan">Channels</button>
+    <button role="tab" data-tab="kb">Keyboard</button>
+    <button role="tab" data-tab="power">Power</button>
+  </nav>
+  <main>
+    <section id="t-nav" class="on">
+      <div class="seg"><button id="modeDpad" class="on">D-pad</button><button id="modePad">Touchpad</button></div>
+      <div id="dpadBox" class="dpad">
+        <span></span><button class="btn" data-cmd="nav.up" aria-label="Up">▲</button><span></span>
+        <button class="btn" data-cmd="nav.left" aria-label="Left">◀</button><button class="btn ok" data-cmd="nav.ok">OK</button><button class="btn" data-cmd="nav.right" aria-label="Right">▶</button>
+        <span></span><button class="btn" data-cmd="nav.down" aria-label="Down">▼</button><span></span>
+      </div>
+      <div id="padBox" class="pad hidden">Swipe to move<br>Tap = OK · Two-finger tap = Back</div>
+      <div class="grid g3">
+        <button class="btn" data-cmd="nav.back">⟵ <small>Back</small></button>
+        <button class="btn" data-cmd="nav.home">⌂ <small>Home</small></button>
+        <button class="btn" data-cmd="media.mute">🔇 <small>Mute</small></button>
+      </div>
+      <h2>Apps</h2>
+      <div class="grid g3">
+        <button class="btn" data-cmd="app.livetv"><small>Live TV</small></button>
+        <button class="btn" data-cmd="app.youtube"><small>YouTube</small></button>
+        <button class="btn" data-cmd="app.netflix"><small>Netflix</small></button>
+      </div>
+    </section>
+    <section id="t-media">
+      <div class="grid g3">
+        <button class="btn" data-cmd="media.prev" aria-label="Previous">⏮</button>
+        <button class="btn primary" data-cmd="media.playpause" aria-label="Play or pause">⏯</button>
+        <button class="btn" data-cmd="media.next" aria-label="Next">⏭</button>
+        <button class="btn" data-cmd="media.seek" data-arg="-10">↺ <small>10s</small></button>
+        <button class="btn" data-cmd="media.stop" aria-label="Stop">⏹</button>
+        <button class="btn" data-cmd="media.seek" data-arg="10">↻ <small>10s</small></button>
+      </div>
+      <h2>Volume</h2>
+      <div class="grid g3">
+        <button class="btn" data-cmd="media.voldown" data-repeat="1" aria-label="Volume down">−</button>
+        <button class="btn" data-cmd="media.mute">🔇</button>
+        <button class="btn" data-cmd="media.volup" data-repeat="1" aria-label="Volume up">+</button>
+      </div>
+    </section>
+    <section id="t-chan">
+      <div class="grid g3">
+        <button class="btn" data-cmd="channel.prev">▲ <small>CH</small></button>
+        <button class="btn" data-cmd="channel.last">↩ <small>Last</small></button>
+        <button class="btn" data-cmd="channel.next">▼ <small>CH</small></button>
+      </div>
+      <h2>Number pad</h2>
+      <div class="grid g3">
+        <button class="btn" data-cmd="channel.digit" data-arg="1">1</button><button class="btn" data-cmd="channel.digit" data-arg="2">2</button><button class="btn" data-cmd="channel.digit" data-arg="3">3</button>
+        <button class="btn" data-cmd="channel.digit" data-arg="4">4</button><button class="btn" data-cmd="channel.digit" data-arg="5">5</button><button class="btn" data-cmd="channel.digit" data-arg="6">6</button>
+        <button class="btn" data-cmd="channel.digit" data-arg="7">7</button><button class="btn" data-cmd="channel.digit" data-arg="8">8</button><button class="btn" data-cmd="channel.digit" data-arg="9">9</button>
+        <button class="btn" data-cmd="channel.favorite">★ <small>Fav</small></button><button class="btn" data-cmd="channel.digit" data-arg="0">0</button><button class="btn primary" data-cmd="channel.commit">Go</button>
+      </div>
+    </section>
+    <section id="t-kb">
+      <h2 style="margin-top:4px">Type on the TV</h2>
+      <input id="kbText" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tap here and type…" aria-label="Text to type on the TV">
+      <div class="grid g3" style="margin-top:12px">
+        <button class="btn" data-cmd="key.backspace">⌫</button>
+        <button class="btn" data-cmd="nav.back">⟵ <small>Back</small></button>
+        <button class="btn primary" data-cmd="key.enter">⏎</button>
+      </div>
+      <p style="color:var(--dim);font-size:13px">Letters appear on the TV as you type. Select a text box on the TV first.</p>
+    </section>
+    <section id="t-power">
+      <div class="grid g2">
+        <button class="btn" data-cmd="power.screenon">🖥 <small>Screen on</small></button>
+        <button class="btn" data-cmd="power.screenoff">⬛ <small>Screen off</small></button>
+        <button class="btn" data-cmd="power.sleep" data-confirm="Put the TV PC to sleep?">🌙 <small>Sleep</small></button>
+        <button class="btn danger" data-cmd="power.restart" data-confirm="Restart the TV PC?">↻ <small>Restart</small></button>
+        <button class="btn danger" data-cmd="power.shutdown" data-confirm="Shut down the TV PC? You will need to switch it on by hand." style="grid-column:span 2">⏻ <small>Shut down</small></button>
+      </div>
+      <h2>This device</h2>
+      <button class="btn" id="unpair" style="width:100%">Forget this TV</button>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg"><div id="dlgText"></div><div class="row"><button class="btn" id="dlgNo">Cancel</button><button class="btn danger" id="dlgYes">Yes</button></div></dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const KEY='kwartotv.pair';
+let creds=null, ws=null, retry=0, failedOpens=0, seq=0, pending=new Map(), closing=false;
+try{creds=JSON.parse(localStorage.getItem(KEY)||'null')}catch{}
+
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),1600)}
+function setStatus(on,text){$('#dot').classList.toggle('on',on);$('#status').textContent=text}
+function show(){const paired=!!creds;$('#pairView').classList.toggle('hidden',paired);$('#remoteView').classList.toggle('hidden',!paired)}
+
+function connect(){
+  if(!creds||closing)return;
+  setStatus(false,'connecting…');
+  const proto=location.protocol==='https:'?'wss':'ws';
+  const s=new WebSocket(`${proto}://${location.host}/ws?device=${encodeURIComponent(creds.deviceId)}&token=${encodeURIComponent(creds.token)}`);
+  let opened=false;ws=s;
+  s.onopen=()=>{opened=true;retry=0;failedOpens=0;setStatus(true,'connected')};
+  s.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}
+    if(m.type==='state'){$('#chNum').textContent=m.number>0?m.number:'–';$('#chName').textContent=m.channel?m.channel.name:'No channel yet'}
+    else if(m.type==='ack'){const p=pending.get(m.id);pending.delete(m.id);if(!m.ok)toast(m.error==='no such channel'?'No such channel':'Not done: '+(m.error||'error'))}};
+  s.onclose=ev=>{
+    if(s!==ws)return;
+    if(ev.code===1008){forget('This device was removed on the TV.');return}
+    if(!opened&&++failedOpens>=4){setStatus(false,'not allowed');toast('TV refused the connection. Forget this TV and pair again.');}
+    else setStatus(false,'reconnecting…');
+    setTimeout(connect,Math.min(1000*2**retry++,8000));
+  };
+}
+function send(cmd,arg){
+  if(!ws||ws.readyState!==1){toast('Not connected');return false}
+  const id=String(++seq);const m={id,cmd};if(arg!=null)m.arg=String(arg);
+  ws.send(JSON.stringify(m));pending.set(id,cmd);
+  if(navigator.vibrate)navigator.vibrate(8);return true;
+}
+function forget(msg){closing=true;try{ws&&ws.close()}catch{}localStorage.removeItem(KEY);creds=null;closing=false;show();if(msg)$('#pairMsg').textContent=msg}
+
+$('#devname').value=localStorage.getItem('kwartotv.name')||('Browser on '+(/Android/.test(navigator.userAgent)?'Android':/iPhone|iPad/.test(navigator.userAgent)?'iOS':'PC'));
+$('#pairBtn').onclick=async()=>{
+  const pin=$('#pin').value.trim(),name=$('#devname').value.trim();$('#pairMsg').textContent='';
+  if(!/^\d{6}$/.test(pin)){$('#pairMsg').textContent='Enter the 6-digit code shown on the TV.';return}
+  $('#pairBtn').disabled=true;
+  try{
+    const r=await fetch('/pair',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin,name})});
+    if(!r.ok){$('#pairMsg').textContent=r.status===403?'Wrong or expired code. Start pairing again on the TV.':'Could not pair ('+r.status+').';return}
+    creds=await r.json();localStorage.setItem(KEY,JSON.stringify(creds));localStorage.setItem('kwartotv.name',name);show();connect();
+  }catch{$('#pairMsg').textContent='Cannot reach the TV. Check that you are on the same Wi-Fi.'}
+  finally{$('#pairBtn').disabled=false}
+};
+$('#pin').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'');if(e.target.value.length===6)$('#pairBtn').focus()});
+$('#unpair').onclick=()=>forget();
+
+// tabs
+$$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));$$('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+b.dataset.tab))});
+
+// command buttons (with press-and-hold repeat for volume / arrows)
+const dlg=$('#dlg');let dlgCb=null;
+$('#dlgNo').onclick=()=>dlg.close();$('#dlgYes').onclick=()=>{dlg.close();dlgCb&&dlgCb()};
+$$('[data-cmd]').forEach(b=>{
+  const fire=()=>send(b.dataset.cmd,b.dataset.arg);
+  let timer=null;
+  const stop=()=>{clearInterval(timer);clearTimeout(timer);timer=null};
+  if(b.dataset.confirm){b.onclick=()=>{$('#dlgText').textContent=b.dataset.confirm;dlgCb=fire;dlg.showModal()};return}
+  b.addEventListener('pointerdown',e=>{fire();if(b.dataset.repeat||/^nav\.(up|down|left|right)$/.test(b.dataset.cmd)){timer=setTimeout(()=>{timer=setInterval(fire,110)},380)}});
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,stop));
+});
+
+// d-pad / touchpad switch
+function mode(pad){$('#dpadBox').classList.toggle('hidden',pad);$('#padBox').classList.toggle('hidden',!pad);$('#modePad').classList.toggle('on',pad);$('#modeDpad').classList.toggle('on',!pad);localStorage.setItem('kwartotv.pad',pad?'1':'0')}
+$('#modeDpad').onclick=()=>mode(false);$('#modePad').onclick=()=>mode(true);mode(localStorage.getItem('kwartotv.pad')==='1');
+(()=>{const pad=$('#padBox');let sx,sy,moved,touches=0,max=0;const STEP=44;
+  pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);sx=e.clientX;sy=e.clientY;moved=false;touches++;max=Math.max(max,touches)});
+  pad.addEventListener('pointermove',e=>{if(sx==null)return;const dx=e.clientX-sx,dy=e.clientY-sy;
+    if(Math.abs(dx)<STEP&&Math.abs(dy)<STEP)return;moved=true;
+    const c=Math.abs(dx)>Math.abs(dy)?(dx>0?'nav.right':'nav.left'):(dy>0?'nav.down':'nav.up');send(c);sx=e.clientX;sy=e.clientY});
+  const end=e=>{touches=Math.max(0,touches-1);if(touches===0){if(!moved)send(max>1?'nav.back':'nav.ok');max=0;sx=null}};
+  pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',end);
+})();
+
+// keyboard: send what changes
+(()=>{const i=$('#kbText');let prev='';
+  i.addEventListener('input',()=>{const v=i.value;
+    if(v.length>prev.length&&v.startsWith(prev)){const add=v.slice(prev.length);for(let k=0;k<add.length;k+=40)send('key.text',add.slice(k,k+40))}
+    else if(v.length<prev.length&&prev.startsWith(v)){for(let k=0;k<prev.length-v.length;k++)send('key.backspace')}
+    else{for(let k=0;k<prev.length;k++)send('key.backspace');for(let k=0;k<v.length;k+=40)send('key.text',v.slice(k,k+40))}
+    prev=v});
+  i.addEventListener('keydown',e=>{if(e.key==='Enter'){send('key.enter');i.value='';prev=''}});
+})();
+
+show();connect();
+})();
+</script>
+</body>
+</html>
