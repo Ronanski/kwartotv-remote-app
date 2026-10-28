@@ -58,6 +58,8 @@ $eps | ForEach-Object { Write-Host ("udp 5353 owner: {0} ({1})" -f $_.OwningProc
 $logText = if (Test-Path (Join-Path $data "log.txt")) { Get-Content (Join-Path $data "log.txt") -Raw } else { "" }
 Check (($null -ne $mdns) -or ($logText -match "mdns: advertising")) "mDNS responder started (socket bound or logged as advertising)"
 
+Shot "00-first-run-pairing"
+Keys "{ESC}"
 Shot "01-home"
 Keys "{DOWN}{DOWN}"
 Shot "02-home-scrolled"
