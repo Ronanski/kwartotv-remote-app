@@ -30,7 +30,8 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="Frame" CornerRadius="14" BorderThickness="3" BorderBrush="Transparent" Background="{StaticResource Surface}" ClipToBounds="True">
+            <Border x:Name="Frame" CornerRadius="14" BorderThickness="3" BorderBrush="Transparent" Background="{StaticResource Surface}" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
+              <Border.RenderTransform><ScaleTransform x:Name="PressScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
               <ContentPresenter/>
             </Border>
             <ControlTemplate.Triggers>
@@ -40,8 +41,8 @@
                 <Trigger.EnterActions>
                   <BeginStoryboard>
                     <Storyboard>
-                      <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1.07" Duration="0:0:0.12"/>
-                      <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1.07" Duration="0:0:0.12"/>
+                      <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1.08" Duration="0:0:0.18"><DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                      <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1.08" Duration="0:0:0.18"><DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
                     </Storyboard>
                   </BeginStoryboard>
                 </Trigger.EnterActions>
@@ -56,6 +57,25 @@
               </Trigger>
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="Frame" Property="BorderBrush" Value="#88FF7A45"/>
+              </Trigger>
+              <!-- the press: the card dips and springs back, so an OK on the remote is felt on screen -->
+              <Trigger Property="IsPressed" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleX" To="0.93" Duration="0:0:0.07"/>
+                      <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleY" To="0.93" Duration="0:0:0.07"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.18"><DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.6"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                      <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.18"><DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.6"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -92,6 +112,50 @@
               </Trigger>
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource Accent}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- A key of the on-screen keyboard. -->
+    <Style x:Key="Key" TargetType="Button">
+      <Setter Property="Focusable" Value="True"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+      <Setter Property="FontFamily" Value="Segoe UI"/>
+      <Setter Property="FontSize" Value="26"/>
+      <Setter Property="Margin" Value="3"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Frame" CornerRadius="10" Background="{StaticResource Surface2}" BorderThickness="2" BorderBrush="Transparent" RenderTransformOrigin="0.5,0.5">
+              <Border.RenderTransform><ScaleTransform x:Name="KeyScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Accent}"/>
+                <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource Accent}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard><Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="KeyScale" Storyboard.TargetProperty="ScaleX" To="0.9" Duration="0:0:0.05"/>
+                    <DoubleAnimation Storyboard.TargetName="KeyScale" Storyboard.TargetProperty="ScaleY" To="0.9" Duration="0:0:0.05"/>
+                  </Storyboard></BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard><Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="KeyScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12"/>
+                    <DoubleAnimation Storyboard.TargetName="KeyScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12"/>
+                  </Storyboard></BeginStoryboard>
+                </Trigger.ExitActions>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>

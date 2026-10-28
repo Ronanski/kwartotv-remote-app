@@ -131,12 +131,28 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { path: dist, merge-multiple: true }
+      - name: Write the update manifest (used by the in-app updater of the TV app and the Android remote)
+        run: |
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest"
+          exe_sha=$(sha256sum dist/KwartoTV.exe | cut -d' ' -f1)
+          apk_sha=$(sha256sum dist/KwartoTV-Remote.apk | cut -d' ' -f1)
+          cat > dist/KwartoTV-update.json <<EOF
+          {
+            "build": ${{ github.run_number }},
+            "version": "1.0.${{ github.run_number }}",
+            "exe": { "url": "$base/KwartoTV.exe", "sha256": "$exe_sha" },
+            "apk": { "url": "$base/KwartoTV-Remote.apk", "sha256": "$apk_sha", "versionCode": ${{ github.run_number }} },
+            "notes": "Built from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+          }
+          EOF
+          cat dist/KwartoTV-update.json
+
       - name: Publish release "latest"
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           ls -la dist
           gh release delete latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
-          gh release create latest dist/KwartoTV.exe dist/KwartoTV-Remote.apk --repo "$GITHUB_REPOSITORY" \
+          gh release create latest dist/KwartoTV.exe dist/KwartoTV-Remote.apk dist/KwartoTV-update.json --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease \
             --title "KwartoTV (latest build)" \
-            --notes "Built from ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). KwartoTV.exe is the Windows installer. KwartoTV-Remote.apk is the Android remote (allow installs from this source once)."
+            --notes "Built from ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). KwartoTV.exe is the Windows installer. KwartoTV-Remote.apk is the Android remote. Both update themselves from inside the apps."

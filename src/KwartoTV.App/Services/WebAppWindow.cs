@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using KwartoTV.App.Ui;
 using KwartoTV.Core;
 
 namespace KwartoTV.App.Services;
@@ -21,6 +22,7 @@ public sealed class WebAppWindow : Window
     private readonly string? _userAgent;
 
     public ForegroundKind Kind { get; }
+    private OskWindow? _osk;
 
     /// <summary>The embedded browser could not start (runtime missing). The caller falls back to an external browser.</summary>
     public event Action<string>? Failed;
@@ -60,9 +62,13 @@ public sealed class WebAppWindow : Window
             // F1 inside the page returns to the KwartoTV home screen.
             await core.AddScriptToExecuteOnDocumentCreatedAsync(
                 "window.addEventListener('keydown', e => { if (e.key === 'F1') { e.preventDefault(); window.chrome.webview.postMessage('home'); } }, true);");
+            // The on-screen keyboard for text fields. YouTube TV has its own keyboard, so skip it there.
+            if (Kind != ForegroundKind.YouTube) await core.AddScriptToExecuteOnDocumentCreatedAsync(WebTextTarget.PageScript);
             core.WebMessageReceived += (_, e) =>
             {
-                if (e.TryGetWebMessageAsString() == "home") Dispatcher.BeginInvoke(() => HomeRequested?.Invoke());
+                var msg = e.TryGetWebMessageAsString();
+                if (msg == "home") Dispatcher.BeginInvoke(() => HomeRequested?.Invoke());
+                else if (msg == "textfocus" && Kind != ForegroundKind.YouTube) Dispatcher.BeginInvoke(ShowKeyboard);
             };
             core.Navigate(_url);
             _web.Focus();
@@ -74,10 +80,20 @@ public sealed class WebAppWindow : Window
         }
     }
 
+    private void ShowKeyboard()
+    {
+        if (_osk is not null || !IsVisible) return;
+        var osk = new OskWindow(new WebTextTarget(_web)) { Owner = this };
+        _osk = osk;
+        osk.Closing_ += () => { _osk = null; Dispatcher.BeginInvoke(() => { Activate(); _web.Focus(); }); };
+        osk.Closed += (_, _) => _osk = null;
+        osk.Show();
+    }
+
     /// <summary>Give the page keyboard focus again after the window is activated.</summary>
     protected override void OnActivated(EventArgs e)
     {
         base.OnActivated(e);
-        if (_web.CoreWebView2 is not null) _web.Focus();
+        if (_osk is null && _web.CoreWebView2 is not null) _web.Focus();
     }
 }

@@ -72,7 +72,7 @@ public sealed class PlayerWindow : Window
             Dispatcher.BeginInvoke(DispatcherPriority.Background, async () => { await Task.Delay(50); TryInit(); });
             return;
         }
-        try { _mpv = MpvPlayer.Create(_host.Handle); _mpv.Volume = _tv.Settings.Volume; }
+        try { _mpv = MpvPlayer.Create(_host.Handle); }
         catch (Exception ex) { AppPaths.LogLine("mpv: " + ex); _osd.ShowMessage("Could not start the video engine (libmpv)."); return; }
         var a = _afterReady; _afterReady = null; a?.Invoke();
     }
@@ -138,35 +138,6 @@ public sealed class PlayerWindow : Window
         return true;
     }
 
-    // ---------- volume (the player's own volume, 0-130%)
-
-    /// <summary>Changes the volume by [delta] points and shows the volume bar. Returns false when nothing is playing.</summary>
-    public bool ChangeVolume(int delta)
-    {
-        if (_mpv is null) return false;
-        SetVolume((_mpv.Muted ? 0 : _mpv.Volume) + delta);
-        return true;
-    }
-
-    public bool SetVolume(int volume)
-    {
-        if (_mpv is null) return false;
-        volume = Math.Clamp(volume, 0, 130);
-        _mpv.Muted = false;
-        _mpv.Volume = volume;
-        _tv.Settings.Volume = volume; _tv.SaveSettingsSoon();
-        _osd.ShowVolume(volume, false);
-        return true;
-    }
-
-    public bool ToggleMute()
-    {
-        if (_mpv is null) return false;
-        _mpv.Muted = !_mpv.Muted;
-        _osd.ShowVolume(_mpv.Volume, _mpv.Muted);
-        return true;
-    }
-
     public bool SetSpeed(double speed) { _mpv?.SetSpeed(speed); return _mpv is not null; }
 
     private void ShowStatus()
@@ -213,9 +184,9 @@ public sealed class PlayerWindow : Window
     {
         base.OnPreviewKeyDown(e);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.VolumeUp or Key.OemPlus or Key.Add) { ChangeVolume(+5); e.Handled = true; return; }
-        if (key is Key.VolumeDown or Key.OemMinus or Key.Subtract) { ChangeVolume(-5); e.Handled = true; return; }
-        if (key is Key.VolumeMute or Key.M) { ToggleMute(); e.Handled = true; return; }
+        if (key is Key.OemPlus or Key.Add) { SystemVolume.Change(+5); e.Handled = true; return; }
+        if (key is Key.OemMinus or Key.Subtract) { SystemVolume.Change(-5); e.Handled = true; return; }
+        if (key is Key.M) { SystemVolume.ToggleMute(); e.Handled = true; return; }
         e.Handled = _mode == Mode.Live ? LiveKey(key) : FileKey(key);
     }
 

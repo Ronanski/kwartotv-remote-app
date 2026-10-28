@@ -52,9 +52,17 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""K
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV discovery"" dir=in action=allow protocol=UDP localport=5353 profile=any"; Flags: runhidden
 Filename: "{app}\KwartoTV.exe"; Description: "Start KwartoTV"; Flags: nowait postinstall skipifsilent
+; In-app update: the app starts the installer with /RELAUNCH=1, and it opens the new version (as the normal user, not elevated).
+Filename: "{app}\KwartoTV.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "http delete urlacl url=http://+:8765/"; Flags: runhidden; RunOnceId: "DelUrlAcl"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV app"""; Flags: runhidden; RunOnceId: "DelFw0"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV remote"""; Flags: runhidden; RunOnceId: "DelFw1"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden; RunOnceId: "DelFw2"
+
+[Code]
+function RelaunchRequested: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;

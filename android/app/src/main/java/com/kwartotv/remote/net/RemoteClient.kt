@@ -33,7 +33,7 @@ data class Now(val number: Int, val name: String?)
 
 class RemoteClient {
     private val http = OkHttpClient.Builder()
-        .pingInterval(15, TimeUnit.SECONDS)
+        .pingInterval(10, TimeUnit.SECONDS)
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
@@ -51,6 +51,11 @@ class RemoteClient {
 
     /** Called (on a worker thread) when the TV turned up on a different port; the caller saves the new port. */
     var onTvMoved: ((SavedTv) -> Unit)? = null
+
+    private var lastRx = 0L
+
+    /** Called when the saved address does not answer: the VM looks for the TV again on the Wi-Fi (its IP may have changed). */
+    var onTvUnreachable: ((SavedTv) -> Unit)? = null
 
     private var socket: WebSocket? = null
     private var tv: SavedTv? = null
@@ -74,12 +79,14 @@ class RemoteClient {
         socket = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (gen != generation) return
+                lastRx = android.os.SystemClock.elapsedRealtime()
                 retry = 0
                 _conn.value = Conn.Connected
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 if (gen != generation) return
+                lastRx = android.os.SystemClock.elapsedRealtime()
                 when (val m = parseTvMessage(text)) {
                     is TvMessage.State -> _now.value = Now(m.number, m.channelName)
                     is TvMessage.Ack -> if (!m.ok) _lastError.value = m.error ?: "Not done"
@@ -111,7 +118,7 @@ class RemoteClient {
         val delay = minOf(1000L shl minOf(retry, 3), 8000L)
         retry++
         if (retry == 3) {
-            // The PC may have restarted on another port (Windows reserves port ranges): look for it once.
+            // The PC may have restarted on another port (Windows reserves port ranges) or got another IP address: look for it once.
             val target = tv
             Thread {
                 val found = target?.let { findPortBlocking(it.host, it.port) }
@@ -119,6 +126,8 @@ class RemoteClient {
                     val moved = target.copy(port = found)
                     tv = moved
                     onTvMoved?.invoke(moved)
+                } else if (found == null && target != null && gen == generation) {
+                    onTvUnreachable?.invoke(target)
                 }
             }.start()
         }
@@ -144,8 +153,30 @@ class RemoteClient {
     fun send(cmd: String, arg: String? = null): Boolean {
         val s = socket ?: return false
         if (_conn.value != Conn.Connected) return false
-        return s.send(commandJson((++seq).toString(), cmd, arg))
+        val ok = s.send(commandJson((++seq).toString(), cmd, arg))
+        if (ok) armWatchdog()
+        return ok
     }
+
+    /**
+     * A socket can look open after the phone slept or the Wi-Fi changed, while nothing gets through.
+     * If the TV does not answer a command within a few seconds, connect again.
+     */
+    private fun armWatchdog() {
+        val gen = generation
+        val sentAt = android.os.SystemClock.elapsedRealtime()
+        main.postDelayed({
+            if (gen == generation && lastRx < sentAt && _conn.value == Conn.Connected) tv?.let { connect(it) }
+        }, 3500)
+    }
+
+    /** Drops the connection and connects again now (screen on, network back, user pressed Reconnect). */
+    fun reconnect() { tv?.let { connect(it) } }
+
+    fun isConnected() = _conn.value == Conn.Connected
+
+    /** The TV was found at a new address. */
+    fun moveTo(moved: SavedTv) { tv = moved; connect(moved) }
 
     fun clearError() { _lastError.value = null }
 

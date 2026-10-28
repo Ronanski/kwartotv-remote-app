@@ -80,7 +80,10 @@ fun RemoteScreen(vm: AppViewModel) {
         }
     }
     val send: (String, String?) -> Unit = { cmd, arg ->
-        if (!client.send(cmd, arg)) Toast.makeText(context, "Not connected to the TV", Toast.LENGTH_SHORT).show()
+        if (!client.send(cmd, arg)) {
+            Toast.makeText(context, "Not connected to the TV. Reconnecting…", Toast.LENGTH_SHORT).show()
+            vm.reconnect()
+        }
     }
 
     Scaffold(
@@ -89,7 +92,7 @@ fun RemoteScreen(vm: AppViewModel) {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(
-                        selected = tab == t, onClick = { tab = t },
+                        selected = tab == t, onClick = { Haptics.click(context); tab = t },
                         icon = { Text(t.glyph, fontSize = 20.sp) },
                         label = { Text(t.label, fontSize = 12.sp) },
                     )
@@ -113,6 +116,8 @@ fun RemoteScreen(vm: AppViewModel) {
                             )
                         }
                         DropdownMenuItem(text = { Text("+  Add another TV") }, onClick = { menu = false; vm.adding.value = true })
+                        DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; vm.reconnect() })
+                        DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menu = false; vm.checkForUpdate(manual = true) })
                         DropdownMenuItem(text = { Text("Forget ${tv.name}") }, onClick = { menu = false; vm.forget(tv) })
                     }
                 }
@@ -126,6 +131,7 @@ fun RemoteScreen(vm: AppViewModel) {
                 Text("  $label", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             }
 
+            UpdateBanner(vm)
             if (conn is Conn.Rejected) {
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp),
@@ -162,9 +168,10 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit) {
     var kind by remember { mutableIntStateOf(vm.padKind) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = kind == 0, onClick = { kind = 0; vm.padKind = 0 }, label = { Text("D-pad") })
-            FilterChip(selected = kind == 1, onClick = { kind = 1; vm.padKind = 1 }, label = { Text("Touchpad") })
-            FilterChip(selected = kind == 2, onClick = { kind = 2; vm.padKind = 2 }, label = { Text("Mouse") })
+            val ctx = LocalContext.current
+            FilterChip(selected = kind == 0, onClick = { Haptics.click(ctx); kind = 0; vm.padKind = 0 }, label = { Text("D-pad") })
+            FilterChip(selected = kind == 1, onClick = { Haptics.click(ctx); kind = 1; vm.padKind = 1 }, label = { Text("Touchpad") })
+            FilterChip(selected = kind == 2, onClick = { Haptics.click(ctx); kind = 2; vm.padKind = 2 }, label = { Text("Mouse") })
         }
         when (kind) {
             1 -> Touchpad(send)
@@ -209,16 +216,18 @@ private fun DPad(send: (String, String?) -> Unit) {
 
 @Composable
 private fun Touchpad(send: (String, String?) -> Unit) {
+    val context = LocalContext.current
     val step = with(LocalDensity.current) { 44.dp.toPx() }
     Box(
         Modifier.fillMaxWidth().height(280.dp).clip(RoundedCornerShape(26.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
-            .pointerInput(Unit) { detectTapGestures(onTap = { send(Cmd.OK, null) }, onLongPress = { send(Cmd.BACK, null) }) }
+            .pointerInput(Unit) { detectTapGestures(onTap = { Haptics.heavy(context); send(Cmd.OK, null) }, onLongPress = { Haptics.heavy(context); send(Cmd.BACK, null) }) }
             .pointerInput(step) {
                 var acc = Offset.Zero
                 detectDragGestures(onDragStart = { acc = Offset.Zero }) { change, drag ->
                     change.consume()
                     acc += drag
                     while (abs(acc.x) >= step || abs(acc.y) >= step) {
+                        Haptics.tick(context)
                         if (abs(acc.x) >= abs(acc.y)) {
                             send(if (acc.x > 0) Cmd.RIGHT else Cmd.LEFT, null); acc = Offset(acc.x - step * (if (acc.x > 0) 1 else -1), 0f)
                         } else {
@@ -236,10 +245,11 @@ private fun Touchpad(send: (String, String?) -> Unit) {
 /** Moves the mouse pointer on the TV: drag = move, tap = click, long press = right click. For websites such as Netflix. */
 @Composable
 private fun MousePad(send: (String, String?) -> Unit) {
+    val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(
             Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(26.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
-                .pointerInput(Unit) { detectTapGestures(onTap = { send(Cmd.MOUSE_CLICK, null) }, onLongPress = { send(Cmd.MOUSE_RIGHT, null) }) }
+                .pointerInput(Unit) { detectTapGestures(onTap = { Haptics.click(context); send(Cmd.MOUSE_CLICK, null) }, onLongPress = { Haptics.heavy(context); send(Cmd.MOUSE_RIGHT, null) }) }
                 .pointerInput(Unit) {
                     var ax = 0f
                     var ay = 0f
@@ -348,12 +358,13 @@ private fun PowerTab(send: (String, String?) -> Unit) {
             RemoteKey("Screen off", "Turn the TV screen off", Modifier.weight(1f), fontSize = 18, height = 72.dp) { send(Cmd.SCREEN_OFF, null) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Sleep", "Put the PC to sleep", Modifier.weight(1f), fontSize = 18, height = 72.dp) { confirm = Cmd.SLEEP to "Put the TV PC to sleep?" }
-            RemoteKey("Restart", "Restart the PC", Modifier.weight(1f), danger = true, fontSize = 18, height = 72.dp) { confirm = Cmd.RESTART to "Restart the TV PC?" }
+            RemoteKey("Sleep PC", "Put the whole PC to sleep", Modifier.weight(1f), fontSize = 18, height = 72.dp) { confirm = Cmd.SLEEP to "Put the whole TV PC to sleep?" }
+            RemoteKey("Restart PC", "Restart the whole PC", Modifier.weight(1f), danger = true, fontSize = 18, height = 72.dp) { confirm = Cmd.RESTART to "Restart the whole TV PC (laptop/computer), not just the app?" }
         }
-        RemoteKey("Shut down", "Shut down the PC", Modifier.fillMaxWidth(), danger = true, fontSize = 18, height = 72.dp) {
-            confirm = Cmd.SHUTDOWN to "Shut down the TV PC? You will need to switch it on by hand."
+        RemoteKey("Shut down PC", "Shut down the whole PC", Modifier.fillMaxWidth(), danger = true, fontSize = 18, height = 72.dp) {
+            confirm = Cmd.SHUTDOWN to "Shut down the whole TV PC (laptop/computer)? You will need to switch it on by hand."
         }
+        Text("These control the whole PC, not only the KwartoTV app.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
     }
     confirm?.let { (cmd, question) ->
         AlertDialog(

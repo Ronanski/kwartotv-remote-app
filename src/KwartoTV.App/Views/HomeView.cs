@@ -23,6 +23,12 @@ public sealed class HomeView : PageBase
         var numbers = new Dictionary<string, int>();
         for (int i = 0; i < channels.Count; i++) numbers[channels[i].Id] = i + 1;
 
+        if (tv.Updater.Available is { } upd)
+        {
+            var banner = UiKit.ActionButton($"⬆  Update {upd.Version} is available. Install", () => Dialogs.UpdateDialog(Shell, upd, tv.Updater));
+            banner.Margin = new Thickness(0, 6, 0, 0);
+            Body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { banner } });
+        }
         Body.Children.Add(Hero(channels.Count, lineup.Current, lineup.CurrentNumber, tv.ChannelsLoading));
 
         var apps = new List<UIElement>

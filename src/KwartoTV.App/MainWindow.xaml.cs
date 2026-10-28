@@ -20,6 +20,7 @@ public partial class MainWindow : Window, IShell
     private readonly DispatcherTimer _digits = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly List<Button> _navButtons = new();
     private PlayerWindow? _player;
+    private readonly VolumeOverlay _volumeRocker = new();
     private WebAppWindow? _web;
     private IInputElement? _focusBeforeDialog;
 
@@ -39,6 +40,7 @@ public partial class MainWindow : Window, IShell
             _navButtons.Add(b); Nav.Children.Add(b);
         }
 
+        PowerButton.Click += (_, _) => Dialogs.PowerMenu(this);
         _clock.Tick += (_, _) => UpdateClock(); UpdateClock(); _clock.Start();
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); Toast.Visibility = Visibility.Collapsed; };
         _digits.Tick += (_, _) => _tv.Lineup.Tick(DateTimeOffset.UtcNow);
@@ -56,12 +58,25 @@ public partial class MainWindow : Window, IShell
             _current?.Refresh();
             // First run: nothing is paired yet, so show the pairing code straight away (no need to find Settings).
             if (_tv.Server is not null && _tv.Pairing.Devices.Count == 0) Dialogs.Pair(this);
+            _ = CheckForUpdateAsync(userAsked: false);
             await _tv.RefreshChannelsAsync();
         };
         Closed += (_, _) => { CloseWeb(); _player?.Close(); _tv.Apps.Close(); _tv.Dispose(); };
     }
 
     public TvServices Tv => _tv;
+
+    /// <summary>Checks the latest release. On startup it only tells you when something new exists; from Settings it always answers.</summary>
+    public async Task CheckForUpdateAsync(bool userAsked)
+    {
+        var info = await _tv.Updater.CheckAsync();
+        if (info is not null)
+        {
+            if (!DialogOpen) Dialogs.UpdateDialog(this, info, _tv.Updater); else ShowToast($"Update {info.Version} is available (Settings → Updates).");
+            _current?.Refresh();
+        }
+        else if (userAsked) ShowToast(_tv.Updater.LastError ?? "KwartoTV is up to date.");
+    }
     public IntPtr Handle => new WindowInteropHelper(this).Handle;
     IntPtr IShell.WindowHandle => Handle;
     public ForegroundKind ForegroundApp =>
@@ -219,9 +234,6 @@ public partial class MainWindow : Window, IShell
     public bool PlayerTogglePause() => _player is { IsVisible: true } p && p.TogglePause();
     public bool PlayerSeek(int seconds) => _player is { IsVisible: true } p && p.Seek(seconds);
     public bool PlayerSpeed(double speed) => _player is { IsVisible: true } p && p.SetSpeed(speed);
-    public bool PlayerVolume(int delta) => _player is { IsVisible: true } p && p.ChangeVolume(delta);
-    public bool PlayerSetVolume(int percent) => _player is { IsVisible: true } p && p.SetVolume(percent);
-    public bool PlayerMute() => _player is { IsVisible: true } p && p.ToggleMute();
     public bool PlayerStop() { if (_player is not { IsVisible: true } p) return false; GoHome(); return true; }
 
     // ---------- toast and dialogs
@@ -233,6 +245,31 @@ public partial class MainWindow : Window, IShell
     }
 
     public bool DialogOpen => Overlay.Visibility == Visibility.Visible;
+    public bool KeyboardOpen => OskHost.Visibility == Visibility.Visible;
+    private TextBox? _oskTarget;
+
+    /// <summary>Opens the on-screen keyboard for a text box (press OK on the box).</summary>
+    public void ShowKeyboard(TextBox target)
+    {
+        _oskTarget = target;
+        var osk = new OnScreenKeyboard(new TextBoxTarget(target), () => HideKeyboard(next: true));
+        OskHost.Child = osk;
+        OskHost.Visibility = Visibility.Visible;
+        // Move the dialog to the top so the keyboard does not cover it.
+        DialogCard.VerticalAlignment = VerticalAlignment.Top; DialogCard.Margin = new Thickness(0, 24, 0, 0);
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, osk.FocusFirstKey);
+    }
+
+    public void HideKeyboard(bool next = false)
+    {
+        if (!KeyboardOpen) return;
+        OskHost.Visibility = Visibility.Collapsed; OskHost.Child = null;
+        DialogCard.VerticalAlignment = VerticalAlignment.Center; DialogCard.Margin = new Thickness(0);
+        var box = _oskTarget; _oskTarget = null;
+        if (box is null) return;
+        box.Focus(); Keyboard.Focus(box);
+        if (next) box.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+    }
 
     /// <summary>Shows a dialog over the page. [focus] is the element that gets the keyboard first (default: the first control).</summary>
     public void ShowDialog(UIElement content, UIElement? focus = null)
@@ -250,6 +287,7 @@ public partial class MainWindow : Window, IShell
     public void CloseDialog()
     {
         if (!DialogOpen) return;
+        if (KeyboardOpen) { OskHost.Visibility = Visibility.Collapsed; OskHost.Child = null; DialogCard.VerticalAlignment = VerticalAlignment.Center; DialogCard.Margin = new Thickness(0); _oskTarget = null; }
         Overlay.Visibility = Visibility.Collapsed;
         DialogCard.Child = null;
         if (_focusBeforeDialog is UIElement u && u.IsVisible) Keyboard.Focus(u); else _current?.FocusFirst();
@@ -260,7 +298,8 @@ public partial class MainWindow : Window, IShell
         base.OnPreviewKeyDown(e);
         if (e.Key is Key.Escape or Key.BrowserBack)
         {
-            if (DialogOpen) CloseDialog();
+            if (KeyboardOpen) HideKeyboard();
+            else if (DialogOpen) CloseDialog();
             else if (_currentName != "Home") Navigate("Home");
             e.Handled = true;
             return;

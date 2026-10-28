@@ -421,7 +421,29 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(mr.Handle(new(null, "mouse.move", "12,-30")).Ok && mh.Last == "mouse.move:12,-30" && mr.Handle(new(null, "mouse.click", null)).Ok && mr.Handle(new(null, "mouse.scroll", "-3")).Ok, "router mouse commands");
     Check(!mr.Handle(new(null, "mouse.move", "9999,0")).Ok && !mr.Handle(new(null, "mouse.move", "abc")).Ok && !mr.Handle(new(null, "mouse.scroll", "0")).Ok && !mr.Handle(new(null, "mouse.scroll", "99")).Ok, "router mouse bounds");
     var defaults = new AppSettings();
-    Check(defaults.NetflixInApp && defaults.Volume == 100, "defaults: Netflix in app, volume 100");
+    Check(defaults.NetflixInApp, "defaults: Netflix opens in the app");
+}
+
+// ---- updates
+{
+    var h = new string('a', 64);
+    string Manifest(string exeUrl = "https://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV.exe", string sha = null!) =>
+        "{\"build\":42,\"version\":\"1.0.42\",\"exe\":{\"url\":\"" + exeUrl + "\",\"sha256\":\"" + (sha ?? h) + "\"},\"apk\":{\"url\":\"https://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV-Remote.apk\",\"sha256\":\"" + h + "\",\"versionCode\":42},\"notes\":\"x\"}";
+    var ui = Updates.Parse(Manifest());
+    Check(ui is { Build: 42, Version: "1.0.42" } && ui.Apk.VersionCode == 42 && ui.Exe.Sha256 == h, "update manifest parses");
+    Check(Updates.IsNewer(ui!, 41) && !Updates.IsNewer(ui!, 42) && !Updates.IsNewer(ui!, 100), "update is newer only when the build number is higher");
+    Check(Updates.Parse(Manifest(exeUrl: "https://evil.example/KwartoTV.exe")) is null, "update manifest refuses other hosts");
+    Check(Updates.Parse(Manifest(exeUrl: "http://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV.exe")) is null, "update manifest refuses http");
+    Check(Updates.Parse(Manifest(sha: "zz")) is null && Updates.Parse("{}") is null && Updates.Parse("junk") is null && Updates.Parse(null) is null, "update manifest refuses bad checksum and garbage");
+
+    // download + checksum against a local server (the host check is bypassed by testing the checksum logic on a loopback file)
+    var dir = Path.Combine(Path.GetTempPath(), "kwupd-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
+    var f = Path.Combine(dir, "a.bin"); File.WriteAllBytes(f, new byte[] { 1, 2, 3, 4 });
+    Check(Updates.Sha256Of(f) == System.Security.Cryptography.SHA256.HashData(new byte[] { 1, 2, 3, 4 }).Aggregate("", (s, b) => s + b.ToString("x2")), "sha256 of a file");
+    bool refused = false;
+    try { await Updates.DownloadAsync(new UpdateFile("http://127.0.0.1:1/x", h), Path.Combine(dir, "x"), new HttpClient()); } catch (InvalidOperationException) { refused = true; }
+    Check(refused, "download refuses addresses outside the project releases");
+    Directory.Delete(dir, true);
 }
 
 Console.WriteLine($"{pass} passed, {fail} failed");

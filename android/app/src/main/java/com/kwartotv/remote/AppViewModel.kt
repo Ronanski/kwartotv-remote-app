@@ -7,10 +7,24 @@ import androidx.lifecycle.viewModelScope
 import com.kwartotv.remote.net.Discovery
 import com.kwartotv.remote.net.FoundTv
 import com.kwartotv.remote.net.RemoteClient
+import com.kwartotv.remote.net.Updater
+import android.net.ConnectivityManager
+import android.net.Network
+import android.widget.Toast
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+
+sealed interface UpdateState {
+    data object None : UpdateState
+    data class Available(val info: UpdateInfo) : UpdateState
+    data class Working(val percent: Int, val installing: Boolean) : UpdateState
+    data class Failed(val message: String, val info: UpdateInfo) : UpdateState
+}
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
@@ -41,7 +55,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         client.connect(tv)
     }
 
+    private val updater = Updater(app)
+    val update = MutableStateFlow<UpdateState>(UpdateState.None)
+
     init {
+        checkForUpdate(manual = false)
+        // When the Wi-Fi comes back (or changes) reconnect right away instead of waiting for the next retry.
+        val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        try {
+            cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) { if (!client.isConnected()) viewModelScope.launch { connectSelected() } }
+            })
+        } catch (_: Exception) { }
+        // The TV's IP address can change (router lease). Look for it by name on the Wi-Fi.
+        client.onTvUnreachable = { lost ->
+            viewModelScope.launch {
+                val found = withTimeoutOrNull(7000) {
+                    Discovery.discover(getApplication()).first { list -> list.any { it.name == lost.name } || (list.size == 1 && tvs.value.size == 1) }
+                }?.let { list -> list.firstOrNull { it.name == lost.name } ?: list.first() }
+                if (found != null && (found.host != lost.host || found.port != lost.port)) {
+                    val moved = lost.copy(host = found.host, port = found.port)
+                    val list = tvs.value.map { if (it.deviceId == moved.deviceId) moved else it }
+                    tvs.value = list; store.save(list)
+                    client.moveTo(moved)
+                }
+            }
+        }
         client.onTvMoved = { moved ->
             val list = tvs.value.map { if (it.deviceId == moved.deviceId) moved else it }
             tvs.value = list
@@ -71,6 +110,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun connectSelected() { selected()?.let { client.connect(it) } }
+
+    /** Connect again now (the connection may be stale after the phone was idle). */
+    fun reconnect() { if (selected() != null) connectSelected() }
+
+    fun checkForUpdate(manual: Boolean) {
+        viewModelScope.launch {
+            val info = updater.check()
+            if (info != null) update.value = UpdateState.Available(info)
+            else if (manual) Toast.makeText(getApplication(), "KwartoTV Remote is up to date.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun installUpdate(info: UpdateInfo) {
+        viewModelScope.launch {
+            update.value = UpdateState.Working(0, false)
+            try {
+                updater.install(info) { p -> update.value = UpdateState.Working(p, p >= 100) }
+                // Android now shows its own "Update this app?" screen. Back here the banner can be tried again.
+                update.value = UpdateState.Available(info)
+            } catch (e: Exception) {
+                update.value = UpdateState.Failed(e.message ?: "Update failed.", info)
+            }
+        }
+    }
     fun disconnect() = client.disconnect()
 
     override fun onCleared() { client.disconnect() }

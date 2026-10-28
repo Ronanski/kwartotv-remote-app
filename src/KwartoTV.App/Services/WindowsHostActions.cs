@@ -21,10 +21,6 @@ public interface IShell
     bool PlayerSeek(int seconds);
     bool PlayerSpeed(double speed);
     bool PlayerStop();
-    /// <summary>Volume of the built-in player (+/- points). False when nothing is playing in KwartoTV, so system volume keys are used.</summary>
-    bool PlayerVolume(int delta);
-    bool PlayerSetVolume(int percent);
-    bool PlayerMute();
 }
 
 /// <summary>Windows implementation of IHostActions: navigation keys, media keys, volume, text, apps and power.</summary>
@@ -61,21 +57,11 @@ public sealed class WindowsHostActions : IHostActions
             }
             case "media.speed":
                 ui.Invoke(() => shell.PlayerSpeed(double.Parse(arg!, CultureInfo.InvariantCulture))); return;
-            case "media.volume":
-            {
-                var v = int.Parse(arg!, CultureInfo.InvariantCulture);
-                if (ui.Invoke(() => shell.PlayerSetVolume(v))) return;
-                Native.Press(HostKeyMap.VolumeTo(v)); return;
-            }
-            case "media.volup":
-                if (ui.Invoke(() => shell.PlayerVolume(+5))) return;
-                break;
-            case "media.voldown":
-                if (ui.Invoke(() => shell.PlayerVolume(-5))) return;
-                break;
-            case "media.mute":
-                if (ui.Invoke(shell.PlayerMute)) return;
-                break;
+            // Volume is the Windows master volume, for every app, with the on-screen volume rocker.
+            case "media.volume": SystemVolume.SetPercent(int.Parse(arg!, CultureInfo.InvariantCulture)); return;
+            case "media.volup": SystemVolume.Change(+5); return;
+            case "media.voldown": SystemVolume.Change(-5); return;
+            case "media.mute": SystemVolume.ToggleMute(); return;
             case "mouse.move":
                 CommandRouter.TryMove(arg, out var mdx, out var mdy);
                 Native.MoveMouse(mdx, mdy); return;
@@ -86,11 +72,11 @@ public sealed class WindowsHostActions : IHostActions
             case "key.text":
                 Native.TypeText(arg!); return;
 
-            case "power.sleep": Native.Sleep(); return;
+            case "power.sleep": PowerActions.Sleep(); return;
             case "power.screenoff": Native.ScreenOff(shell.WindowHandle); return;
             case "power.screenon": Native.WakeScreen(); return;
-            case "power.shutdown": Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 0") { CreateNoWindow = true, UseShellExecute = false }); return;
-            case "power.restart": Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 0") { CreateNoWindow = true, UseShellExecute = false }); return;
+            case "power.shutdown": PowerActions.Shutdown(); return;
+            case "power.restart": PowerActions.Restart(); return;
         }
 
         var keys = HostKeyMap.Navigation(cmd, shell.ForegroundApp) ?? HostKeyMap.Media(cmd);

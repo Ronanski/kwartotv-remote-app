@@ -33,6 +33,7 @@ public static class UiKit
     public static StackPanel Row(string title, IEnumerable<UIElement> tiles)
     {
         var strip = new StackPanel { Orientation = Orientation.Horizontal };
+        SmoothScroll.Attach(strip);
         foreach (var t in tiles) strip.Children.Add(t);
         var scroll = new ScrollViewer
         {

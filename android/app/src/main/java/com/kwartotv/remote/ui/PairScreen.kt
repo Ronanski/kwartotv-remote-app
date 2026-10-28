@@ -69,6 +69,7 @@ fun PairScreen(vm: AppViewModel, canCancel: Boolean) {
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        UpdateBanner(vm)
         if (canCancel) TextButton(onClick = { vm.adding.value = false }) { Text("‹ Back to remote") }
         Text("Connect to your TV", fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text(

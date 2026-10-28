@@ -22,21 +22,6 @@
       <TextBlock x:Name="DigitText" FontSize="84" FontWeight="Bold" FontFamily="Consolas" Foreground="#FFFFB36B"/>
     </Border>
 
-    <!-- volume -->
-    <Border x:Name="VolumeBox" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,56,0,0" Padding="28,14" CornerRadius="18" Background="#E60B0D12" MinWidth="380">
-      <StackPanel>
-        <TextBlock x:Name="VolumeText" FontSize="30" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-        <Grid Margin="0,10,0,0" Height="8">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="VolFillCol" Width="0*"/>
-            <ColumnDefinition x:Name="VolRestCol" Width="1*"/>
-          </Grid.ColumnDefinitions>
-          <Border Grid.ColumnSpan="2" Background="#33FFFFFF" CornerRadius="4"/>
-          <Border Background="#FFFF7A45" CornerRadius="4"/>
-        </Grid>
-      </StackPanel>
-    </Border>
-
     <!-- centre message -->
     <Border x:Name="MessageBox" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="36,20" CornerRadius="18" Background="#E60B0D12">
       <TextBlock x:Name="MessageText" FontSize="30" TextAlignment="Center" MaxWidth="900" TextWrapping="Wrap"/>

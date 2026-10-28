@@ -53,7 +53,6 @@ public sealed class MpvPlayer : IDisposable
         p.Opt("demuxer-max-bytes", "64MiB");
         p.Opt("sub-auto", "fuzzy");
         p.Opt("audio-client-name", "KwartoTV");
-        p.Opt("volume-max", "130");
         p.Opt("user-agent", DefaultUserAgent);
         if (mpv_initialize(p._ctx) < 0) { p.Dispose(); throw new InvalidOperationException("mpv_initialize failed"); }
         return p;
@@ -87,19 +86,6 @@ public sealed class MpvPlayer : IDisposable
     {
         Set("referrer", referrer ?? "");
         Set("user-agent", userAgent ?? DefaultUserAgent);
-    }
-
-    /// <summary>Player volume 0-130 (100 = original level).</summary>
-    public int Volume
-    {
-        get => double.TryParse(Get("volume"), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? (int)Math.Round(v) : 100;
-        set => Set("volume", Math.Clamp(value, 0, 130).ToString(CultureInfo.InvariantCulture));
-    }
-
-    public bool Muted
-    {
-        get => Get("mute") == "yes";
-        set => Set("mute", value ? "yes" : "no");
     }
 
     public void Load(string urlOrPath) => Command("loadfile", urlOrPath, "replace");

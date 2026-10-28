@@ -69,7 +69,11 @@ public sealed class SettingsView : PageBase
         Body.Children.Add(Buttons(UiKit.ActionButton(Tv.Settings.NetflixInApp ? "Netflix opens: inside KwartoTV" : "Netflix opens: Microsoft Store app", () => { Tv.Settings.NetflixInApp = !Tv.Settings.NetflixInApp; Tv.SaveSettings(); Refresh(); })));
         Body.Children.Add(Buttons(
             UiKit.ActionButton(startup ? "Start with Windows: On" : "Start with Windows: Off", () => { SetStartup(!startup); Refresh(); }),
-            UiKit.ActionButton("Exit KwartoTV", () => Dialogs.Confirm(Shell, "Close KwartoTV?", "Exit", () => Application.Current.Shutdown()), danger: true)));
+            UiKit.ActionButton("Power…", () => Dialogs.PowerMenu(Shell), danger: true)));
+        Body.Children.Add(UiKit.Heading("Updates"));
+        var upd = Tv.Updater.Available;
+        Body.Children.Add(Buttons(
+            UiKit.ActionButton(upd is null ? $"Check for updates (you have 1.0.{Updater.CurrentBuild})" : $"Install update {upd.Version}", () => { if (upd is null) _ = Shell.CheckForUpdateAsync(true); else Dialogs.UpdateDialog(Shell, upd, Tv.Updater); })));
         Body.Children.Add(UiKit.Dimmed($"KwartoTV {typeof(SettingsView).Assembly.GetName().Version?.ToString(3)}  ·  data in {AppPaths.Root}", 15));
     }
 

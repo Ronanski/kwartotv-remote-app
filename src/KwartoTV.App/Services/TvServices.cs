@@ -15,6 +15,7 @@ public sealed class TvServices : IDisposable
     public ChannelLineup Lineup { get; } = new();
     public PairingService Pairing { get; } = new();
     public ExternalApps Apps { get; } = new();
+    public Updater Updater { get; } = new();
     public CommandRouter Router { get; private set; } = null!;
     public RemoteServer? Server { get; private set; }
     public MdnsResponder? Mdns { get; private set; }

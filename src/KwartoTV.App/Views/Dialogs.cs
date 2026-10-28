@@ -48,7 +48,9 @@ public static class Dialogs
         buttons.Children.Add(UiKit.ActionButton(saveLabel, Save));
         buttons.Children.Add(UiKit.ActionButton("Cancel", w.CloseDialog));
         panel.Children.Add(buttons);
-        foreach (var b in boxes) b.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { Save(); e.Handled = true; } };
+        // OK/Enter on a field opens the on-screen keyboard (a physical keyboard can still be typed on directly).
+        foreach (var b in boxes) b.PreviewKeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { w.ShowKeyboard(b); e.Handled = true; } };
+        panel.Children.Insert(2, UiKit.Dimmed("Select a box and press OK to type with the on-screen keyboard.", 15));
         w.ShowDialog(panel, boxes.FirstOrDefault());
     }
 
@@ -110,8 +112,13 @@ public static class Dialogs
         // Enter picks the first match; Down moves into the list (a text box would otherwise keep both keys).
         filter.PreviewKeyDown += (_, e) =>
         {
+            if (e.Key == System.Windows.Input.Key.Enter && filter.Text.Length == 0) { w.ShowKeyboard(filter); e.Handled = true; return; }
             if (results.Children.Count == 0 || results.Children[0] is not Button first) return;
-            if (e.Key == System.Windows.Input.Key.Enter) { first.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); e.Handled = true; }
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                if (filter.Text.Length == 0) w.ShowKeyboard(filter); else first.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                e.Handled = true;
+            }
             else if (e.Key == System.Windows.Input.Key.Down) { first.Focus(); e.Handled = true; }
         };
         panel.Children.Add(tabs);
@@ -134,6 +141,57 @@ public static class Dialogs
             }
             catch { }
         });
+    }
+
+    /// <summary>Sleep, restart or shut down the whole PC (not only KwartoTV), or close the app.</summary>
+    public static void PowerMenu(MainWindow w)
+    {
+        var panel = new StackPanel { Width = 620 };
+        panel.Children.Add(new TextBlock { Text = "Power", FontSize = 32, FontWeight = FontWeights.Bold });
+        panel.Children.Add(UiKit.Dimmed("These control the whole PC, not just KwartoTV.", 18));
+        void Option(string label, string question, string yes, Action act, bool danger)
+        {
+            var b = UiKit.ActionButton(label, () => { w.CloseDialog(); Confirm(w, question, yes, act); }, danger);
+            b.HorizontalContentAlignment = HorizontalAlignment.Left; b.Margin = new Thickness(0, 10, 0, 0);
+            panel.Children.Add(b);
+        }
+        Option("🌙  Sleep the PC", "Put the PC to sleep? You will need to wake it with its power button.", "Sleep", PowerActions.Sleep, false);
+        Option("↻  Restart the PC", "Restart the whole PC? KwartoTV will start again if it is set to start with Windows.", "Restart PC", PowerActions.Restart, true);
+        Option("⏻  Shut down the PC", "Shut down the whole PC? You will need to switch it on by hand.", "Shut down PC", PowerActions.Shutdown, true);
+        Option("✕  Exit KwartoTV only", "Close the KwartoTV app? The PC stays on.", "Exit app", () => Application.Current.Shutdown(), false);
+        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 22, 0, 0), Children = { UiKit.ActionButton("Cancel", w.CloseDialog) } });
+        w.ShowDialog(panel);
+    }
+
+    /// <summary>Offers to install a newer KwartoTV. The installer closes the app and opens it again.</summary>
+    public static void UpdateDialog(MainWindow w, UpdateInfo info, Updater updater)
+    {
+        var status = UiKit.Dimmed("", 18);
+        var panel = new StackPanel { Width = 700 };
+        panel.Children.Add(new TextBlock { Text = "Update available", FontSize = 32, FontWeight = FontWeights.Bold });
+        panel.Children.Add(UiKit.Dimmed($"Version {info.Version} is ready (you have 1.0.{Updater.CurrentBuild}). KwartoTV will download it, close, install and open again. Windows will ask permission once.", 18));
+        if (!string.IsNullOrWhiteSpace(info.Notes)) panel.Children.Add(UiKit.Dimmed(info.Notes!, 16));
+        panel.Children.Add(status);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 20, 0, 0) };
+        Button? installBtn = null;
+        installBtn = UiKit.ActionButton("Install now", async () =>
+        {
+            installBtn!.IsEnabled = false;
+            status.Text = "Downloading…";
+            var progress = new Progress<double>(p => status.Text = $"Downloading… {(int)(p * 100)}%");
+            var err = await updater.InstallAsync(info, progress);
+            if (err is null)
+            {
+                status.Text = "Installing. KwartoTV will close and open again.";
+                await Task.Delay(2500);
+                Application.Current.Shutdown();
+            }
+            else { status.Text = "⚠ " + err; status.Foreground = UiKit.B("Danger"); installBtn.IsEnabled = true; }
+        });
+        buttons.Children.Add(installBtn);
+        buttons.Children.Add(UiKit.ActionButton("Later", w.CloseDialog));
+        panel.Children.Add(buttons);
+        w.ShowDialog(panel);
     }
 
     public static string? PickFolder()

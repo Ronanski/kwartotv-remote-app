@@ -19,9 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
+import com.kwartotv.remote.Haptics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -51,7 +51,7 @@ fun RemoteKey(
     height: Dp = 60.dp,
     onFire: () -> Unit,
 ) {
-    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val fire by rememberUpdatedState(onFire)
     var pressed by remember { mutableStateOf(false) }
@@ -81,7 +81,7 @@ fun RemoteKey(
                 awaitEachGesture {
                     awaitFirstDown()
                     pressed = true
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    if (primary) Haptics.heavy(context) else Haptics.click(context)
                     fire()
                     val job = if (repeat) scope.launch {
                         delay(380)

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using KwartoTV.App.Ui;
 
 namespace KwartoTV.App.Views;
 
@@ -14,6 +15,7 @@ public abstract class PageBase : UserControl
     {
         Shell = shell;
         Scroll.Content = Body;
+        SmoothScroll.Attach(Body);
         Content = Scroll;
         Loaded += (_, _) => Refresh();
     }
