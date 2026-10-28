@@ -77,6 +77,30 @@ internal static class Native
         SendInput((uint)arr.Length, arr, Marshal.SizeOf<Input>());
     }
 
+    private const uint MouseLeftDown = 0x0002, MouseLeftUp = 0x0004, MouseRightDown = 0x0008, MouseRightUp = 0x0010, MouseWheel = 0x0800;
+
+    /// <summary>Moves the pointer by (dx, dy) pixels, like a laptop touchpad.</summary>
+    public static void MoveMouse(int dx, int dy)
+    {
+        var m = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { dx = dx, dy = dy, dwFlags = MouseMove } } };
+        SendInput(1, new[] { m }, Marshal.SizeOf<Input>());
+    }
+
+    public static void MouseClick(bool right)
+    {
+        uint down = right ? MouseRightDown : MouseLeftDown, up = right ? MouseRightUp : MouseLeftUp;
+        var a = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { dwFlags = down } } };
+        var b = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { dwFlags = up } } };
+        SendInput(2, new[] { a, b }, Marshal.SizeOf<Input>());
+    }
+
+    /// <summary>Wheel notches: positive scrolls up, negative scrolls down.</summary>
+    public static void MouseScroll(int notches)
+    {
+        var w = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { mouseData = unchecked((uint)(notches * 120)), dwFlags = MouseWheel } } };
+        SendInput(1, new[] { w }, Marshal.SizeOf<Input>());
+    }
+
     /// <summary>A 1px mouse nudge wakes a monitor that was switched off.</summary>
     public static void WakeScreen()
     {

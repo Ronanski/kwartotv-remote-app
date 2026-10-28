@@ -19,6 +19,7 @@ public sealed class CommandRouter
         "media.seek", "media.volume", "media.speed",
         "media.volup", "media.voldown",
         "key.text", "key.backspace", "key.enter",
+        "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
         "app.youtube", "app.netflix", "app.livetv", "app.library", "app.settings",
         "power.sleep", "power.screenoff", "power.screenon", "power.shutdown", "power.restart",
     };
@@ -65,6 +66,12 @@ public sealed class CommandRouter
             case "media.volume":
                 if (!int.TryParse(c.Arg, out var v) || v < 0 || v > 100) return new(false, "bad volume");
                 break;
+            case "mouse.move":
+                if (!TryMove(c.Arg, out _, out _)) return new(false, "bad move");
+                break;
+            case "mouse.scroll":
+                if (!int.TryParse(c.Arg, out var sc) || sc < -20 || sc > 20 || sc == 0) return new(false, "bad scroll");
+                break;
             case "key.text":
                 if (string.IsNullOrEmpty(c.Arg) || c.Arg.Any(char.IsControl)) return new(false, "bad text");
                 break;
@@ -76,6 +83,14 @@ public sealed class CommandRouter
 
         try { _host.Execute(c.Cmd, c.Arg); return new(true); }
         catch (Exception ex) { return new(false, ex.GetType().Name); }
+    }
+
+    /// <summary>"dx,dy" in pixels, each -300..300.</summary>
+    public static bool TryMove(string? arg, out int dx, out int dy)
+    {
+        dx = dy = 0;
+        var parts = (arg ?? "").Split(',');
+        return parts.Length == 2 && int.TryParse(parts[0], out dx) && int.TryParse(parts[1], out dy) && Math.Abs(dx) <= 300 && Math.Abs(dy) <= 300;
     }
 
     private static CommandResult Tuned(Channel? ch) => ch is null ? new(false, "no such channel") : new(true);

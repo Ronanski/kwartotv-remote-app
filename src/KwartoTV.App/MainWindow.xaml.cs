@@ -141,6 +141,13 @@ public partial class MainWindow : Window, IShell
 
     public async void LaunchNetflix()
     {
+        if (_tv.Settings.NetflixInApp)
+        {
+            // Inside KwartoTV, like YouTube. Move the pointer with the phone's Mouse pad (Netflix's website is built for a mouse).
+            const string url = "https://www.netflix.com/browse";
+            OpenWeb(url, "netflix", ForegroundKind.Netflix, null, "Netflix", () => _tv.Apps.LaunchWeb(new WebTile("netflix", "Netflix", url)));
+            return;
+        }
         PrepareExternal();
         ShowToast("Opening Netflix…");
         if (_tv.Settings.NetflixAppId is null)
@@ -191,6 +198,20 @@ public partial class MainWindow : Window, IShell
         try { w.Close(); } catch { }
     }
 
+    /// <summary>Lets the user pick a public iptv-org playlist (country or category) and adds it.</summary>
+    public void AddIptvOrgPlaylist()
+    {
+        Dialogs.IptvOrgPicker(this, pick =>
+        {
+            var err = _tv.Settings.AddPlaylist(pick.Name + " (iptv-org)", pick.Url);
+            if (err is not null) { ShowToast(err); return; }
+            _tv.SaveSettings();
+            _ = _tv.RefreshChannelsAsync();
+            ShowToast($"Loading {pick.Name} channels…");
+            _current?.Refresh();
+        });
+    }
+
     private void PrepareExternal() { CloseDialog(); _player?.Hide(); }
 
     // ---------- in-app player controls used by the remote
@@ -198,6 +219,9 @@ public partial class MainWindow : Window, IShell
     public bool PlayerTogglePause() => _player is { IsVisible: true } p && p.TogglePause();
     public bool PlayerSeek(int seconds) => _player is { IsVisible: true } p && p.Seek(seconds);
     public bool PlayerSpeed(double speed) => _player is { IsVisible: true } p && p.SetSpeed(speed);
+    public bool PlayerVolume(int delta) => _player is { IsVisible: true } p && p.ChangeVolume(delta);
+    public bool PlayerSetVolume(int percent) => _player is { IsVisible: true } p && p.SetVolume(percent);
+    public bool PlayerMute() => _player is { IsVisible: true } p && p.ToggleMute();
     public bool PlayerStop() { if (_player is not { IsVisible: true } p) return false; GoHome(); return true; }
 
     // ---------- toast and dialogs
@@ -236,10 +260,10 @@ public partial class MainWindow : Window, IShell
             e.Handled = true;
             return;
         }
-        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube.
-        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube, F6 Netflix, F7 add iptv-org channels.
+        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or Key.F6 or Key.F7 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
-            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; default: ShowSettings(); break; }
+            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; case Key.F6: LaunchNetflix(); break; case Key.F7: AddIptvOrgPlaylist(); break; default: ShowSettings(); break; }
             e.Handled = true;
             return;
         }

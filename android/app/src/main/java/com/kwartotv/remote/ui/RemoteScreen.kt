@@ -54,6 +54,7 @@ import com.kwartotv.remote.AppViewModel
 import com.kwartotv.remote.Cmd
 import com.kwartotv.remote.net.Conn
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private enum class Tab(val label: String, val glyph: String) {
     Remote("Remote", "◉"), Media("Media", "▶"), Channels("Channels", "#"), Keys("Keyboard", "⌨"), Power("Power", "⏻")
@@ -158,17 +159,27 @@ fun RemoteScreen(vm: AppViewModel) {
 
 @Composable
 private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit) {
-    var pad by remember { mutableStateOf(vm.padMode) }
+    var kind by remember { mutableIntStateOf(vm.padKind) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !pad, onClick = { pad = false; vm.padMode = false }, label = { Text("D-pad") })
-            FilterChip(selected = pad, onClick = { pad = true; vm.padMode = true }, label = { Text("Touchpad") })
+            FilterChip(selected = kind == 0, onClick = { kind = 0; vm.padKind = 0 }, label = { Text("D-pad") })
+            FilterChip(selected = kind == 1, onClick = { kind = 1; vm.padKind = 1 }, label = { Text("Touchpad") })
+            FilterChip(selected = kind == 2, onClick = { kind = 2; vm.padKind = 2 }, label = { Text("Mouse") })
         }
-        if (pad) Touchpad(send) else DPad(send)
+        when (kind) {
+            1 -> Touchpad(send)
+            2 -> MousePad(send)
+            else -> DPad(send)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("⟵", "Back", Modifier.weight(1f)) { send(Cmd.BACK, null) }
             RemoteKey("⌂", "Home", Modifier.weight(1f)) { send(Cmd.HOME, null) }
             RemoteKey("🔇", "Mute", Modifier.weight(1f)) { send(Cmd.MUTE, null) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RemoteKey("−", "Volume down", Modifier.weight(1f), repeat = true, fontSize = 30) { send(Cmd.VOL_DOWN, null) }
+            Text("Volume", Modifier.weight(1f).align(Alignment.CenterVertically), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            RemoteKey("+", "Volume up", Modifier.weight(1f), repeat = true, fontSize = 30) { send(Cmd.VOL_UP, null) }
         }
         Text("Apps", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -219,6 +230,39 @@ private fun Touchpad(send: (String, String?) -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text("Swipe to move\nTap = OK  ·  Long press = Back", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
+/** Moves the mouse pointer on the TV: drag = move, tap = click, long press = right click. For websites such as Netflix. */
+@Composable
+private fun MousePad(send: (String, String?) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(26.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
+                .pointerInput(Unit) { detectTapGestures(onTap = { send(Cmd.MOUSE_CLICK, null) }, onLongPress = { send(Cmd.MOUSE_RIGHT, null) }) }
+                .pointerInput(Unit) {
+                    var ax = 0f
+                    var ay = 0f
+                    var last = 0L
+                    detectDragGestures(onDragStart = { ax = 0f; ay = 0f; last = 0L }) { change, drag ->
+                        change.consume()
+                        ax += drag.x * 2.2f; ay += drag.y * 2.2f
+                        val now = System.currentTimeMillis()
+                        if (now - last >= 25) {
+                            val dx = ax.roundToInt().coerceIn(-300, 300); val dy = ay.roundToInt().coerceIn(-300, 300)
+                            if (dx != 0 || dy != 0) { send(Cmd.MOUSE_MOVE, "$dx,$dy"); ax = 0f; ay = 0f; last = now }
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Drag to move the pointer\nTap = click  ·  Long press = right click", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RemoteKey("Click", "Mouse click", Modifier.weight(1f), fontSize = 18) { send(Cmd.MOUSE_CLICK, null) }
+            RemoteKey("▲ Scroll", "Scroll up", Modifier.weight(1f), repeat = true, fontSize = 16) { send(Cmd.MOUSE_SCROLL, "-2") }
+            RemoteKey("▼ Scroll", "Scroll down", Modifier.weight(1f), repeat = true, fontSize = 16) { send(Cmd.MOUSE_SCROLL, "2") }
+        }
     }
 }
 

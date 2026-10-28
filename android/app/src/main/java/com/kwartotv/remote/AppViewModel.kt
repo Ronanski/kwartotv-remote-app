@@ -25,9 +25,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val found: StateFlow<List<FoundTv>> = Discovery.discover(app)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    var padMode: Boolean
-        get() = store.padMode
-        set(v) { store.padMode = v }
+    var padKind: Int
+        get() = store.padKind
+        set(v) { store.padKind = v }
 
     val phoneName: String
         get() = listOf(Build.MANUFACTURER, Build.MODEL).filter { it.isNotBlank() }.joinToString(" ")

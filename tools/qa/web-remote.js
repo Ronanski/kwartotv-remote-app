@@ -43,11 +43,24 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const b2 = hostLog().length;
   await page.touchscreen.tap(pad.x + pad.width / 2, pad.y + pad.height / 2); await wait(300);
   check(hostLog().slice(b2).includes('HOST nav.ok'), 'touchpad tap = OK');
+  // mouse mode: drag moves the pointer, tap clicks, scroll buttons scroll
+  await page.click('#modeMouse'); await page.screenshot({ path: `${outDir}/web-3b-mouse.png` });
+  const mp = await page.locator('#mousePad').boundingBox();
+  const bm = hostLog().length;
+  await page.touchscreen.tap(mp.x + 50, mp.y + 50); await wait(300);
+  check(hostLog().slice(bm).includes('HOST mouse.click'), 'mouse pad tap = click');
+  await page.mouse.move(mp.x + 60, mp.y + 60); await page.mouse.down(); await page.mouse.move(mp.x + 160, mp.y + 100, { steps: 6 }); await page.mouse.up(); await wait(300);
+  check(/HOST mouse\.move -?\d+,-?\d+/.test(hostLog().slice(bm)), 'mouse pad drag moves the pointer');
+  await page.click('#t-nav [data-cmd="mouse.scroll"][data-arg="2"]'); await wait(300);
+  check(hostLog().slice(bm).includes('HOST mouse.scroll 2'), 'mouse scroll down');
   await page.click('#modeDpad');
+  const bv = hostLog().length;
+  await page.click('#t-nav [data-cmd="media.volup"]'); await page.click('#t-nav [data-cmd="media.voldown"]'); await wait(300);
+  check(hostLog().slice(bv).includes('HOST media.volup') && hostLog().slice(bv).includes('HOST media.voldown'), 'volume buttons on the main Remote tab');
 
   await page.click('[data-tab="media"]'); await page.screenshot({ path: `${outDir}/web-4-media.png` });
   const b3 = hostLog().length;
-  await page.click('[data-cmd="media.playpause"]'); await page.click('[data-cmd="media.volup"]'); await page.click('#t-media [data-cmd="media.mute"]');
+  await page.click('[data-cmd="media.playpause"]'); await page.click('#t-media [data-cmd="media.volup"]'); await page.click('#t-media [data-cmd="media.mute"]');
   await page.click('[data-cmd="media.seek"][data-arg="-10"]'); await wait(400);
   const l3 = hostLog().slice(b3);
   check(l3.includes('HOST media.playpause') && l3.includes('HOST media.volup') && l3.includes('HOST media.mute') && l3.includes('HOST media.seek -10'), 'media, volume and seek commands');

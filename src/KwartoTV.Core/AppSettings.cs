@@ -17,6 +17,10 @@ public sealed class AppSettings
     public LineupState Lineup { get; set; } = new(null, null, new List<string>());
     public int Port { get; set; } = DefaultPort;
     public string? NetflixAppId { get; set; }
+    /// <summary>Netflix opens inside KwartoTV (website). Turn off to use the Microsoft Store app instead.</summary>
+    public bool NetflixInApp { get; set; } = true;
+    /// <summary>Volume of the built-in player, 0-130.</summary>
+    public int Volume { get; set; } = 100;
 
     public static bool IsPlaylistFile(string path) =>
         Path.IsPathRooted(path) && (path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));

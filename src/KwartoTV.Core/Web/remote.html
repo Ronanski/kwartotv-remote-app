@@ -68,17 +68,30 @@ dialog::backdrop{background:#000a}
   </nav>
   <main>
     <section id="t-nav" class="on">
-      <div class="seg"><button id="modeDpad" class="on">D-pad</button><button id="modePad">Touchpad</button></div>
+      <div class="seg"><button id="modeDpad" class="on">D-pad</button><button id="modePad">Touchpad</button><button id="modeMouse">Mouse</button></div>
       <div id="dpadBox" class="dpad">
         <span></span><button class="btn" data-cmd="nav.up" aria-label="Up">▲</button><span></span>
         <button class="btn" data-cmd="nav.left" aria-label="Left">◀</button><button class="btn ok" data-cmd="nav.ok">OK</button><button class="btn" data-cmd="nav.right" aria-label="Right">▶</button>
         <span></span><button class="btn" data-cmd="nav.down" aria-label="Down">▼</button><span></span>
       </div>
       <div id="padBox" class="pad hidden">Swipe to move<br>Tap = OK · Two-finger tap = Back</div>
+      <div id="mouseBox" class="hidden">
+        <div id="mousePad" class="pad" style="margin-bottom:10px">Drag to move the pointer<br>Tap = click · Hold = right click</div>
+        <div class="grid g3" style="margin-bottom:14px">
+          <button class="btn" data-cmd="mouse.click">Click</button>
+          <button class="btn" data-cmd="mouse.scroll" data-arg="-2" data-repeat="1">▲ Scroll</button>
+          <button class="btn" data-cmd="mouse.scroll" data-arg="2" data-repeat="1">▼ Scroll</button>
+        </div>
+      </div>
       <div class="grid g3">
         <button class="btn" data-cmd="nav.back">⟵ <small>Back</small></button>
         <button class="btn" data-cmd="nav.home">⌂ <small>Home</small></button>
         <button class="btn" data-cmd="media.mute">🔇 <small>Mute</small></button>
+      </div>
+      <div class="grid g3" style="margin-top:10px">
+        <button class="btn" data-cmd="media.voldown" data-repeat="1" aria-label="Volume down">−</button>
+        <span style="align-self:center;text-align:center;color:var(--dim)">Volume</span>
+        <button class="btn" data-cmd="media.volup" data-repeat="1" aria-label="Volume up">+</button>
       </div>
       <h2>Apps</h2>
       <div class="grid g3">
@@ -212,8 +225,17 @@ $$('[data-cmd]').forEach(b=>{
 });
 
 // d-pad / touchpad switch
-function mode(pad){$('#dpadBox').classList.toggle('hidden',pad);$('#padBox').classList.toggle('hidden',!pad);$('#modePad').classList.toggle('on',pad);$('#modeDpad').classList.toggle('on',!pad);localStorage.setItem('kwartotv.pad',pad?'1':'0')}
-$('#modeDpad').onclick=()=>mode(false);$('#modePad').onclick=()=>mode(true);mode(localStorage.getItem('kwartotv.pad')==='1');
+function mode(k){$('#dpadBox').classList.toggle('hidden',k!==0);$('#padBox').classList.toggle('hidden',k!==1);$('#mouseBox').classList.toggle('hidden',k!==2);
+  $('#modeDpad').classList.toggle('on',k===0);$('#modePad').classList.toggle('on',k===1);$('#modeMouse').classList.toggle('on',k===2);localStorage.setItem('kwartotv.padKind',String(k))}
+$('#modeDpad').onclick=()=>mode(0);$('#modePad').onclick=()=>mode(1);$('#modeMouse').onclick=()=>mode(2);mode(Number(localStorage.getItem('kwartotv.padKind')||0));
+(()=>{const pad=$('#mousePad');let lx,ly,ax=0,ay=0,last=0,moved=false,hold=null;
+  pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);lx=e.clientX;ly=e.clientY;ax=ay=0;moved=false;clearTimeout(hold);hold=setTimeout(()=>{if(!moved){send('mouse.rightclick');moved=true}},600)});
+  pad.addEventListener('pointermove',e=>{if(lx==null)return;ax+=(e.clientX-lx)*2.2;ay+=(e.clientY-ly)*2.2;lx=e.clientX;ly=e.clientY;
+    if(Math.abs(ax)+Math.abs(ay)>6)moved=true;const now=Date.now();
+    if(now-last>=25){const dx=Math.max(-300,Math.min(300,Math.round(ax))),dy=Math.max(-300,Math.min(300,Math.round(ay)));if(dx||dy){send('mouse.move',dx+','+dy);ax=ay=0;last=now}}});
+  const end=()=>{clearTimeout(hold);if(lx!=null&&!moved)send('mouse.click');lx=null};
+  pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',()=>{clearTimeout(hold);lx=null});
+})();
 (()=>{const pad=$('#padBox');let sx,sy,moved,touches=0,max=0;const STEP=44;
   pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);sx=e.clientX;sy=e.clientY;moved=false;touches++;max=Math.max(max,touches)});
   pad.addEventListener('pointermove',e=>{if(sx==null)return;const dx=e.clientX-sx,dy=e.clientY-sy;

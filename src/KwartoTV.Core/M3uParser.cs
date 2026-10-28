@@ -11,7 +11,7 @@ public static class M3uParser
     {
         var result = new List<Channel>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string? name = null, logo = null, group = null;
+        string? name = null, logo = null, group = null, referrer = null, userAgent = null;
         bool pending = false;
 
         foreach (var raw in text.Split('\n'))
@@ -36,12 +36,29 @@ public static class M3uParser
                 continue;
             }
 
+            // #EXTVLCOPT:http-referrer=... and http-user-agent=... apply to the next stream (many public lists need them).
+            if (line.StartsWith("#EXTVLCOPT:", StringComparison.OrdinalIgnoreCase))
+            {
+                var opt = line["#EXTVLCOPT:".Length..];
+                var eq = opt.IndexOf('=');
+                if (eq > 0)
+                {
+                    var key = opt[..eq].Trim().ToLowerInvariant(); var val = opt[(eq + 1)..].Trim().Trim('"');
+                    if (val.Length is > 0 and < 512 && !val.Any(char.IsControl))
+                    {
+                        if (key is "http-referrer" or "http-referer") referrer = val;
+                        else if (key == "http-user-agent") userAgent = val;
+                    }
+                }
+                continue;
+            }
+
             if (line.StartsWith('#')) continue;
 
             if (!Uri.TryCreate(line, UriKind.Absolute, out var uri) ||
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            { pending = false; continue; }
-            if (!seen.Add(line)) { pending = false; continue; }
+            { pending = false; referrer = userAgent = null; continue; }
+            if (!seen.Add(line)) { pending = false; referrer = userAgent = null; continue; }
 
             var finalName = pending && !string.IsNullOrWhiteSpace(name)
                 ? name!
@@ -50,8 +67,8 @@ public static class M3uParser
                 Channel.StableId(line), finalName, line,
                 string.IsNullOrWhiteSpace(logo) ? null : logo,
                 string.IsNullOrWhiteSpace(group) ? "Other" : group!,
-                Channel.DetectKind(line)));
-            name = logo = group = null; pending = false;
+                Channel.DetectKind(line), referrer, userAgent));
+            name = logo = group = referrer = userAgent = null; pending = false;
         }
         return result;
     }

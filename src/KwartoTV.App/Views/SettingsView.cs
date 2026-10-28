@@ -26,7 +26,8 @@ public sealed class SettingsView : PageBase
             Body.Children.Add(ItemRow($"{p.Name}", p.Source, ("Remove", () => { Tv.Settings.RemovePlaylist(p.Id); Tv.SaveSettings(); _ = Tv.RefreshChannelsAsync(); Refresh(); }, true)));
         foreach (var err in Tv.PlaylistErrors) Body.Children.Add(new TextBlock { Text = "⚠ " + err, FontSize = 17, Foreground = UiKit.B("Danger"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
         Body.Children.Add(Buttons(
-            UiKit.ActionButton("Add playlist", AddPlaylist),
+            UiKit.ActionButton("Add from iptv-org", Shell.AddIptvOrgPlaylist),
+            UiKit.ActionButton("Add playlist link/file", AddPlaylist),
             UiKit.ActionButton(Tv.ChannelsLoading ? "Loading…" : $"Reload channels ({Tv.Lineup.Channels.Count})", () => _ = Tv.RefreshChannelsAsync())));
 
         // ---- website tiles
@@ -65,6 +66,7 @@ public sealed class SettingsView : PageBase
         // ---- system
         Body.Children.Add(UiKit.Heading("System"));
         var startup = StartupEnabled();
+        Body.Children.Add(Buttons(UiKit.ActionButton(Tv.Settings.NetflixInApp ? "Netflix opens: inside KwartoTV" : "Netflix opens: Microsoft Store app", () => { Tv.Settings.NetflixInApp = !Tv.Settings.NetflixInApp; Tv.SaveSettings(); Refresh(); })));
         Body.Children.Add(Buttons(
             UiKit.ActionButton(startup ? "Start with Windows: On" : "Start with Windows: Off", () => { SetStartup(!startup); Refresh(); }),
             UiKit.ActionButton("Exit KwartoTV", () => Dialogs.Confirm(Shell, "Close KwartoTV?", "Exit", () => Application.Current.Shutdown()), danger: true)));

@@ -18,6 +18,9 @@ public sealed class MpvPlayer : IDisposable
     [DllImport(Lib)] private static extern int mpv_command(IntPtr ctx, IntPtr[] args);
     [DllImport(Lib)] private static extern void mpv_free(IntPtr data);
 
+    /// <summary>Public stream servers often refuse mpv's own name, so identify as a normal browser unless the playlist says otherwise.</summary>
+    public const string DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
     private IntPtr _ctx;
 
     /// <summary>True when libmpv-2.dll can be found next to the app.</summary>
@@ -50,6 +53,8 @@ public sealed class MpvPlayer : IDisposable
         p.Opt("demuxer-max-bytes", "64MiB");
         p.Opt("sub-auto", "fuzzy");
         p.Opt("audio-client-name", "KwartoTV");
+        p.Opt("volume-max", "130");
+        p.Opt("user-agent", DefaultUserAgent);
         if (mpv_initialize(p._ctx) < 0) { p.Dispose(); throw new InvalidOperationException("mpv_initialize failed"); }
         return p;
     }
@@ -76,6 +81,26 @@ public sealed class MpvPlayer : IDisposable
     }
 
     private void Set(string name, string value) { if (_ctx != IntPtr.Zero) mpv_set_property_string(_ctx, name, value); }
+
+    /// <summary>Per-stream headers from the playlist (#EXTVLCOPT). Pass nulls to go back to the defaults.</summary>
+    public void SetHeaders(string? referrer, string? userAgent)
+    {
+        Set("referrer", referrer ?? "");
+        Set("user-agent", userAgent ?? DefaultUserAgent);
+    }
+
+    /// <summary>Player volume 0-130 (100 = original level).</summary>
+    public int Volume
+    {
+        get => double.TryParse(Get("volume"), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? (int)Math.Round(v) : 100;
+        set => Set("volume", Math.Clamp(value, 0, 130).ToString(CultureInfo.InvariantCulture));
+    }
+
+    public bool Muted
+    {
+        get => Get("mute") == "yes";
+        set => Set("mute", value ? "yes" : "no");
+    }
 
     public void Load(string urlOrPath) => Command("loadfile", urlOrPath, "replace");
     public void Stop() => Command("stop");

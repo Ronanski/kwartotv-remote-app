@@ -21,7 +21,8 @@ class Store(context: Context) {
         get() = prefs.getString("selected", null)
         set(v) { prefs.edit().putString("selected", v).apply() }
 
-    var padMode: Boolean
-        get() = prefs.getBoolean("pad", false)
-        set(v) { prefs.edit().putBoolean("pad", v).apply() }
+    /** 0 = D-pad, 1 = touchpad (arrows), 2 = mouse. */
+    var padKind: Int
+        get() = prefs.getInt("padKind", 0)
+        set(v) { prefs.edit().putInt("padKind", v).apply() }
 }

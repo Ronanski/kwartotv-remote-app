@@ -30,6 +30,11 @@ object Cmd {
     const val CH_COMMIT = "channel.commit"
     const val CH_FAVORITE = "channel.favorite"
 
+    const val MOUSE_MOVE = "mouse.move"
+    const val MOUSE_CLICK = "mouse.click"
+    const val MOUSE_RIGHT = "mouse.rightclick"
+    const val MOUSE_SCROLL = "mouse.scroll"
+
     const val TEXT = "key.text"
     const val BACKSPACE = "key.backspace"
     const val ENTER = "key.enter"

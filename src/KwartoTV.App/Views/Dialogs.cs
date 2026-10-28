@@ -63,6 +63,73 @@ public static class Dialogs
         w.ShowDialog(panel);
     }
 
+    private static readonly HttpClient Web = new() { Timeout = TimeSpan.FromSeconds(8) };
+
+    /// <summary>
+    /// Pick a public playlist from iptv-org (github.com/iptv-org/iptv) by country or category. Type to filter.
+    /// Nothing is bundled: this only fills in the playlist link, which is downloaded like any other.
+    /// </summary>
+    public static void IptvOrgPicker(MainWindow w, Action<PlaylistSuggestion> onPick)
+    {
+        var countries = IptvOrg.CountrySuggestions(IptvOrg.BuiltInCountries);
+        var categories = IptvOrg.CategorySuggestions();
+        bool showCountries = true;
+
+        var panel = new StackPanel { Width = 820 };
+        panel.Children.Add(new TextBlock { Text = "Add channels from iptv-org", FontSize = 32, FontWeight = FontWeights.Bold });
+        panel.Children.Add(UiKit.Dimmed("Public playlists from github.com/iptv-org/iptv. KwartoTV includes no channels: you pick a list and it is downloaded to this PC. Some streams may be offline or blocked in your country.", 17));
+
+        var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 6) };
+        var filter = new TextBox { Style = (Style)Application.Current.FindResource("Field"), Margin = new Thickness(0, 4, 0, 8) };
+        var results = new StackPanel();
+        var shown = new TextBlock { FontSize = 15, Foreground = UiKit.B("Dim"), Margin = new Thickness(0, 6, 0, 0) };
+
+        void Render()
+        {
+            results.Children.Clear();
+            var matches = IptvOrg.Filter(showCountries ? countries : categories, filter.Text);
+            foreach (var m in matches.Take(8))
+            {
+                var pick = m;
+                var b = new Button { Style = (Style)Application.Current.FindResource("Pill"), Tag = "action", HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 2) };
+                b.Content = new TextBlock { Text = pick.Name, FontSize = 22 };
+                b.Click += (_, _) => { w.CloseDialog(); onPick(pick); };
+                results.Children.Add(b);
+            }
+            shown.Text = matches.Count == 0 ? "Nothing matches. Check the spelling." : matches.Count > 8 ? $"Showing 8 of {matches.Count}. Type more letters to narrow it down." : "";
+        }
+
+        Button TabButton(string label, bool countriesTab)
+        {
+            var b = UiKit.ActionButton(label, () => { showCountries = countriesTab; filter.Clear(); Render(); });
+            return b;
+        }
+        tabs.Children.Add(TabButton("Countries", true));
+        tabs.Children.Add(TabButton("Categories", false));
+        filter.TextChanged += (_, _) => Render();
+        panel.Children.Add(tabs);
+        panel.Children.Add(new TextBlock { Text = "Type to search (for example: phil)", FontSize = 16, Foreground = UiKit.B("Dim") });
+        panel.Children.Add(filter);
+        panel.Children.Add(results);
+        panel.Children.Add(shown);
+        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0), Children = { UiKit.ActionButton("Cancel", w.CloseDialog) } });
+        Render();
+        w.ShowDialog(panel);
+        filter.Focus();
+
+        // Use the current country list from iptv-org when online; the built-in list is the fallback.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var json = await Web.GetStringAsync(IptvOrg.CountriesApi);
+                var live = IptvOrg.ParseCountries(json);
+                if (live.Count > 20) { var s = IptvOrg.CountrySuggestions(live); await panel.Dispatcher.InvokeAsync(() => { countries = s; if (showCountries) Render(); }); }
+            }
+            catch { }
+        });
+    }
+
     public static string? PickFolder()
     {
         var d = new Microsoft.Win32.OpenFolderDialog { Title = "Choose a folder" };

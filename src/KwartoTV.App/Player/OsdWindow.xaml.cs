@@ -21,8 +21,22 @@ public partial class OsdWindow : Window
     {
         InitializeComponent();
         SourceInitialized += (_, _) => Native.MakeOverlay(new WindowInteropHelper(this).Handle);
+        _volumeTimer.Tick += (_, _) => { _volumeTimer.Stop(); VolumeBox.Visibility = Visibility.Collapsed; };
         _bannerTimer.Tick += (_, _) => { _bannerTimer.Stop(); Banner.Visibility = Visibility.Collapsed; };
         _progressTimer.Tick += (_, _) => { _progressTimer.Stop(); Progress.Visibility = Visibility.Collapsed; };
+    }
+
+    private readonly DispatcherTimer _volumeTimer = new() { Interval = TimeSpan.FromMilliseconds(1600) };
+
+    /// <summary>Volume bar at the top. Volume goes up to 130 (percent of the original level).</summary>
+    public void ShowVolume(int volume, bool muted)
+    {
+        VolumeText.Text = muted ? "🔇  Muted" : $"🔊  {volume}%";
+        double frac = muted ? 0 : Math.Clamp(volume / 130.0, 0, 1);
+        VolFillCol.Width = new GridLength(frac, GridUnitType.Star);
+        VolRestCol.Width = new GridLength(1 - frac, GridUnitType.Star);
+        VolumeBox.Visibility = Visibility.Visible;
+        _volumeTimer.Stop(); _volumeTimer.Start();
     }
 
     public void ShowBanner(Channel ch, int number, bool favorite)
@@ -93,8 +107,8 @@ public partial class OsdWindow : Window
 
     public void HideAll()
     {
-        Banner.Visibility = DigitBox.Visibility = MessageBox.Visibility = Guide.Visibility = Progress.Visibility = Visibility.Collapsed;
-        _bannerTimer.Stop(); _progressTimer.Stop();
+        Banner.Visibility = DigitBox.Visibility = MessageBox.Visibility = Guide.Visibility = Progress.Visibility = VolumeBox.Visibility = Visibility.Collapsed;
+        _bannerTimer.Stop(); _progressTimer.Stop(); _volumeTimer.Stop();
     }
 
     private static string Fmt(double s)

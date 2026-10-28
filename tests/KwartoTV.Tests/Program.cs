@@ -401,6 +401,29 @@ Check(vt.Count(k => k.Vk == HostKeyMap.VkVolumeDown) == 50 && vt.Count(k => k.Vk
 
 Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 8767, 8768, 8769, 28765, 38765, 48765, 58765 }) && RemoteServer.PortsToTry(8765).First() == 8765 && RemoteServer.PortsToTry(8765).Distinct().Count() == RemoteServer.PortsToTry(8765).Count, "port fallback order: last used first, no duplicates");
 
+// ---- iptv-org links, #EXTVLCOPT headers, mouse commands, defaults
+{
+    Check(IptvOrg.CountryUrl("PH") == "https://iptv-org.github.io/iptv/countries/ph.m3u" && IptvOrg.CategoryUrl("News") == "https://iptv-org.github.io/iptv/categories/news.m3u", "iptv-org playlist links");
+    Check(IptvOrg.BuiltInCountries.Any(c => c.Code == "PH" && c.Name == "Philippines") && IptvOrg.Categories.Contains("news") && IptvOrg.Categories.Contains("kids"), "iptv-org built-in country and category names");
+    var cs = IptvOrg.ParseCountries("[{\"name\":\"Philippines\",\"code\":\"PH\",\"flag\":\"x\"},{\"name\":\"Bad\"},{\"code\":\"US\",\"name\":\"United States\"}]");
+    Check(cs.Count == 2 && cs[0].Code == "PH", "iptv-org countries.json parses and skips bad rows");
+    Check(IptvOrg.ParseCountries("not json").Count == 0 && IptvOrg.ParseCountries("{}").Count == 0, "iptv-org countries.json garbage gives empty list");
+    var sug = IptvOrg.CountrySuggestions(IptvOrg.BuiltInCountries);
+    Check(sug.All(s => AppSettings.IsHttpsUrl(s.Url)) && sug.First().Name.StartsWith("A"), "iptv-org suggestions are https and sorted");
+    Check(IptvOrg.Filter(sug, "phil").Single().Name == "Philippines" && IptvOrg.Filter(sug, "").Count == sug.Count, "iptv-org filter by typed text");
+
+    const string withOpts = "#EXTM3U\n#EXTINF:-1 group-title=\"News\",Needs Headers\n#EXTVLCOPT:http-referrer=https://example.invalid/\n#EXTVLCOPT:http-user-agent=Custom UA/1.0\nhttps://example.invalid/h.m3u8\n#EXTINF:-1,Plain\nhttps://example.invalid/p.m3u8\n";
+    var wo = M3uParser.Parse(withOpts);
+    Check(wo[0].Referrer == "https://example.invalid/" && wo[0].UserAgent == "Custom UA/1.0", "EXTVLCOPT referrer and user agent are kept");
+    Check(wo[1].Referrer is null && wo[1].UserAgent is null, "EXTVLCOPT options do not leak into the next channel");
+
+    var mh = new FakeHost(); var mr = new CommandRouter(new ChannelLineup(), mh);
+    Check(mr.Handle(new(null, "mouse.move", "12,-30")).Ok && mh.Last == "mouse.move:12,-30" && mr.Handle(new(null, "mouse.click", null)).Ok && mr.Handle(new(null, "mouse.scroll", "-3")).Ok, "router mouse commands");
+    Check(!mr.Handle(new(null, "mouse.move", "9999,0")).Ok && !mr.Handle(new(null, "mouse.move", "abc")).Ok && !mr.Handle(new(null, "mouse.scroll", "0")).Ok && !mr.Handle(new(null, "mouse.scroll", "99")).Ok, "router mouse bounds");
+    var defaults = new AppSettings();
+    Check(defaults.NetflixInApp && defaults.Volume == 100, "defaults: Netflix in app, volume 100");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

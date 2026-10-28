@@ -19,7 +19,8 @@ Download the latest build from the **Releases** page (`latest`), or from the art
 5. Several phones can be paired and connected at the same time. Block or revoke any of them in Settings.
 
 ### TV app
-- **Home**: Netflix-style rows (apps, favorites, channel groups). YouTube opens inside KwartoTV (Edge WebView2, TV layout: sign in with the code from your phone, and cast from the phone's YouTube app). Netflix uses the Store app. Add any https website as a tile (also opens inside the app). F1 returns Home.
+- **Home**: Netflix-style rows (apps, favorites, channel groups). YouTube opens inside KwartoTV (Edge WebView2, TV layout: sign in with the code from your phone, and cast from the phone's YouTube app). Netflix also opens inside KwartoTV (the website; use the phone remote's **Mouse** pad), or switch to the Microsoft Store app in Settings. Add any https website as a tile (also opens inside the app). F1 returns Home.
+- **Channels**: Home and Settings have **Add from iptv-org**: pick a country or category from the public lists at github.com/iptv-org/iptv (nothing is bundled). Or add any .m3u link or file.
 - **Live TV**: cable-style. Number keys, ▲▼ channel up/down, Back/Tab = last channel, `F` = favorite, OK/◀ = mini guide.
 - **Library**: videos and music from folders you add.
 - **Settings**: playlists, website tiles, paired devices, library folders, start with Windows.

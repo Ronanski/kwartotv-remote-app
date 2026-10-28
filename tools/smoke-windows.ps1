@@ -83,10 +83,32 @@ Keys "{DOWN}{DOWN}{DOWN}"
 Shot "04-settings-scrolled"
 Keys "{F3}"
 Shot "05-library"
+# iptv-org: are the public links the app builds real, and does picking one fill the channel list end to end?
+foreach ($u in "https://iptv-org.github.io/iptv/countries/ph.m3u", "https://iptv-org.github.io/api/countries.json") {
+    try { $r = Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 30; $n = ([regex]::Matches($r.Content, "#EXTINF")).Count; Check ($r.StatusCode -eq 200) "iptv-org reachable: $u ($($r.Content.Length) bytes, $n channels)" }
+    catch { Check $false "iptv-org reachable: $u ($_)" }
+}
+Keys "{F7}"
+Shot "10-iptv-org-picker"
+Keys "phil"
+Shot "11-iptv-org-filtered"
+Keys "{DOWN}"
+Keys "{ENTER}"
+Start-Sleep -Seconds 20
 Keys "{F1}"
+Start-Sleep -Seconds 4
+Shot "12-home-after-iptv-org"
+Start-Sleep -Seconds 1
+$saved = Get-Content (Join-Path $data "settings.json") -Raw
+Check ($saved -match "iptv-org.github.io/iptv/countries/ph.m3u") "picking Philippines added the iptv-org playlist to the settings"
 Keys "{F5}"
 Start-Sleep -Seconds 25
 Shot "09-youtube-in-app"
+Keys "{F1}"
+Start-Sleep -Seconds 2
+Keys "{F6}"
+Start-Sleep -Seconds 25
+Shot "13-netflix-in-app"
 Keys "{F1}"
 Start-Sleep -Seconds 2
 Keys "1"

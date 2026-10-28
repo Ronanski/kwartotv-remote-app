@@ -72,7 +72,7 @@ public sealed class PlayerWindow : Window
             Dispatcher.BeginInvoke(DispatcherPriority.Background, async () => { await Task.Delay(50); TryInit(); });
             return;
         }
-        try { _mpv = MpvPlayer.Create(_host.Handle); }
+        try { _mpv = MpvPlayer.Create(_host.Handle); _mpv.Volume = _tv.Settings.Volume; }
         catch (Exception ex) { AppPaths.LogLine("mpv: " + ex); _osd.ShowMessage("Could not start the video engine (libmpv)."); return; }
         var a = _afterReady; _afterReady = null; a?.Invoke();
     }
@@ -97,7 +97,8 @@ public sealed class PlayerWindow : Window
         WhenReady(() =>
         {
             _osd.ShowMessage(null);
-            _mpv!.Load(ch.Url); _mpv.Paused = false;
+            _mpv!.SetHeaders(ch.Referrer, ch.UserAgent);
+            _mpv.Load(ch.Url); _mpv.Paused = false;
             _loadedAt = DateTime.UtcNow;
             _osd.ShowBanner(ch, number, _tv.Lineup.IsFavorite(ch.Id));
         });
@@ -114,7 +115,8 @@ public sealed class PlayerWindow : Window
     {
         var item = _files[_fileIndex];
         _osd.ShowMessage(null);
-        _mpv!.Load(item.Path); _mpv.Paused = false;
+        _mpv!.SetHeaders(null, null);
+        _mpv.Load(item.Path); _mpv.Paused = false;
         _loadedAt = DateTime.UtcNow; _failed = false;
         _osd.ShowProgress(item.Title, 0, 0, false, false);
     }
@@ -133,6 +135,35 @@ public sealed class PlayerWindow : Window
     {
         if (_mpv is null || _mode == Mode.Live) return false;
         _mpv.Seek(seconds); ShowStatus();
+        return true;
+    }
+
+    // ---------- volume (the player's own volume, 0-130%)
+
+    /// <summary>Changes the volume by [delta] points and shows the volume bar. Returns false when nothing is playing.</summary>
+    public bool ChangeVolume(int delta)
+    {
+        if (_mpv is null) return false;
+        SetVolume((_mpv.Muted ? 0 : _mpv.Volume) + delta);
+        return true;
+    }
+
+    public bool SetVolume(int volume)
+    {
+        if (_mpv is null) return false;
+        volume = Math.Clamp(volume, 0, 130);
+        _mpv.Muted = false;
+        _mpv.Volume = volume;
+        _tv.Settings.Volume = volume; _tv.SaveSettingsSoon();
+        _osd.ShowVolume(volume, false);
+        return true;
+    }
+
+    public bool ToggleMute()
+    {
+        if (_mpv is null) return false;
+        _mpv.Muted = !_mpv.Muted;
+        _osd.ShowVolume(_mpv.Volume, _mpv.Muted);
         return true;
     }
 
@@ -182,6 +213,9 @@ public sealed class PlayerWindow : Window
     {
         base.OnPreviewKeyDown(e);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.VolumeUp or Key.OemPlus or Key.Add) { ChangeVolume(+5); e.Handled = true; return; }
+        if (key is Key.VolumeDown or Key.OemMinus or Key.Subtract) { ChangeVolume(-5); e.Handled = true; return; }
+        if (key is Key.VolumeMute or Key.M) { ToggleMute(); e.Handled = true; return; }
         e.Handled = _mode == Mode.Live ? LiveKey(key) : FileKey(key);
     }
 
