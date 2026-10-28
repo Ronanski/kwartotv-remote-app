@@ -143,7 +143,7 @@ class RemoteClient {
         } catch (e: PairException) {
             throw e
         } catch (e: java.io.IOException) {
-            throw PairException("Cannot reach the TV. Check that both are on the same Wi-Fi.")
+            throw PairException(explain(e, host, port))
         }
     }
 
@@ -154,3 +154,19 @@ class RemoteClient {
 }
 
 class PairException(message: String) : Exception(message)
+
+/** Turns a network error into a next step. The technical reason is kept at the end so it can be reported. */
+fun explain(e: Throwable, host: String, port: Int): String {
+    val why = "(${e.javaClass.simpleName}${e.message?.let { ": $it" } ?: ""})"
+    return when (e) {
+        is java.net.SocketTimeoutException ->
+            "The TV did not answer at $host:$port. Usually Windows Firewall is blocking it: on the TV press \"Fix network access\" in the pairing screen, then try again. $why"
+        is java.net.ConnectException ->
+            if (e.message?.contains("ECONNREFUSED") == true || e.message?.contains("refused", ignoreCase = true) == true)
+                "The PC at $host answered but nothing is listening on port $port. Is KwartoTV open? $why"
+            else "Cannot connect to $host:$port. Check the address on the TV screen and that the phone is on the same Wi-Fi (not mobile data or a guest network). $why"
+        is java.net.NoRouteToHostException, is java.net.UnknownHostException ->
+            "No route to $host. The phone and the PC are not on the same network. $why"
+        else -> "Cannot reach the TV at $host:$port. $why"
+    }
+}

@@ -75,6 +75,14 @@ public static class Dialogs
         return d.ShowDialog() == true ? d.FileName : null;
     }
 
+    /// <summary>Re-applies the URL reservation and firewall rules (asks Windows for permission once).</summary>
+    public static async void FixNetwork(MainWindow w, int port)
+    {
+        w.ShowToast("Windows will ask for permission…");
+        var ok = await Task.Run(() => UrlAcl.RunElevated(port));
+        w.ShowToast(ok ? "Network access fixed. Try again on the phone." : "Not changed: permission was declined.");
+    }
+
     /// <summary>Shows a PIN and a QR code. Closes by itself when a phone completes pairing.</summary>
     public static void Pair(MainWindow w)
     {
@@ -123,9 +131,11 @@ public static class Dialogs
         right.Children.Add(new TextBlock { Text = "Address", FontSize = 16, Foreground = UiKit.B("Dim"), Margin = new Thickness(0, 22, 0, 2) });
         right.Children.Add(new TextBlock { Text = $"{host}:{port}", FontSize = 26, FontFamily = new System.Windows.Media.FontFamily("Consolas") });
         if (addrs.Count > 1) right.Children.Add(UiKit.Dimmed("Other addresses of this PC: " + string.Join(", ", addrs.Skip(1)), 15));
+        right.Children.Add(UiKit.Dimmed("Phone says it cannot reach the TV? Press Fix network access.", 15));
         right.Children.Add(UiKit.Dimmed($"No app? Open http://{host}:{port} in any phone or PC browser on this Wi-Fi.", 16));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 24, 0, 0) };
         buttons.Children.Add(UiKit.ActionButton("New code", () => { NewCode(); Tick(); }));
+        buttons.Children.Add(UiKit.ActionButton("Fix network access", () => FixNetwork(w, port)));
         buttons.Children.Add(UiKit.ActionButton("Close", () => { timer.Stop(); w.CloseDialog(); }));
         right.Children.Add(buttons);
 
