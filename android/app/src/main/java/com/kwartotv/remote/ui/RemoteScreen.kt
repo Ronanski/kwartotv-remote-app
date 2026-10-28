@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kwartotv.remote.AppViewModel
 import com.kwartotv.remote.Cmd
+import com.kwartotv.remote.Haptics
 import com.kwartotv.remote.net.Conn
 import kotlin.math.abs
 import kotlin.math.roundToInt
