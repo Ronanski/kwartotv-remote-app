@@ -113,7 +113,8 @@ public sealed class TvServices : IDisposable
         }
         if (Server is null) return;
         Mdns = new MdnsResponder(name, Environment.MachineName.ToLowerInvariant(), port);
-        if (!Mdns.Start()) RemoteStatus += " (auto-discovery unavailable, use the address shown in Settings)";
+        if (!Mdns.Start()) { RemoteStatus += " (auto-discovery unavailable, use the address shown in Settings)"; AppPaths.LogLine("mdns: " + Mdns.Error); }
+        else AppPaths.LogLine("mdns: advertising " + string.Join(", ", MdnsResponder.LocalAddresses()));
     }
 
     /// <summary>LAN addresses a phone could use, best guess first (private ranges before anything else).</summary>

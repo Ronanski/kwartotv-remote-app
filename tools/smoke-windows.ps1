@@ -47,23 +47,29 @@ try { $info = Invoke-RestMethod "$base/info"; Check ($info.app -eq "KwartoTV") "
 try { $page = Invoke-WebRequest "$base/" -UseBasicParsing; Check ($page.Content -match "KwartoTV Remote") "browser remote page is served" } catch { Check $false "browser remote page: $_" }
 try { Invoke-WebRequest "$base/pair" -Method Post -Body '{"pin":"000000","name":"x"}' -ContentType "application/json" -UseBasicParsing | Out-Null; Check $false "wrong pin is refused" }
 catch { Check ($_.Exception.Response.StatusCode.value__ -eq 403) "wrong pin is refused (403)" }
+Get-NetUDPEndpoint -LocalPort 5353 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("udp 5353 owner: {0} ({1})" -f $_.OwningProcess, (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName) }
 $mdns = Get-NetUDPEndpoint -LocalPort 5353 -ErrorAction SilentlyContinue | Where-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName -eq "KwartoTV" }
 Check ($null -ne $mdns) "mDNS responder is listening on UDP 5353"
 
 Shot "01-home"
-Keys "{UP}{RIGHT}{RIGHT}{RIGHT}{ENTER}"
-Start-Sleep -Seconds 1
-Shot "02-settings"
-Keys "{ESC}"
 Keys "{DOWN}{DOWN}"
-Shot "03-home-scrolled"
+Shot "02-home-scrolled"
+Keys "{F4}"
+Shot "03-settings"
+Keys "{DOWN}{DOWN}{DOWN}"
+Shot "04-settings-scrolled"
+Keys "{F3}"
+Shot "05-library"
+Keys "{F1}"
 Keys "1"
 Start-Sleep -Seconds 6
-Shot "04-live-tv-player"
+Shot "06-live-tv-player"
 Keys "{ENTER}"
-Shot "05-mini-guide"
-Keys "{ESC}{ESC}"
+Shot "07-mini-guide"
+Keys "{ESC}"
+Keys "{ESC}"
 Start-Sleep -Seconds 1
+Shot "08-back-home"
 Check (-not $p.HasExited) "app survived navigation and the player"
 
 $log = Join-Path $data "log.txt"

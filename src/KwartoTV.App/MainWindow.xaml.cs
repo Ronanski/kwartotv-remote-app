@@ -201,6 +201,13 @@ public partial class MainWindow : Window, IShell
             e.Handled = true;
             return;
         }
+        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings.
+        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        {
+            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; default: ShowSettings(); break; }
+            e.Handled = true;
+            return;
+        }
         // Typing a channel number anywhere (not in a text box) switches to that channel.
         if (!DialogOpen && Keyboard.FocusedElement is not TextBox && TryDigit(e.Key, out var d))
         {

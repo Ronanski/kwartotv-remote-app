@@ -28,8 +28,13 @@ internal static class Native
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int cmd);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value);
+    [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+    [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern void SwitchToThisWindow(IntPtr hWnd, bool altTab);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("powrprof.dll")] private static extern bool SetSuspendState(bool hibernate, bool forceCritical, bool disableWakeEvent);
 
     public static IntPtr Foreground => GetForegroundWindow();
@@ -86,10 +91,20 @@ internal static class Native
 
     public static void BringToFront(IntPtr hwnd)
     {
-        ShowWindow(hwnd, 9); // SW_RESTORE
-        // Windows only lets the foreground app take focus; a quick Alt tap makes the request allowed.
-        Press(new[] { new KeyStroke(VkMenu) });
-        SetForegroundWindow(hwnd);
+        // Only un-minimize: SW_RESTORE on a maximized window would shrink it back to a normal window.
+        if (IsIconic(hwnd)) ShowWindow(hwnd, 9);
+        // Windows only lets the foreground app take focus. Briefly sharing the foreground thread's input queue allows it
+        // (an Alt key tap would also work but opens the window's system menu).
+        var fgThread = GetWindowThreadProcessId(GetForegroundWindow(), out _);
+        var me = GetCurrentThreadId();
+        if (fgThread != 0 && fgThread != me && AttachThreadInput(me, fgThread, true))
+        {
+            SetForegroundWindow(hwnd);
+            BringWindowToTop(hwnd);
+            AttachThreadInput(me, fgThread, false);
+        }
+        else SetForegroundWindow(hwnd);
+        if (GetForegroundWindow() != hwnd) SwitchToThisWindow(hwnd, true);
     }
 
     /// <summary>Makes a window click-through, non-activating and hidden from Alt+Tab (used for the on-screen display).</summary>

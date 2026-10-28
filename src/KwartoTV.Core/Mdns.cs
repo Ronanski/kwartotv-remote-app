@@ -154,6 +154,9 @@ public sealed class MdnsResponder : IDisposable
     private readonly CancellationTokenSource _cts = new();
     private Socket? _socket;
 
+    /// <summary>Why Start failed, for the log and the Settings screen.</summary>
+    public string? Error { get; private set; }
+
     public MdnsResponder(string instanceName, string hostLabel, int port, Func<IReadOnlyList<IPAddress>>? addresses = null)
     {
         _instance = MdnsPacket.SanitizeLabel(instanceName, "KwartoTV");
@@ -200,7 +203,7 @@ public sealed class MdnsResponder : IDisposable
             _ = Task.Run(AnnounceLoop);
             return true;
         }
-        catch { return false; }
+        catch (Exception ex) { Error = ex.Message; return false; }
     }
 
     private async Task ReceiveLoop()
