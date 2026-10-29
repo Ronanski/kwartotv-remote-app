@@ -40,7 +40,16 @@ public sealed class WebAppWindow : Window
     '#masthead-container,#secondary,#below,#related,#comments,ytd-watch-metadata,#chat,#chat-container,tp-yt-app-drawer,ytd-mini-guide-renderer{display:none!important}' +
     '#player-full-bleed-container,#player-container-outer,#player-container-inner,#player-container,#player,ytd-player,#ytd-player,#movie_player{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:99999!important;background:#000!important}' +
     'video.html5-main-video{width:100vw!important;height:100vh!important;left:0!important;top:0!important;object-fit:contain!important}';
-  function add() { if (document.getElementById('kw-video')) return; var s = document.createElement('style'); s.id = 'kw-video'; s.textContent = css; (document.head || document.documentElement).appendChild(s); }
+  // YouTube's security policy blocks added <style> tags, so use a constructed style sheet (not covered by that policy).
+  var sheet = null;
+  function add() {
+    try {
+      if (!sheet) { sheet = new CSSStyleSheet(); sheet.replaceSync(css); }
+      if (document.adoptedStyleSheets.indexOf(sheet) < 0) document.adoptedStyleSheets = document.adoptedStyleSheets.concat([sheet]);
+    } catch (x) {
+      if (document.getElementById('kw-video')) return; var s = document.createElement('style'); s.id = 'kw-video'; s.textContent = css; (document.head || document.documentElement).appendChild(s);
+    }
+  }
   add(); document.addEventListener('DOMContentLoaded', add); window.addEventListener('yt-navigate-finish', add);
   setInterval(function () { add(); var v = document.querySelector('video'); if (v && v.paused && !v.ended && !window.__kwPausedByUser) { v.play().catch(function(){}); } }, 2000);
   window.addEventListener('keydown', function (e) {

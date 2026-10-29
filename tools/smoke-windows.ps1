@@ -179,7 +179,9 @@ Shot "21-youtube-channel-video-only"
 Keys "{UP}"
 Start-Sleep -Seconds 6
 $logText = Get-Content (Join-Path $data "log.txt") -Raw
-Check ($logText -match "player: opening ") "channel up from the YouTube channel goes back to the player"
+$ytAt = $logText.IndexOf("youtube channel: YouTube live test")
+Check ($ytAt -ge 0) "the YouTube live channel opened inside the app"
+Check ($ytAt -ge 0 -and $logText.IndexOf("player: opening ", $ytAt) -gt $ytAt) "channel up from the YouTube channel goes to the next channel"
 Keys "{ESC}"
 Keys "{F1}"
 # channel 1 is a real public HLS test stream: libmpv must actually play it

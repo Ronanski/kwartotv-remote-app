@@ -203,6 +203,7 @@ public partial class MainWindow : Window, IShell
     /// <summary>A YouTube live link in a playlist: opens inside KwartoTV showing only the video. ▲▼ still change channel.</summary>
     public void PlayYouTubeChannel(Channel ch)
     {
+        AppPaths.LogLine("youtube channel: " + ch.Name);
         OpenWeb(ch.Url, "youtube", ForegroundKind.YouTube, null, ch.Name, () => _tv.Apps.LaunchWeb(new WebTile(ch.Id, ch.Name, ch.Url)), videoOnly: true);
     }
 
