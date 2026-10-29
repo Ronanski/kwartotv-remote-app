@@ -138,7 +138,10 @@ public sealed class TvServices : IDisposable
     /// <summary>The numbered lineup again, from the playlists and the user's selection. No download.</summary>
     public void RebuildLineup()
     {
-        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null));
+        var next = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null);
+        // Nothing changed: do nothing (a rebuild redraws the home screen, which is slow with many channels).
+        if (next.Select(c => c.Id).SequenceEqual(Lineup.Channels.Select(c => c.Id))) return;
+        Lineup.Load(next);
         if (Lineup.Current is null && Lineup.Channels.Count > 0) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites });
         ChannelsChanged?.Invoke();
     }

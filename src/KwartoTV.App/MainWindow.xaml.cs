@@ -25,6 +25,7 @@ public partial class MainWindow : Window, IShell
     private IInputElement? _focusBeforeDialog;
 
     private PageBase? _current;
+    private bool _pageStale;
     private string _currentName = "Home";
 
     public MainWindow()
@@ -54,7 +55,12 @@ public partial class MainWindow : Window, IShell
         _digits.Start();
 
         _tv.Lineup.Tuned += OnTuned;
-        _tv.ChannelsChanged += () => Dispatcher.BeginInvoke(() => { if (_current is not ChannelPickerView) _current?.Refresh(); });
+        // Redraw the page only while it is on screen; GoHome redraws it when the player or a web app closes.
+        _tv.ChannelsChanged += () => Dispatcher.BeginInvoke(() =>
+        {
+            if (_current is ChannelPickerView || _player is { IsVisible: true } || _web is { IsVisible: true }) { _pageStale = true; return; }
+            _current?.Refresh();
+        });
         _tv.Apps.Exited += () => Dispatcher.BeginInvoke(() => { if (_player is not { IsVisible: true }) Native.BringToFront(Handle); });
 
         Loaded += async (_, _) =>
@@ -121,6 +127,7 @@ public partial class MainWindow : Window, IShell
         CloseWeb();
         _tv.Apps.Close();
         if (_currentName != "Home") Navigate("Home"); else _current?.Refresh();
+        _pageStale = false;
         Native.BringToFront(Handle);
         Activate();
     }
@@ -156,6 +163,7 @@ public partial class MainWindow : Window, IShell
     {
         _player?.Hide();
         _tv.RebuildLineup();
+        if (_pageStale && _current is not ChannelPickerView) { _pageStale = false; _current?.Refresh(); }
         Native.BringToFront(Handle);
         Activate();
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _current?.FocusFirst());
