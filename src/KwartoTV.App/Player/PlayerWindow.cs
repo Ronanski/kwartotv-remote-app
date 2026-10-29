@@ -251,9 +251,11 @@ public sealed class PlayerWindow : Window
                 case Key.Down: MoveGuide(1); return true;
                 case Key.PageUp: MoveGuide(-8); return true;
                 case Key.PageDown: MoveGuide(8); return true;
-                case Key.Enter or Key.Right: lineup.TuneNumber(_guideIndex + 1); return true;
+                case Key.Enter: if (_guideIndex < _guideList.Count) lineup.TuneNumber(_guideList[_guideIndex].Number); return true;
+                case Key.Left: SwitchGroup(-1); return true;
+                case Key.Right: SwitchGroup(+1); return true;
                 case Key.F: ToggleGuideFavorite(); return true;
-                case Key.Escape or Key.BrowserBack or Key.Left: CloseGuide(); return true;
+                case Key.Escape or Key.BrowserBack or Key.G: CloseGuide(); return true;
             }
             return true;
         }
@@ -301,39 +303,78 @@ public sealed class PlayerWindow : Window
         return false;
     }
 
-    // ---------- mini guide
+    // ---------- channel list (the guide): grouped by category, switch with left/right
 
-    private void OpenGuide()
+    private List<string> _guideGroups = new();
+    private int _guideGroup;
+    private List<(int Number, Channel Channel)> _guideList = new();
+
+    private const string AllGroup = "All channels", FavoritesGroup = "★ Favorites";
+
+    /// <summary>Opens (or closes) the channel list. Used by the OK key and by the phone's "Channel list" button.</summary>
+    public void ToggleGuide() { if (_guideOpen) CloseGuide(); else OpenGuide(); }
+
+    public void OpenGuide()
     {
-        if (_tv.Lineup.Channels.Count == 0) return;
+        if (_mode != Mode.Live || _tv.Lineup.Channels.Count == 0) return;
+        _guideGroups = new List<string> { AllGroup };
+        if (_tv.Lineup.Favorites.Count > 0) _guideGroups.Add(FavoritesGroup);
+        _guideGroups.AddRange(_tv.Lineup.Groups);
+        // Start in the category of the channel being watched, so "where am I" is obvious.
+        var cur = _tv.Lineup.Current;
+        _guideGroup = 0;
         _guideOpen = true;
-        _guideIndex = Math.Max(0, _tv.Lineup.CurrentNumber - 1);
+        BuildGuideList();
+        _guideIndex = Math.Max(0, _guideList.FindIndex(x => x.Number == _tv.Lineup.CurrentNumber));
         DrawGuide();
     }
 
     private void CloseGuide() { _guideOpen = false; _osd.HideGuide(); }
 
+    private void BuildGuideList()
+    {
+        var all = _tv.Lineup.Channels;
+        var name = _guideGroups[_guideGroup];
+        var list = new List<(int, Channel)>();
+        for (int i = 0; i < all.Count; i++)
+        {
+            var c = all[i];
+            if (name == AllGroup || (name == FavoritesGroup && _tv.Lineup.IsFavorite(c.Id)) || c.Group == name) list.Add((i + 1, c));
+        }
+        _guideList = list;
+    }
+
     private void MoveGuide(int delta)
     {
-        int n = _tv.Lineup.Channels.Count;
+        int n = _guideList.Count;
         if (n == 0) return;
         _guideIndex = Math.Abs(delta) == 1 ? (_guideIndex + delta + n) % n : Math.Clamp(_guideIndex + delta, 0, n - 1);
         DrawGuide();
     }
 
+    private void SwitchGroup(int delta)
+    {
+        if (_guideGroups.Count == 0) return;
+        _guideGroup = (_guideGroup + delta + _guideGroups.Count) % _guideGroups.Count;
+        BuildGuideList();
+        _guideIndex = Math.Max(0, _guideList.FindIndex(x => x.Number == _tv.Lineup.CurrentNumber));
+        DrawGuide();
+    }
+
     private void DrawGuide()
     {
-        var all = _tv.Lineup.Channels;
         const int rows = 11;
-        int start = Math.Clamp(_guideIndex - rows / 2, 0, Math.Max(0, all.Count - rows));
+        int n = _guideList.Count;
+        int start = Math.Clamp(_guideIndex - rows / 2, 0, Math.Max(0, n - rows));
         var slice = new List<(int, Channel, bool)>();
-        for (int i = start; i < Math.Min(all.Count, start + rows); i++) slice.Add((i + 1, all[i], _tv.Lineup.IsFavorite(all[i].Id)));
-        _osd.ShowGuide(slice, _guideIndex - start);
+        for (int i = start; i < Math.Min(n, start + rows); i++) slice.Add((_guideList[i].Number, _guideList[i].Channel, _tv.Lineup.IsFavorite(_guideList[i].Channel.Id)));
+        var title = _guideGroups[_guideGroup];
+        _osd.ShowGuide(slice, _guideIndex - start, n == 0 ? title + "  (empty)" : title,
+            $"{(n == 0 ? 0 : _guideIndex + 1)} of {n}   ·   category {_guideGroup + 1}/{_guideGroups.Count}");
     }
 
     private void ToggleGuideFavorite()
     {
-        var all = _tv.Lineup.Channels;
-        if (_guideIndex < all.Count) { _tv.Lineup.ToggleFavorite(all[_guideIndex].Id); DrawGuide(); }
+        if (_guideIndex < _guideList.Count) { _tv.Lineup.ToggleFavorite(_guideList[_guideIndex].Channel.Id); DrawGuide(); }
     }
 }

@@ -12,6 +12,8 @@ public interface IShell
     IntPtr WindowHandle { get; }
     void GoHome();
     void ShowLiveTv();
+    /// <summary>Opens the on-screen channel list over the picture (starts Live TV first if needed).</summary>
+    void ShowChannelList();
     void ShowLibrary();
     void ShowSettings();
     void LaunchYouTube();
@@ -38,6 +40,7 @@ public sealed class WindowsHostActions : IHostActions
         {
             case "nav.home": ui.Invoke(shell.GoHome); return;
             case "app.livetv": ui.Invoke(shell.ShowLiveTv); return;
+            case "channel.list": ui.Invoke(shell.ShowChannelList); return;
             case "app.library": ui.Invoke(shell.ShowLibrary); return;
             case "app.settings": ui.Invoke(shell.ShowSettings); return;
             case "app.youtube": ui.Invoke(shell.LaunchYouTube); return;

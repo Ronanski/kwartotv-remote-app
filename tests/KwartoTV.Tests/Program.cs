@@ -533,6 +533,11 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
 Check(DohResolver.ParseAnswer("{\"Status\":0,\"Answer\":[{\"name\":\"x\",\"type\":5,\"data\":\"y.\"},{\"name\":\"x\",\"type\":1,\"data\":\"185.199.108.153\"},{\"type\":1,\"data\":\"bad\"}]}").Select(i => i.ToString()).SequenceEqual(new[] { "185.199.108.153" }), "DNS-over-HTTPS answer keeps only valid A records");
 Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk").Count == 0, "DNS-over-HTTPS garbage gives no addresses");
 
+{
+    var lh = new FakeHost(); var lr = new CommandRouter(new ChannelLineup(), lh);
+    Check(lr.Handle(new(null, "channel.list", null)).Ok && lh.Last == "channel.list:", "router channel.list reaches the host");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

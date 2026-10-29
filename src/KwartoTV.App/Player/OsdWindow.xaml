@@ -13,6 +13,7 @@
         <StackPanel VerticalAlignment="Center">
           <TextBlock x:Name="BannerName" FontSize="34" FontWeight="SemiBold" MaxWidth="760" TextTrimming="CharacterEllipsis"/>
           <TextBlock x:Name="BannerGroup" FontSize="20" Foreground="#FF9AA3B8"/>
+          <TextBlock Text="OK = channel list" FontSize="15" Foreground="#FF6F788C" Margin="0,4,0,0"/>
         </StackPanel>
       </StackPanel>
     </Border>
@@ -30,8 +31,15 @@
     <!-- mini guide -->
     <Border x:Name="Guide" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="520" Margin="0,48,48,48" Padding="20,18" CornerRadius="22" Background="#F00B0D12">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Text="Channels" FontSize="28" FontWeight="Bold" Margin="8,0,0,12"/>
-        <TextBlock DockPanel.Dock="Bottom" Text="▲▼ choose    OK watch    F favorite    Back close" FontSize="16" Foreground="#FF9AA3B8" Margin="8,12,0,0"/>
+        <Grid DockPanel.Dock="Top" Margin="4,0,4,12">
+          <TextBlock Text="◀" FontSize="28" Foreground="#FFFF7A45" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+          <StackPanel HorizontalAlignment="Center">
+            <TextBlock x:Name="GuideTitle" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="360"/>
+            <TextBlock x:Name="GuideSub" FontSize="15" Foreground="#FF9AA3B8" HorizontalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock Text="▶" FontSize="28" Foreground="#FFFF7A45" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+        </Grid>
+        <TextBlock DockPanel.Dock="Bottom" Text="◀▶ category    ▲▼ choose    OK watch    F favorite    Back close" FontSize="15" Foreground="#FF9AA3B8" Margin="8,12,0,0" TextWrapping="Wrap"/>
         <StackPanel x:Name="GuideRows"/>
       </DockPanel>
     </Border>

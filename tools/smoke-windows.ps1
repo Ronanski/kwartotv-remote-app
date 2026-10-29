@@ -146,6 +146,8 @@ Keys "{ADD}"
 Shot "18-volume-rocker"
 Keys "{ENTER}"
 Shot "07-mini-guide"
+Keys "{RIGHT}"
+Shot "07b-guide-next-category"
 Keys "{ESC}"
 # a dead channel must say so (and have tried the other ways to connect)
 Keys "{F1}"

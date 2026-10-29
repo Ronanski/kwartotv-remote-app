@@ -165,6 +165,13 @@ public partial class MainWindow : Window, IShell
         if (_tv.Lineup.Current is not null) OpenPlayerLive(ch);
     }
 
+    public void ShowChannelList()
+    {
+        if (_tv.Lineup.Channels.Count == 0) { ShowToast("No channels yet. Add channels first."); return; }
+        if (_player is not { IsVisible: true }) { ShowLiveTv(); Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _player?.OpenGuide()); }
+        else _player.ToggleGuide();
+    }
+
     private void OnTuned(Channel ch, int number) => Dispatcher.BeginInvoke(() => { CloseWeb(); _tv.Apps.Close(); OpenPlayerLive(ch); });
 
     private void OpenPlayerLive(Channel ch)

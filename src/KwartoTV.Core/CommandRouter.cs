@@ -18,6 +18,7 @@ public sealed class CommandRouter
         "media.playpause", "media.next", "media.prev", "media.stop", "media.mute",
         "media.seek", "media.volume", "media.speed",
         "media.volup", "media.voldown",
+        "channel.list",
         "key.text", "key.backspace", "key.enter",
         "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
         "app.youtube", "app.netflix", "app.livetv", "app.library", "app.settings",

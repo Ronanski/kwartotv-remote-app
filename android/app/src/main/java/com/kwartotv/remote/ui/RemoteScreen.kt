@@ -302,6 +302,8 @@ private fun MediaTab(send: (String, String?) -> Unit) {
 @Composable
 private fun ChannelsTab(send: (String, String?) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Opens the channel list on the TV, grouped by category: ◀ ▶ change category, ▲ ▼ choose, OK watches.
+        RemoteKey("☰  Channel list", "Open the channel list on the TV", Modifier.fillMaxWidth(), primary = true, fontSize = 20, height = 64.dp) { send(Cmd.CH_LIST, null) }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("▲ CH", "Channel up", Modifier.weight(1f), repeat = true, fontSize = 18) { send(Cmd.CH_NEXT, null) }
             RemoteKey("↩ Last", "Last channel", Modifier.weight(1f), fontSize = 18) { send(Cmd.CH_LAST, null) }

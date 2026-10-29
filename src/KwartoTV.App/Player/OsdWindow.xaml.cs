@@ -46,8 +46,10 @@ public partial class OsdWindow : Window
         MessageBox.Visibility = string.IsNullOrEmpty(text) || Guide.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public void ShowGuide(IReadOnlyList<(int Number, Channel Channel, bool Favorite)> rows, int selected)
+    public void ShowGuide(IReadOnlyList<(int Number, Channel Channel, bool Favorite)> rows, int selected, string category, string position)
     {
+        GuideTitle.Text = category;
+        GuideSub.Text = position;
         GuideRows.Children.Clear();
         for (int i = 0; i < rows.Count; i++)
         {
