@@ -104,7 +104,7 @@ Start-Sleep -Seconds 25
 Shot "12-channel-picker"
 Keys "{RIGHT}{RIGHT}{ENTER}"
 Shot "12b-picker-all-selected"
-Keys "{RIGHT}{RIGHT}{ENTER}"
+Keys "{ESC}"
 Start-Sleep -Seconds 2
 Shot "12c-settings-after-pick"
 $cfg = Get-Content (Join-Path $data "settings.json") -Raw | ConvertFrom-Json
@@ -141,11 +141,13 @@ Start-Sleep -Seconds 18
 Shot "06-live-tv-player"
 $logText = Get-Content (Join-Path $data "log.txt") -Raw
 Check ($logText -match "player: started Test Stream 1") "channel 1 (public HLS test stream) was opened and played by libmpv"
+Keys "{ENTER}"
+Shot "07-mini-guide"
+Keys "{ESC}"
 # volume rocker: + on the number pad raises the Windows volume and shows the bar
 Keys "{ADD}"
 Shot "18-volume-rocker"
 Keys "{ENTER}"
-Shot "07-mini-guide"
 Keys "{RIGHT}"
 Shot "07b-guide-next-category"
 Keys "{ESC}"

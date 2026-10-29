@@ -129,6 +129,7 @@ public sealed class PlayerWindow : Window
         _osd.ShowMessage(attempt == 0 ? null : "Trying another way to connect…");
         var ua = ch.UserAgent ?? UserAgents[Math.Min(attempt, UserAgents.Length - 1)];
         _mpv!.SetHeaders(ch.Referrer, ua);
+        _mpv.SetSubtitles(false);
         _mpv.Load(ch.Url); _mpv.Paused = false;
         _loadedAt = _streamStarted = DateTime.UtcNow;
         AppPaths.LogLine($"player: opening {ch.Name} (attempt {attempt + 1}) {ch.Url}");
@@ -146,6 +147,7 @@ public sealed class PlayerWindow : Window
         var item = _files[_fileIndex];
         _osd.ShowMessage(null);
         _mpv!.SetHeaders(null, null);
+        _mpv.SetSubtitles(true);
         _mpv.Load(item.Path); _mpv.Paused = false;
         _loadedAt = DateTime.UtcNow; _failed = false;
         _osd.ShowProgress(item.Title, 0, 0, false, false);

@@ -145,6 +145,9 @@ public sealed class MpvPlayer : IDisposable
         Set("user-agent", userAgent ?? DefaultUserAgent);
     }
 
+    /// <summary>Subtitles / closed captions: off for live TV (like a TV), automatic for your own files.</summary>
+    public void SetSubtitles(bool on) => Set("sid", on ? "auto" : "no");
+
     public void Load(string urlOrPath) => Command("loadfile", urlOrPath, "replace");
     public void Stop() => Command("stop");
 

@@ -41,6 +41,9 @@ public abstract class PageBase : UserControl
 
     private void RestoreFocus(int index)
     {
+        // Only when this page is what the user is looking at: a refresh in the background (new channel checks, downloads)
+        // must never take the keyboard away from the player, a web app or a dialog.
+        if (Window.GetWindow(this) is not { IsActive: true } || Shell.DialogOpen) return;
         var all = AllButtons().ToList();
         if (all.Count == 0) return;
         if (index >= 0 && index < all.Count) all[index].Focus(); else if (index == -1 && !IsKeyboardFocusWithin) { }

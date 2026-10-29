@@ -47,7 +47,7 @@ public partial class MainWindow : Window, IShell
         _digits.Start();
 
         _tv.Lineup.Tuned += OnTuned;
-        _tv.ChannelsChanged += () => Dispatcher.BeginInvoke(() => _current?.Refresh());
+        _tv.ChannelsChanged += () => Dispatcher.BeginInvoke(() => { if (_current is not ChannelPickerView) _current?.Refresh(); });
         _tv.Apps.Exited += () => Dispatcher.BeginInvoke(() => { if (_player is not { IsVisible: true }) Native.BringToFront(Handle); });
 
         Loaded += async (_, _) =>
