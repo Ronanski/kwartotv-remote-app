@@ -41,6 +41,13 @@ public partial class MainWindow : Window, IShell
         }
 
         PowerButton.Click += (_, _) => Dialogs.PowerMenu(this);
+        // While the player or a web app is on screen it must keep the keyboard (the remote's keys). If the home window
+        // behind it gets activated (a click, a notification closing), hand the focus straight back.
+        Activated += (_, _) =>
+        {
+            if (_player is { IsVisible: true } p) Dispatcher.BeginInvoke(() => { p.Activate(); p.Focus(); });
+            else if (_web is { IsVisible: true } w) Dispatcher.BeginInvoke(() => w.Activate());
+        };
         _clock.Tick += (_, _) => UpdateClock(); UpdateClock(); _clock.Start();
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); Toast.Visibility = Visibility.Collapsed; };
         _digits.Tick += (_, _) => _tv.Lineup.Tick(DateTimeOffset.UtcNow);

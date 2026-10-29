@@ -248,6 +248,7 @@ public sealed class PlayerWindow : Window
     {
         base.OnPreviewKeyDown(e);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Enter or Key.Up or Key.Down) AppPaths.LogLine($"player key: {key} (guide {(_guideOpen ? "open" : "closed")})");
         if (key is Key.OemPlus or Key.Add) { SystemVolume.Change(+5); e.Handled = true; return; }
         if (key is Key.OemMinus or Key.Subtract) { SystemVolume.Change(-5); e.Handled = true; return; }
         if (key is Key.M) { SystemVolume.ToggleMute(); e.Handled = true; return; }
@@ -342,6 +343,7 @@ public sealed class PlayerWindow : Window
         var cur = _tv.Lineup.Current;
         _guideGroup = 0;
         _guideOpen = true;
+        AppPaths.LogLine($"guide: open ({_guideGroups.Count} categories)");
         BuildGuideList();
         _guideIndex = Math.Max(0, _guideList.FindIndex(x => x.Number == _tv.Lineup.CurrentNumber));
         DrawGuide();
