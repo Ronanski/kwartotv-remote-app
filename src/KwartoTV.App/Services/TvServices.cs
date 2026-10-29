@@ -105,7 +105,7 @@ public sealed class TvServices : IDisposable
         int done = 0, ok = 0, dead = 0, network = 0;
         var results = new System.Collections.Concurrent.ConcurrentDictionary<string, ChannelHealth>();
         Interlocked.Add(ref _checkingCount, todo.Count);
-        using var gate = new SemaphoreSlim(todo.Count > 200 ? 16 : 8);
+        using var gate = new SemaphoreSlim(todo.Count > 1000 ? 32 : todo.Count > 200 ? 16 : 8);
         var tasks = todo.Select(async c =>
         {
             await gate.WaitAsync(ct);
