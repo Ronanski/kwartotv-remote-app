@@ -98,7 +98,7 @@ public sealed class PlayerWindow : Window
         if (ch.Kind == StreamKind.YouTube)
         {
             Hide();
-            _main.LaunchWeb(new WebTile(ch.Id, ch.Name, ch.Url.StartsWith("https") ? ch.Url : "https://www.youtube.com/"));
+            _main.PlayYouTubeChannel(ch);
             return;
         }
         _mode = Mode.Live; _failed = false; CloseGuide();
@@ -324,6 +324,7 @@ public sealed class PlayerWindow : Window
     // ---------- channel list (the guide): grouped by category, switch with left/right
 
     private List<string> _guideGroups = new();
+    private Dictionary<string, HashSet<string>> _spaceMembers = new();
     private int _guideGroup;
     private List<(int Number, Channel Channel)> _guideList = new();
 
@@ -332,16 +333,21 @@ public sealed class PlayerWindow : Window
     /// <summary>Opens (or closes) the channel list. Used by the OK key and by the phone's "Channel list" button.</summary>
     public void ToggleGuide() { if (_guideOpen) CloseGuide(); else OpenGuide(); }
 
-    public void OpenGuide()
+    public void OpenGuide() => OpenGuide(null);
+
+    /// <summary>Opens the channel list, optionally on a given category (for example a playlist's own space).</summary>
+    public void OpenGuide(string? category)
     {
         if (_mode != Mode.Live || _tv.Lineup.Channels.Count == 0) return;
         _tv.RebuildLineup();   // channels found not to work since the last time drop out of the list
         _guideGroups = new List<string> { AllGroup };
         if (_tv.Lineup.Favorites.Count > 0) _guideGroups.Add(FavoritesGroup);
+        _spaceMembers = _tv.Spaces().ToDictionary(s => "📺 " + s.Playlist.Name, s => s.Channels.Select(c => c.Channel.Id).ToHashSet());
+        _guideGroups.AddRange(_spaceMembers.Keys);
         _guideGroups.AddRange(_tv.Lineup.Groups);
         // Start in the category of the channel being watched, so "where am I" is obvious.
         var cur = _tv.Lineup.Current;
-        _guideGroup = 0;
+        _guideGroup = category is not null && _guideGroups.IndexOf(category) is >= 0 and var gi ? gi : 0;
         _guideOpen = true;
         AppPaths.LogLine($"guide: open ({_guideGroups.Count} categories)");
         BuildGuideList();
@@ -359,7 +365,8 @@ public sealed class PlayerWindow : Window
         for (int i = 0; i < all.Count; i++)
         {
             var c = all[i];
-            if (name == AllGroup || (name == FavoritesGroup && _tv.Lineup.IsFavorite(c.Id)) || c.Group == name) list.Add((i + 1, c));
+            if (name == AllGroup || (name == FavoritesGroup && _tv.Lineup.IsFavorite(c.Id))
+                || (_spaceMembers.TryGetValue(name, out var members) ? members.Contains(c.Id) : c.Group == name)) list.Add((i + 1, c));
         }
         _guideList = list;
     }

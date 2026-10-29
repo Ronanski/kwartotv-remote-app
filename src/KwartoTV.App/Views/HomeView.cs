@@ -38,6 +38,11 @@ public sealed class HomeView : PageBase
             UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Netflix", "N", Color.FromRgb(0x1A, 0x06, 0x08), Color.FromRgb(0x8E, 0x10, 0x18)), Shell.LaunchNetflix, "Netflix"),
             UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Library", "▤", Color.FromRgb(0x14, 0x2A, 0x4A), Color.FromRgb(0x2A, 0x5E, 0xA8)), Shell.ShowLibrary, "Library"),
         };
+        foreach (var (space, chs) in tv.Spaces())
+        {
+            var sp = space;
+            apps.Insert(1, UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard(sp.Name, "📺", Color.FromRgb(0x0E, 0x2A, 0x5C), Color.FromRgb(0xC8, 0x2A, 0x2A), $"{chs.Count} channels"), () => Shell.OpenSpace(sp.Id), sp.Name));
+        }
         foreach (var site in tv.Settings.WebTiles)
         {
             var s = site;
@@ -45,6 +50,10 @@ public sealed class HomeView : PageBase
         }
         apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Add website", "+", Color.FromRgb(0x1E, 0x24, 0x30), Color.FromRgb(0x2B, 0x31, 0x40)), Shell.ShowSettings, "Add website"));
         Body.Children.Add(UiKit.Row("Apps", apps));
+
+        // Each playlist the user gave its own space gets its own row right under the apps.
+        foreach (var (space, chs) in tv.Spaces())
+            if (chs.Count > 0) Body.Children.Add(UiKit.Row("📺  " + space.Name, chs.Take(MaxPerRow).Select(x => Card(x.Channel, x.Number, lineup.IsFavorite(x.Channel.Id)))));
 
         var favs = lineup.Favorites;
         if (favs.Count > 0) Body.Children.Add(UiKit.Row("My favorites", favs.Take(MaxPerRow).Select(c => Card(c, numbers[c.Id], true))));

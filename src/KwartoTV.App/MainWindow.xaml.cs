@@ -182,6 +182,30 @@ public partial class MainWindow : Window, IShell
         if (_tv.Lineup.Current is not null) OpenPlayerLive(ch);
     }
 
+    /// <summary>Starts watching a playlist's own space: its first channel, with the channel list open on that space.</summary>
+    public void OpenSpace(string playlistId)
+    {
+        var space = _tv.Spaces().FirstOrDefault(s => s.Playlist.Id == playlistId);
+        if (space.Playlist is null || space.Channels.Count == 0) { ShowToast("No working channels in this space yet. Open Settings → Choose channels."); return; }
+        var currentInSpace = space.Channels.Any(c => c.Number == _tv.Lineup.CurrentNumber);
+        if (!currentInSpace) _tv.Lineup.TuneNumber(space.Channels[0].Number); else ShowLiveTv();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _player?.OpenGuide("📺 " + space.Playlist.Name));
+    }
+
+    /// <summary>A playlist link sent from the phone: added like any link, then the channel picker opens on the TV.</summary>
+    public void AddLinkFromPhone(string url)
+    {
+        CloseWeb(); _player?.Hide(); _tv.Apps.Close();
+        Native.BringToFront(Handle);
+        AddPlaylistSource("", url, false);
+    }
+
+    /// <summary>A YouTube live link in a playlist: opens inside KwartoTV showing only the video. ▲▼ still change channel.</summary>
+    public void PlayYouTubeChannel(Channel ch)
+    {
+        OpenWeb(ch.Url, "youtube", ForegroundKind.YouTube, null, ch.Name, () => _tv.Apps.LaunchWeb(new WebTile(ch.Id, ch.Name, ch.Url)), videoOnly: true);
+    }
+
     public void ShowChannelList()
     {
         if (_tv.Lineup.Channels.Count == 0) { ShowToast("No channels yet. Add channels first."); return; }
@@ -246,14 +270,16 @@ public partial class MainWindow : Window, IShell
     }
 
     /// <summary>Opens a site fullscreen inside KwartoTV. If the embedded browser is not available, uses an external browser window.</summary>
-    private void OpenWeb(string url, string profile, ForegroundKind kind, string? userAgent, string name, Func<bool> browserFallback)
+    private void OpenWeb(string url, string profile, ForegroundKind kind, string? userAgent, string name, Func<bool> browserFallback, bool videoOnly = false)
     {
         PrepareExternal();
         _tv.Apps.Close();
         CloseWeb();
         ShowToast($"Opening {name}…");
-        var w = new WebAppWindow(url, profile, kind, userAgent) { Owner = this };
+        var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this };
         w.HomeRequested += GoHome;
+        w.ChannelUp += () => _tv.Lineup.Next();
+        w.ChannelDown += () => _tv.Lineup.Previous();
         w.Failed += _ => Dispatcher.BeginInvoke(() =>
         {
             if (!ReferenceEquals(_web, w)) return;

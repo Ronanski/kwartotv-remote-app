@@ -18,7 +18,7 @@ public sealed class CommandRouter
         "media.playpause", "media.next", "media.prev", "media.stop", "media.mute",
         "media.seek", "media.volume", "media.speed",
         "media.volup", "media.voldown",
-        "channel.list",
+        "channel.list", "playlist.add",
         "key.text", "key.backspace", "key.enter",
         "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
         "app.youtube", "app.netflix", "app.livetv", "app.library", "app.settings",
@@ -37,7 +37,10 @@ public sealed class CommandRouter
     public CommandResult Handle(RemoteCommand c)
     {
         if (string.IsNullOrWhiteSpace(c.Cmd) || c.Cmd.Length > 40) return new(false, "bad command");
-        if (c.Arg is { Length: > 64 }) return new(false, "bad argument");
+        // A playlist link from the phone can be long; everything else is short.
+        if (c.Arg is { Length: > 64 } && !(c.Cmd == "playlist.add" && c.Arg.Length <= 1024)) return new(false, "bad argument");
+        if (c.Cmd == "playlist.add" && !AppSettings.IsHttpsUrl(c.Arg ?? "") && !(Uri.TryCreate(c.Arg, UriKind.Absolute, out var pu) && M3uParser.IsStreamUri(pu) && pu.Scheme != "file"))
+            return new(false, "bad link");
 
         switch (c.Cmd)
         {

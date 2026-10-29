@@ -14,6 +14,8 @@ public interface IShell
     void ShowLiveTv();
     /// <summary>Opens the on-screen channel list over the picture (starts Live TV first if needed).</summary>
     void ShowChannelList();
+    /// <summary>A playlist link typed or pasted on the phone.</summary>
+    void AddLinkFromPhone(string url);
     void ShowLibrary();
     void ShowSettings();
     void LaunchYouTube();
@@ -41,6 +43,7 @@ public sealed class WindowsHostActions : IHostActions
             case "nav.home": ui.Invoke(shell.GoHome); return;
             case "app.livetv": ui.Invoke(shell.ShowLiveTv); return;
             case "channel.list": ui.Invoke(shell.ShowChannelList); return;
+            case "playlist.add": ui.Invoke(() => shell.AddLinkFromPhone(arg!.Trim())); return;
             case "app.library": ui.Invoke(shell.ShowLibrary); return;
             case "app.settings": ui.Invoke(shell.ShowSettings); return;
             case "app.youtube": ui.Invoke(shell.LaunchYouTube); return;

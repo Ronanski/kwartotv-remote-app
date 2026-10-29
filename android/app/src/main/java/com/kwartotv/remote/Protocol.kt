@@ -30,6 +30,7 @@ object Cmd {
     const val CH_COMMIT = "channel.commit"
     const val CH_FAVORITE = "channel.favorite"
     const val CH_LIST = "channel.list"
+    const val PLAYLIST_ADD = "playlist.add"
 
     const val MOUSE_MOVE = "mouse.move"
     const val MOUSE_CLICK = "mouse.click"

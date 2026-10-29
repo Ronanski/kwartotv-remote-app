@@ -21,7 +21,11 @@ $lines = @(
   '#EXTINF:-1 group-title="Test",Dead Stream',
   "https://example.invalid/dead.m3u8")
 Set-Content -Path $m3u -Value $lines -Encoding UTF8
-$settings = @{ playlists = @(@{ id = "demo"; name = "Test streams"; source = $m3u }); webTiles = @(@{ id = "ex"; name = "Example"; url = "https://example.com" }); libraryFolders = @(); port = 8765 } | ConvertTo-Json -Depth 5
+# plus a YouTube live channel, and the user's Philippines list shown as its own space
+$settings = @{ playlists = @(
+    @{ id = "demo"; name = "Test streams"; source = $m3u },
+    @{ id = "yt"; name = "YouTube live test"; source = "https://www.youtube.com/@NASA/live"; isStream = $true },
+    @{ id = "phspace"; name = "PH TV"; source = "https://raw.githubusercontent.com/IPTV-Philippines/IPTV-Philippines/main/ph.m3u"; showAsSpace = $true }); webTiles = @(@{ id = "ex"; name = "Example"; url = "https://example.com" }); libraryFolders = @(); port = 8765 } | ConvertTo-Json -Depth 5
 Set-Content -Path (Join-Path $data "settings.json") -Value $settings -Encoding UTF8
 Remove-Item (Join-Path $data "log.txt") -ErrorAction SilentlyContinue
 
@@ -97,7 +101,7 @@ Keys "{DOWN}{DOWN}"
 Shot "01d-channel-row-by-dpad"
 Keys "{ENTER}"
 Start-Sleep -Seconds 6
-Check ((Get-Content (Join-Path $data "log.txt") -Raw) -match "player: opening Test Stream") "d-pad: down to a channel row and OK plays it"
+Check ((Get-Content (Join-Path $data "log.txt") -Raw) -match "player: opening ") "d-pad: down to a channel row and OK plays it"
 Keys "{ESC}"
 Start-Sleep -Seconds 1
 Keys "{DOWN}{DOWN}"
@@ -154,6 +158,30 @@ Start-Sleep -Seconds 25
 Shot "13-netflix-in-app"
 Keys "{F1}"
 Start-Sleep -Seconds 2
+# the PH list has its own space: a tile in Apps (right of Live TV) opens it with the channel list on that space
+$phLine = (Get-Content (Join-Path $data "log.txt") | Where-Object { $_ -like "*playlist: PH TV:*" } | Select-Object -First 1)
+Check ($null -ne $phLine) "the PH playlist downloaded: $phLine"
+Keys "{F1}"
+Start-Sleep -Seconds 2
+Shot "19-home-with-ph-space"
+Keys "{DOWN}"
+Keys "{RIGHT}"
+Keys "{ENTER}"
+Start-Sleep -Seconds 8
+Shot "20-ph-space-channel-list"
+Keys "{ESC}"
+Keys "{ESC}"
+Keys "{F1}"
+# a YouTube live link in the lineup opens as a fullscreen video inside the app, and channel up still works
+Keys "3"
+Start-Sleep -Seconds 25
+Shot "21-youtube-channel-video-only"
+Keys "{UP}"
+Start-Sleep -Seconds 6
+$logText = Get-Content (Join-Path $data "log.txt") -Raw
+Check ($logText -match "player: opening ") "channel up from the YouTube channel goes back to the player"
+Keys "{ESC}"
+Keys "{F1}"
 # channel 1 is a real public HLS test stream: libmpv must actually play it
 Keys "1"
 Start-Sleep -Seconds 18

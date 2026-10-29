@@ -127,6 +127,22 @@ public sealed class TvServices : IDisposable
         return (ok, dead);
     }
 
+    /// <summary>Playlists shown as their own space, with the lineup numbers of their channels (only the ones that work).</summary>
+    public IReadOnlyList<(PlaylistEntry Playlist, IReadOnlyList<(int Number, Channel Channel)> Channels)> Spaces()
+    {
+        var lineup = Lineup.Channels;
+        var number = new Dictionary<string, int>();
+        for (int i = 0; i < lineup.Count; i++) number[lineup[i].Id] = i + 1;
+        var result = new List<(PlaylistEntry, IReadOnlyList<(int, Channel)>)>();
+        foreach (var p in Settings.Playlists.Where(p => p.ShowAsSpace))
+        {
+            var mine = Library.GetValueOrDefault(p.Id) ?? Array.Empty<Channel>();
+            var list = mine.Where(c => number.ContainsKey(c.Id)).Select(c => (number[c.Id], c)).ToList();
+            result.Add((p, list));
+        }
+        return result;
+    }
+
     /// <summary>The channels the user chose (what the lineup is made from), before hiding the ones that do not work.</summary>
     public IReadOnlyList<Channel> ChosenChannels() => ChannelCatalog.BuildLineup(Settings.Playlists, Library);
 

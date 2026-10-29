@@ -140,6 +140,9 @@ dialog::backdrop{background:#000a}
         <button class="btn primary" data-cmd="key.enter">⏎</button>
       </div>
       <p style="color:var(--dim);font-size:13px">Letters appear on the TV as you type. Select a text box on the TV first.</p>
+      <h2>Send a playlist link to the TV</h2>
+      <input id="linkText" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/playlist.m3u" aria-label="Playlist link">
+      <button class="btn primary" id="sendLink" style="width:100%;margin-top:10px">Send to TV</button>
     </section>
     <section id="t-power">
       <div class="grid g2">
@@ -203,7 +206,8 @@ $('#pairBtn').onclick=async()=>{
   try{
     const r=await fetch('/pair',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin,name})});
     if(!r.ok){$('#pairMsg').textContent=r.status===403?'Wrong or expired code. Start pairing again on the TV.':'Could not pair ('+r.status+').';return}
-    creds=await r.json();localStorage.setItem(KEY,JSON.stringify(creds));localStorage.setItem('kwartotv.name',name);show();connect();
+    creds=await r.json();localStorage.setItem(KEY,JSON.stringify(creds));localStorage.setItem('kwartotv.name',name);$('#sendLink').onclick=()=>{const v=$('#linkText').value.trim();if(!/^https?:\/\//.test(v)){toast('Paste a link that starts with https://');return}if(send('playlist.add',v)){toast('Sent. Look at the TV.');$('#linkText').value=''}};
+show();connect();
   }catch{$('#pairMsg').textContent='Cannot reach the TV. Check that you are on the same Wi-Fi.'}
   finally{$('#pairBtn').disabled=false}
 };

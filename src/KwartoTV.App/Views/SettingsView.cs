@@ -34,6 +34,7 @@ public sealed class SettingsView : PageBase
             var err = Tv.ErrorFor(pl.Id);
             var actions = new List<(string, Action, bool)>();
             if (!pl.IsStream) actions.Add(("Choose channels", () => { if (Tv.Library.ContainsKey(pl.Id)) Shell.ShowChannelPicker(pl.Id); else Shell.ShowToast(err is null ? "This playlist is not downloaded yet. Use Reload channels." : "This playlist did not download. Use Reload channels."); }, false));
+            if (!pl.IsStream) actions.Add((pl.ShowAsSpace ? "Own space: On" : "Own space: Off", () => { Tv.Settings.SetSpace(pl.Id, !pl.ShowAsSpace); Tv.SaveSettings(); Refresh(); }, false));
             if (chosenList.Count > 0) actions.Add(("Check channels", async () =>
             {
                 Shell.ShowToast($"Checking {chosenList.Count} channels…");

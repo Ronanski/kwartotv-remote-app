@@ -84,6 +84,10 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const l4 = hostLog().slice(b4);
   check(l4.includes('HOST key.text h') && l4.includes('HOST key.text i') && l4.includes('HOST key.backspace') && l4.includes('HOST key.enter'), 'keyboard typing, backspace and enter');
   await page.screenshot({ path: `${outDir}/web-6-keyboard.png` });
+  const bl = hostLog().length;
+  await page.fill('#linkText', 'https://raw.githubusercontent.com/IPTV-Philippines/IPTV-Philippines/main/ph.m3u');
+  await page.click('#sendLink'); await wait(400);
+  check(hostLog().slice(bl).includes('HOST playlist.add https://raw.githubusercontent.com/IPTV-Philippines/IPTV-Philippines/main/ph.m3u'), 'a long playlist link is sent to the TV');
 
   await page.click('[data-tab="power"]'); await page.screenshot({ path: `${outDir}/web-7-power.png` });
   const b5 = hostLog().length;

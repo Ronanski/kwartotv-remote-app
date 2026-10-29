@@ -349,6 +349,34 @@ private fun KeysTab(send: (String, String?) -> Unit) {
             RemoteKey("⟵ Back", "Back", Modifier.weight(1f), fontSize = 18) { send(Cmd.BACK, null) }
             RemoteKey("⏎ Enter", "Enter", Modifier.weight(1f), primary = true, fontSize = 18) { send(Cmd.ENTER, null); text = "" }
         }
+        SendLinkBox(send)
+    }
+}
+
+/** Paste a playlist (or stream) link on the phone and send it: the TV adds it and opens the channel picker. */
+@Composable
+private fun SendLinkBox(send: (String, String?) -> Unit) {
+    val context = LocalContext.current
+    var link by remember { mutableStateOf("") }
+    Text("Send a playlist link to the TV", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 18.dp))
+    Text("Paste an .m3u / .m3u8 link here instead of typing it on the TV. The TV downloads it and lets you choose the channels.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+    OutlinedTextField(
+        value = link, onValueChange = { link = it.trim() }, singleLine = true,
+        label = { Text("https://…/playlist.m3u") },
+        modifier = Modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = ImeAction.Send),
+        keyboardActions = KeyboardActions(onSend = { if (link.isNotEmpty()) { send(Cmd.PLAYLIST_ADD, link); link = "" } }),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        RemoteKey("Paste", "Paste a link from the clipboard", Modifier.weight(1f), fontSize = 18) {
+            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            link = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.trim() ?: ""
+            if (link.isEmpty()) Toast.makeText(context, "The clipboard is empty", Toast.LENGTH_SHORT).show()
+        }
+        RemoteKey("Send to TV", "Send the link to the TV", Modifier.weight(1f), primary = true, fontSize = 18) {
+            if (link.startsWith("http://") || link.startsWith("https://")) { send(Cmd.PLAYLIST_ADD, link); Toast.makeText(context, "Sent. Look at the TV.", Toast.LENGTH_SHORT).show(); link = "" }
+            else Toast.makeText(context, "Paste a link that starts with https://", Toast.LENGTH_SHORT).show()
+        }
     }
 }
 

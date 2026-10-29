@@ -7,7 +7,8 @@ namespace KwartoTV.Core;
 /// A playlist the user added. Source is an https link or a local file path; for a single stream (IsStream) it is the stream address.
 /// Selected holds the ids of the channels the user chose from the playlist; null means every channel.
 /// </summary>
-public sealed record PlaylistEntry(string Id, string Name, string Source, List<string>? Selected = null, bool IsStream = false);
+/// ShowAsSpace gives the playlist its own place: a row and a tile on Home, and a category in the channel list.
+public sealed record PlaylistEntry(string Id, string Name, string Source, List<string>? Selected = null, bool IsStream = false, bool ShowAsSpace = false);
 
 public sealed record WebTile(string Id, string Name, string Url);
 
@@ -57,6 +58,12 @@ public sealed class AppSettings
     }
 
     public PlaylistEntry? FindPlaylist(string id) => Playlists.FirstOrDefault(p => p.Id == id);
+
+    public void SetSpace(string playlistId, bool on)
+    {
+        var i = Playlists.FindIndex(p => p.Id == playlistId);
+        if (i >= 0) Playlists[i] = Playlists[i] with { ShowAsSpace = on };
+    }
 
     public void SetSelection(string playlistId, IEnumerable<string> channelIds)
     {

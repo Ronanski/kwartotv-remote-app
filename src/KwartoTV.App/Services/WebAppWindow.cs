@@ -28,10 +28,32 @@ public sealed class WebAppWindow : Window
     public event Action<string>? Failed;
     /// <summary>User pressed F1 inside the page.</summary>
     public event Action? HomeRequested;
+    /// <summary>▲ / ▼ while a YouTube channel from the lineup is showing (video-only mode).</summary>
+    public event Action? ChannelUp, ChannelDown;
+    private readonly bool _videoOnly;
 
-    public WebAppWindow(string url, string profileName, ForegroundKind kind, string? userAgent = null)
+    /// <summary>Shows only the video of a YouTube watch/live page, fullscreen, and turns ▲▼ into channel up/down.</summary>
+    private const string VideoOnlyScript = @"
+(function () {
+  if (window.__kwVideo) return; window.__kwVideo = true;
+  var css = 'html,body{overflow:hidden!important;background:#000!important}' +
+    '#masthead-container,#secondary,#below,#related,#comments,ytd-watch-metadata,#chat,#chat-container,tp-yt-app-drawer,ytd-mini-guide-renderer{display:none!important}' +
+    '#player-full-bleed-container,#player-container-outer,#player-container-inner,#player-container,#player,ytd-player,#ytd-player,#movie_player{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:99999!important;background:#000!important}' +
+    'video.html5-main-video{width:100vw!important;height:100vh!important;left:0!important;top:0!important;object-fit:contain!important}';
+  function add() { if (document.getElementById('kw-video')) return; var s = document.createElement('style'); s.id = 'kw-video'; s.textContent = css; (document.head || document.documentElement).appendChild(s); }
+  add(); document.addEventListener('DOMContentLoaded', add); window.addEventListener('yt-navigate-finish', add);
+  setInterval(function () { add(); var v = document.querySelector('video'); if (v && v.paused && !v.ended && !window.__kwPausedByUser) { v.play().catch(function(){}); } }, 2000);
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); e.stopPropagation(); window.chrome.webview.postMessage('chup'); }
+    else if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); e.stopPropagation(); window.chrome.webview.postMessage('chdown'); }
+    else if (e.key === 'Escape' || e.key === 'BrowserBack') { e.preventDefault(); window.chrome.webview.postMessage('home'); }
+    else if (e.key === ' ' || e.key === 'Enter' || e.key === 'MediaPlayPause') { var v = document.querySelector('video'); if (v) { e.preventDefault(); if (v.paused) { window.__kwPausedByUser = false; v.play(); } else { window.__kwPausedByUser = true; v.pause(); } } }
+  }, true);
+})();";
+
+    public WebAppWindow(string url, string profileName, ForegroundKind kind, string? userAgent = null, bool videoOnly = false)
     {
-        _url = url; _profile = profileName; Kind = kind; _userAgent = userAgent;
+        _url = url; _profile = profileName; Kind = kind; _userAgent = userAgent; _videoOnly = videoOnly;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; WindowState = WindowState.Maximized;
         Background = Brushes.Black; ShowInTaskbar = false; Title = "KwartoTV Web";
         Content = _web;
@@ -64,10 +86,13 @@ public sealed class WebAppWindow : Window
                 "window.addEventListener('keydown', e => { if (e.key === 'F1') { e.preventDefault(); window.chrome.webview.postMessage('home'); } }, true);");
             // The on-screen keyboard for text fields. YouTube TV has its own keyboard, so skip it there.
             if (Kind != ForegroundKind.YouTube) await core.AddScriptToExecuteOnDocumentCreatedAsync(WebTextTarget.PageScript);
+            if (_videoOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(VideoOnlyScript);
             core.WebMessageReceived += (_, e) =>
             {
                 var msg = e.TryGetWebMessageAsString();
                 if (msg == "home") Dispatcher.BeginInvoke(() => HomeRequested?.Invoke());
+                else if (msg == "chup") Dispatcher.BeginInvoke(() => ChannelUp?.Invoke());
+                else if (msg == "chdown") Dispatcher.BeginInvoke(() => ChannelDown?.Invoke());
                 else if (msg == "textfocus" && Kind != ForegroundKind.YouTube) Dispatcher.BeginInvoke(ShowKeyboard);
             };
             core.Navigate(_url);

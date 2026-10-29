@@ -82,7 +82,7 @@ public static class M3uParser
             result.Add(new Channel(
                 Channel.StableId(line), finalName, line,
                 string.IsNullOrWhiteSpace(logo) ? null : logo,
-                string.IsNullOrWhiteSpace(group) ? "Other" : group!,
+                string.IsNullOrWhiteSpace(group) ? AutoCategory.Guess(finalName) ?? "Other" : group!,
                 Channel.DetectKind(line), referrer, userAgent));
             name = logo = group = referrer = userAgent = null; pending = false;
         }

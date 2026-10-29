@@ -21,6 +21,7 @@ public static class StreamProbe
     {
         if (!Uri.TryCreate(ch.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             return new(HealthStatus.Unknown, "cannot be checked before playing (" + (uri?.Scheme ?? "bad address") + ")", now);
+        if (ch.Kind == StreamKind.YouTube) return new(HealthStatus.Unknown, "YouTube: opens in the YouTube player", now);
         try
         {
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -64,6 +65,12 @@ public static class StreamProbe
         if (got == 0) return "the stream sent nothing";
 
         var head = Encoding.UTF8.GetString(buf, 0, Math.Min(got, 2048)).TrimStart('﻿', ' ', '\r', '\n', '\t');
+        // DASH (.mpd) is XML, not a web page. Protected (DRM) DASH cannot be played by KwartoTV.
+        if (type.Contains("dash", StringComparison.OrdinalIgnoreCase) || head.Contains("<MPD", StringComparison.Ordinal))
+        {
+            var xml = Encoding.UTF8.GetString(buf, 0, got);
+            return xml.Contains("ContentProtection", StringComparison.Ordinal) ? "protected (DRM), cannot be played here" : null;
+        }
         if (type.Contains("html", StringComparison.OrdinalIgnoreCase) || head.StartsWith('<'))
             return "not a stream (a web page, often a sign-up or 'not available' page)";
         if (!head.StartsWith("#EXTM3U", StringComparison.Ordinal)) return null; // video bytes (TS, MP4, ...)

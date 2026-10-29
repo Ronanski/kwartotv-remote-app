@@ -78,6 +78,8 @@ public sealed class ChannelPickerView : PageBase
         controls.Children.Add(UiKit.ActionButton("Clear shown", () => { foreach (var c in Matches()) _selected.Remove(c.Id); RenderList(); UpdateCount(); }));
         controls.Children.Add(UiKit.ActionButton("Check all", () => _ = CheckAsync(_all, force: true)));
         controls.Children.Add(UiKit.ActionButton(_hideDead ? "Not working: hidden" : "Not working: shown", () => { _hideDead = !_hideDead; Refresh(); }));
+        var isSpace = Shell.Tv.Settings.FindPlaylist(_playlistId)?.ShowAsSpace == true;
+        controls.Children.Add(UiKit.ActionButton(isSpace ? "Own space on Home: On" : "Own space on Home: Off", () => { Shell.Tv.Settings.SetSpace(_playlistId, !isSpace); Shell.Tv.SaveSettings(); Refresh(); }));
         controls.Children.Add(UiKit.ActionButton("Done", () => { Commit(); Shell.ShowToast($"{_selected.Count} channels in your lineup"); Shell.ShowSettings(); }));
         Body.Children.Add(controls);
 

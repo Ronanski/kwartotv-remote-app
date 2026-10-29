@@ -560,6 +560,8 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
                     "/nosegment/index.m3u8" => "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nmissing.ts\n",
                     "/empty/index.m3u8" => "#EXTM3U\n#EXT-X-TARGETDURATION:6\n",
                     "/signup" => "<html><body>Please register</body></html>",
+                    "/dash.mpd" => "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\"><Period><AdaptationSet/></Period></MPD>",
+                    "/drm.mpd" => "<?xml version=\"1.0\"?><MPD><Period><AdaptationSet><ContentProtection schemeIdUri=\"urn:uuid:edef8ba9\"/></AdaptationSet></Period></MPD>",
                     _ => null,
                 };
                 if (path == "/good/low/seg1.ts" || path == "/direct.ts") { await c.Response.OutputStream.WriteAsync(new byte[] { 0x47, 1, 2, 3, 4 }); }
@@ -587,6 +589,8 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check((await Probe("/nosegment/index.m3u8")).Reason!.Contains("no longer exists"), "check: playlist whose video segments are missing is dead");
     Check((await Probe("/empty/index.m3u8")).Reason!.Contains("empty"), "check: empty playlist means nothing on air");
     Check((await Probe("/needsref.m3u8")).Status == HealthStatus.Dead && (await Probe("/needsref.m3u8", "https://ok.example/")).Status == HealthStatus.Ok, "check: uses the playlist's referrer like the player does");
+    Check((await Probe("/dash.mpd")).Status == HealthStatus.Ok, "check: DASH (.mpd) is a stream, not a web page");
+    Check((await Probe("/drm.mpd")).Reason!.Contains("DRM"), "check: DRM-protected DASH is reported as not playable");
     var rtmp = await StreamProbe.CheckAsync(new Channel("r", "r", "rtmp://example.invalid/live", null, "T", StreamKind.Direct), ph, nowH);
     Check(rtmp.Status == HealthStatus.Unknown, "check: rtmp cannot be checked ahead and is kept");
     hl.Stop();
@@ -598,6 +602,22 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(ChannelCatalog.BuildLineup(new[] { hp }, loadedH, healthMap).Single().Id == two[1].Id, "lineup leaves out channels that do not work here");
     Check(ChannelCatalog.BuildLineup(new[] { hp }, loadedH, null).Count == 2, "lineup keeps everything when unavailable channels are shown");
     Check(new AppSettings().HideUnavailable, "unavailable channels are hidden by default");
+}
+
+// ---- PH list support: auto categories, DASH/DRM checks, space flag, links sent from the phone
+{
+    var noGroups = M3uParser.Parse("#EXTM3U\n#EXTINF:-1,BBC World News\nhttps://example.invalid/a.m3u8\n#EXTINF:-1,Disney Jr\nhttps://example.invalid/b.m3u8\n#EXTINF:-1,GMA Network (1080p)\nhttps://example.invalid/c.m3u8\n#EXTINF:-1,NBA TV\nhttps://example.invalid/d.m3u8\n#EXTINF:-1,EWTN Asia-Pacific\nhttps://example.invalid/e.m3u8\n#EXTINF:-1,Zarok TV Sorani\nhttps://example.invalid/f.m3u8\n#EXTINF:-1 group-title=\"Mine\",Cinema One\nhttps://example.invalid/g.m3u8\n");
+    Check(noGroups.Select(c => c.Group).SequenceEqual(new[] { "News", "Kids", "Local TV", "Sports", "Religious", "International", "Mine" }), "channels without a group get a category from their name; a playlist's own group wins: " + string.Join(",", noGroups.Select(c => c.Group)));
+
+    var st = new AppSettings();
+    st.AddPlaylist("PH", "https://example.invalid/ph.m3u");
+    Check(!st.Playlists[0].ShowAsSpace, "a playlist is not a space until the user asks");
+    st.SetSpace(st.Playlists[0].Id, true);
+    Check(st.Playlists[0].ShowAsSpace, "a playlist can get its own space");
+
+    var pr = new CommandRouter(new ChannelLineup(), new FakeHost());
+    Check(pr.Handle(new(null, "playlist.add", "https://raw.githubusercontent.com/IPTV-Philippines/IPTV-Philippines/main/ph.m3u")).Ok, "a playlist link longer than 64 characters can be sent from the phone");
+    Check(!pr.Handle(new(null, "playlist.add", "javascript:alert(1)")).Ok && !pr.Handle(new(null, "playlist.add", "file:///c:/x.m3u")).Ok && !pr.Handle(new(null, "nav.up", new string('x', 100))).Ok, "phone links are checked and other commands keep the short limit");
 }
 
 Console.WriteLine($"{pass} passed, {fail} failed");
