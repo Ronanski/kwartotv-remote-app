@@ -151,7 +151,8 @@ Shot "07b-guide-next-category"
 Keys "{ESC}"
 # the dead test address must have been found by the channel check and left out of the list
 $logText = Get-Content (Join-Path $data "log.txt") -Raw
-Check ($logText -match "health: Dead Stream: dead") "the channel check found the dead address ($([regex]::Match($logText, 'health: Dead Stream: dead \(([^)]*)\)').Groups[1].Value))"
+$deadLine = ($logText -split "`n" | Where-Object { $_ -like "*health: Dead Stream: dead*" } | Select-Object -First 1)
+Check ($null -ne $deadLine) "the channel check found the dead address: $deadLine"
 Check ($logText -notmatch "health: Test Stream 1: dead") "the working test stream was not marked as dead"
 Keys "{F1}"
 Keys "{F2}"
