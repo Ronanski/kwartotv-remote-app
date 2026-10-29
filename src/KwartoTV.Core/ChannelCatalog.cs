@@ -28,8 +28,10 @@ public static class ChannelCatalog
     }
 
     /// <summary>The numbered lineup: only the channels the user selected, playlist by playlist, without duplicate addresses.</summary>
+    /// <param name="health">When given, channels found not to work are left out.</param>
+    /// <param name="onlyVerified">Also leave out channels that have not been checked yet (they appear once they pass).</param>
     public static IReadOnlyList<Channel> BuildLineup(IEnumerable<PlaylistEntry> playlists, IReadOnlyDictionary<string, IReadOnlyList<Channel>> loaded,
-        IReadOnlyDictionary<string, ChannelHealth>? health = null)
+        IReadOnlyDictionary<string, ChannelHealth>? health = null, bool onlyVerified = false)
     {
         var result = new List<Channel>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -38,7 +40,7 @@ public static class ChannelCatalog
             if (!loaded.TryGetValue(p.Id, out var all)) continue;
             var chosen = p.Selected is null ? null : new HashSet<string>(p.Selected);
             foreach (var c in all)
-                if ((chosen is null || chosen.Contains(c.Id)) && !IsDead(c, health) && seen.Add(c.Url)) result.Add(c);
+                if ((chosen is null || chosen.Contains(c.Id)) && !IsDead(c, health) && (!onlyVerified || health is null || health.ContainsKey(c.Id)) && seen.Add(c.Url)) result.Add(c);
         }
         return result;
     }

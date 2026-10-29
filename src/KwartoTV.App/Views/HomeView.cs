@@ -69,7 +69,9 @@ public sealed class HomeView : PageBase
         if (channels.Count == 0)
         {
             var empty = new StackPanel { Margin = new Thickness(0, 30, 0, 0) };
-            empty.Children.Add(UiKit.Dimmed(tv.ChannelsLoading
+            if (tv.CheckingCount > 0)
+                empty.Children.Add(UiKit.Dimmed($"Checking channels from this PC… {tv.CheckingCount} to go. Channels that work appear here as they pass.", 22));
+            else empty.Children.Add(UiKit.Dimmed(tv.ChannelsLoading
                 ? "Loading your channels…"
                 : tv.Settings.Playlists.Count == 0
                     ? "No channels yet. KwartoTV comes with no channel list: add a playlist link or file (or one stream), then choose the channels you want."
@@ -80,7 +82,7 @@ public sealed class HomeView : PageBase
                 empty.Children.Add(new TextBlock { Text = "⚠ " + tv.PlaylistErrors[0], FontSize = 18, Foreground = UiKit.B("Danger"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) });
                 empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0), Children = { UiKit.ActionButton("Try again", () => _ = tv.RefreshChannelsAsync()) } });
             }
-            if (!tv.ChannelsLoading) empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 18, 0, 0), Children = { UiKit.ActionButton("Add channels", Shell.AddChannelsMenu) } });
+            if (!tv.ChannelsLoading) empty.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 18, 0, 0), Children = { UiKit.ActionButton("⭐ Free channel pack", Shell.AddFreePack), UiKit.ActionButton("Add channels", Shell.AddChannelsMenu) } });
             Body.Children.Add(empty);
         }
     }

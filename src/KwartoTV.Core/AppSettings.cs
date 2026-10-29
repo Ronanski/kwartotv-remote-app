@@ -65,6 +65,13 @@ public sealed class AppSettings
         if (i >= 0) Playlists[i] = Playlists[i] with { ShowAsSpace = on };
     }
 
+    /// <summary>Every channel of the playlist (also the ones added to it later).</summary>
+    public void SetSelectionAll(string playlistId)
+    {
+        var i = Playlists.FindIndex(p => p.Id == playlistId);
+        if (i >= 0) Playlists[i] = Playlists[i] with { Selected = null };
+    }
+
     public void SetSelection(string playlistId, IEnumerable<string> channelIds)
     {
         var i = Playlists.FindIndex(p => p.Id == playlistId);

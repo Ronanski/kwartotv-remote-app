@@ -36,7 +36,7 @@ public sealed class TvServices : IDisposable
         // Start with what was loaded last time, so the channels are there even before (or without) the internet.
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, List<Channel>>>(AppPaths.PlaylistCache)) Library[kv.Key] = kv.Value;
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, ChannelHealth>>(AppPaths.Health)) Health[kv.Key] = kv.Value;
-        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null));
+        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable));
         Lineup.Restore(Settings.Lineup);
         Lineup.Tuned += (_, _) => SaveSettingsSoon();
         Lineup.FavoritesChanged += SaveSettingsSoon;
@@ -102,26 +102,44 @@ public sealed class TvServices : IDisposable
         var now = DateTimeOffset.UtcNow;
         var todo = channels.Where(c => force || !Health.TryGetValue(c.Id, out var h) || now - h.CheckedAt > RecheckAfter)
                            .Where(c => _checking.TryAdd(c.Id, 0)).ToList();
-        int done = 0, ok = 0, dead = 0;
-        using var gate = new SemaphoreSlim(8);
+        int done = 0, ok = 0, dead = 0, network = 0;
+        var results = new System.Collections.Concurrent.ConcurrentDictionary<string, ChannelHealth>();
+        Interlocked.Add(ref _checkingCount, todo.Count);
+        using var gate = new SemaphoreSlim(todo.Count > 200 ? 16 : 8);
         var tasks = todo.Select(async c =>
         {
             await gate.WaitAsync(ct);
             try
             {
                 var h = await StreamProbe.CheckAsync(c, ProbeHttp, DateTimeOffset.UtcNow, ct);
-                Health[c.Id] = h;
-                if (h.Status == HealthStatus.Dead) { Interlocked.Increment(ref dead); AppPaths.LogLine($"health: {c.Name}: dead ({h.Reason})"); }
+                Health[c.Id] = h; results[c.Id] = h;
+                if (h.Status == HealthStatus.Dead)
+                {
+                    Interlocked.Increment(ref dead);
+                    if (h.Reason is "cannot connect" || h.Reason?.StartsWith("no answer") == true) Interlocked.Increment(ref network);
+                    if (todo.Count <= 300) AppPaths.LogLine($"health: {c.Name}: dead ({h.Reason})");
+                }
                 else if (h.Status == HealthStatus.Ok) Interlocked.Increment(ref ok);
             }
             finally
             {
                 gate.Release(); _checking.TryRemove(c.Id, out _);
-                progress?.Report((Interlocked.Increment(ref done), todo.Count));
+                Interlocked.Decrement(ref _checkingCount);
+                var d = Interlocked.Increment(ref done);
+                progress?.Report((d, todo.Count));
+                // Long checks: show the channels found so far, every 100.
+                if (d % 100 == 0) RebuildLineup();
             }
         });
         try { await Task.WhenAll(tasks); }
         catch (OperationCanceledException) { }
+        // If nearly everything failed to even connect, the internet was down, not the channels: forget these results.
+        if (todo.Count >= 10 && network >= todo.Count * 0.9)
+        {
+            foreach (var id in results.Keys) Health.TryRemove(id, out _);
+            AppPaths.LogLine($"health: {network} of {todo.Count} could not connect; looks like the internet is down, results not kept");
+            return (0, 0);
+        }
         SaveHealthSoon();
         if (todo.Count > 0) { AppPaths.LogLine($"health: checked {todo.Count} channels: {ok} work, {dead} do not"); RebuildLineup(); }
         return (ok, dead);
@@ -143,6 +161,10 @@ public sealed class TvServices : IDisposable
         return result;
     }
 
+    private int _checkingCount;
+    /// <summary>How many channels are being checked right now (shown on Home while the first check runs).</summary>
+    public int CheckingCount => Volatile.Read(ref _checkingCount);
+
     /// <summary>The channels the user chose (what the lineup is made from), before hiding the ones that do not work.</summary>
     public IReadOnlyList<Channel> ChosenChannels() => ChannelCatalog.BuildLineup(Settings.Playlists, Library);
 
@@ -154,7 +176,7 @@ public sealed class TvServices : IDisposable
     /// <summary>The numbered lineup again, from the playlists and the user's selection. No download.</summary>
     public void RebuildLineup()
     {
-        var next = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null);
+        var next = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable);
         // Nothing changed: do nothing (a rebuild redraws the home screen, which is slow with many channels).
         if (next.Select(c => c.Id).SequenceEqual(Lineup.Channels.Select(c => c.Id))) return;
         Lineup.Load(next);

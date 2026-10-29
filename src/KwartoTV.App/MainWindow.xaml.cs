@@ -302,6 +302,30 @@ public partial class MainWindow : Window, IShell
     /// <summary>The "Add channels" menu: link, file, clipboard, one stream, or the public iptv-org lists.</summary>
     public void AddChannelsMenu() => Dialogs.AddChannels(this);
 
+    /// <summary>
+    /// One press: free channels in English and Filipino plus the Philippines list (as its own space). Everything is
+    /// checked from this PC and only the channels that work appear, sorted by category.
+    /// </summary>
+    public async void AddFreePack()
+    {
+        int added = 0;
+        foreach (var s in IptvOrg.FreePack)
+        {
+            if (_tv.Settings.Playlists.Any(p => p.Source == s.Url)) continue;
+            if (_tv.Settings.AddPlaylist(s.Name, s.Url) is not null) continue;
+            var entry = _tv.Settings.Playlists.Last();
+            _tv.Settings.SetSelectionAll(entry.Id);
+            if (s.Name == "Philippines") _tv.Settings.SetSpace(entry.Id, true);
+            added++;
+        }
+        _tv.SaveSettings();
+        if (added == 0) { ShowToast("The free channel pack is already added."); return; }
+        ShowToast("Downloading the free channel lists…");
+        await _tv.RefreshChannelsAsync();
+        ShowToast($"Checking {_tv.ChosenChannels().Count} channels. The ones that work appear on Home as they pass.");
+        GoHome();
+    }
+
     public void AddIptvOrgPlaylist() => Dialogs.IptvOrgPicker(this, pick => AddPlaylistSource(pick.Name + " (iptv-org)", pick.Url, false));
 
     /// <summary>

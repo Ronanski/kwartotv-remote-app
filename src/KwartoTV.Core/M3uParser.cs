@@ -15,6 +15,15 @@ public static class M3uParser
     public static bool LooksLikeSingleStream(string text) =>
         text.Contains("#EXT-X-STREAM-INF", StringComparison.Ordinal) || text.Contains("#EXT-X-TARGETDURATION", StringComparison.Ordinal);
 
+    /// <summary>"Animation;Kids" → "Animation"; empty or "Undefined" → a category guessed from the name.</summary>
+    public static string CleanGroup(string? group, string name)
+    {
+        var g = (group ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+        if (g.Length == 0 || g.Equals("Undefined", StringComparison.OrdinalIgnoreCase) || g.Equals("General", StringComparison.OrdinalIgnoreCase) && AutoCategory.Guess(name) is not null)
+            return AutoCategory.Guess(name) ?? (g.Length == 0 || g.Equals("Undefined", StringComparison.OrdinalIgnoreCase) ? "Other" : g);
+        return g;
+    }
+
     public static IReadOnlyList<Channel> Parse(string text, Uri? baseUri = null)
     {
         var result = new List<Channel>();
@@ -82,7 +91,7 @@ public static class M3uParser
             result.Add(new Channel(
                 Channel.StableId(line), finalName, line,
                 string.IsNullOrWhiteSpace(logo) ? null : logo,
-                string.IsNullOrWhiteSpace(group) ? AutoCategory.Guess(finalName) ?? "Other" : group!,
+                CleanGroup(group, finalName),
                 Channel.DetectKind(line), referrer, userAgent));
             name = logo = group = referrer = userAgent = null; pending = false;
         }

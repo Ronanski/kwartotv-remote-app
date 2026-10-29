@@ -214,6 +214,26 @@ Keys "{ESC}"
 Keys "{ESC}"
 Start-Sleep -Seconds 1
 Shot "08-back-home"
+# Free channel pack: one press from the Add channels menu, then wait for the check
+Keys "{F1}"
+Keys "{F7}"
+Keys "{ENTER}"
+Start-Sleep -Seconds 240
+Keys "{F1}"
+Start-Sleep -Seconds 3
+Shot "22-free-pack-home"
+Keys "{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}"
+Shot "23-free-pack-home-scrolled"
+Keys "{F2}"
+Start-Sleep -Seconds 4
+Keys "{ENTER}"
+Keys "{RIGHT}{RIGHT}{RIGHT}"
+Shot "24-free-pack-channel-list"
+Keys "{ESC}{ESC}"
+$logText = Get-Content (Join-Path $data "log.txt") -Raw
+$packLines = ($logText -split "`n" | Where-Object { $_ -match "playlist: (Philippines|Filipino channels|Tagalog channels|English channels):|health: checked" })
+$packLines | ForEach-Object { Write-Host "pack: $_" }
+Check ($logText -match "playlist: English channels: \d+ channels") "free channel pack downloaded"
 Check (-not $p.HasExited) "app survived navigation and the player"
 
 $log = Join-Path $data "log.txt"

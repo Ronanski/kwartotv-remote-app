@@ -35,6 +35,18 @@ public static class IptvOrg
     public static string CountryUrl(string code) => $"{Base}countries/{code.ToLowerInvariant()}.m3u";
     public static string LanguageUrl(string code) => $"{Base}languages/{code.ToLowerInvariant()}.m3u";
 
+    /// <summary>
+    /// One press for free channels in English and Filipino plus the Philippines list. The channels are sorted into
+    /// their categories (movies, series, animation, kids, sports, news, ...) and only the ones that work are shown.
+    /// </summary>
+    public static readonly IReadOnlyList<PlaylistSuggestion> FreePack = new[]
+    {
+        new PlaylistSuggestion("Philippines", Base + "countries/ph.m3u"),
+        new PlaylistSuggestion("Filipino channels", Base + "languages/fil.m3u"),
+        new PlaylistSuggestion("Tagalog channels", Base + "languages/tgl.m3u"),
+        new PlaylistSuggestion("English channels", Base + "languages/eng.m3u"),
+    };
+
     /// <summary>Every channel of the project in one list (large). Pick the channels you want in the channel picker.</summary>
     public static readonly PlaylistSuggestion AllChannels = new("All channels (everything)", Base + "index.m3u");
 

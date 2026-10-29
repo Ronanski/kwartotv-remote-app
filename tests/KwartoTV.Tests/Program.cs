@@ -541,6 +541,7 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
 // ---- channel checks: blocked, gone, web pages, empty, and good HLS
 {
     int hport = 19950 + Random.Shared.Next(40);
+    int flakyHits = 0;
     using var hl = new HttpListener();
     hl.Prefixes.Add($"http://127.0.0.1:{hport}/");
     hl.Start();
@@ -560,11 +561,23 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
                     "/nosegment/index.m3u8" => "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nmissing.ts\n",
                     "/empty/index.m3u8" => "#EXTM3U\n#EXT-X-TARGETDURATION:6\n",
                     "/signup" => "<html><body>Please register</body></html>",
+                    "/json/index.m3u8" => "#EXTM3U\n#EXTINF:6,\nseg.ts\n",
+                    "/text/index.m3u8" => "#EXTM3U\n#EXTINF:6,\nseg.ts\n",
+                    "/aes/index.m3u8" => "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"key.bin\"\n#EXTINF:6,\nseg.ts\n",
+                    "/wv/index.m3u8" => "#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://x\",KEYFORMAT=\"com.apple.streamingkeydelivery\"\n#EXTINF:6,\nseg.ts\n",
+                    "/norange/index.m3u8" => "#EXTM3U\n#EXTINF:6,\nseg.ts\n",
+                    "/fmp4/index.m3u8" => "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:6,\nseg.m4s\n",
                     "/dash.mpd" => "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\"><Period><AdaptationSet/></Period></MPD>",
                     "/drm.mpd" => "<?xml version=\"1.0\"?><MPD><Period><AdaptationSet><ContentProtection schemeIdUri=\"urn:uuid:edef8ba9\"/></AdaptationSet></Period></MPD>",
                     _ => null,
                 };
                 if (path == "/good/low/seg1.ts" || path == "/direct.ts") { await c.Response.OutputStream.WriteAsync(new byte[] { 0x47, 1, 2, 3, 4 }); }
+                else if (path == "/json/seg.ts") { c.Response.ContentType = "application/json"; await c.Response.OutputStream.WriteAsync("{\"error\":\"expired token\"}"u8.ToArray()); }
+                else if (path == "/text/seg.ts") { c.Response.ContentType = "text/plain"; await c.Response.OutputStream.WriteAsync("not allowed"u8.ToArray()); }
+                else if (path == "/aes/seg.ts" || path == "/wv/seg.ts") { c.Response.ContentType = "text/plain"; await c.Response.OutputStream.WriteAsync(new byte[] { 0x9A, 0x13, 0x77, 0x01, 0xEE, 0x42 }); }
+                else if (path == "/norange/seg.ts") { if (c.Request.Headers["Range"] is not null) c.Response.StatusCode = 416; else await c.Response.OutputStream.WriteAsync(new byte[] { 0x47, 0, 0 }); }
+                else if (path == "/fmp4/seg.m4s") { await c.Response.OutputStream.WriteAsync(new byte[] { 0, 0, 0, 24, (byte)'m', (byte)'o', (byte)'o', (byte)'f', 0, 0 }); }
+                else if (path == "/flaky.ts") { if (Interlocked.Increment(ref flakyHits) == 1) c.Response.StatusCode = 503; else await c.Response.OutputStream.WriteAsync(new byte[] { 0x47, 9 }); }
                 else if (path == "/blocked.m3u8") c.Response.StatusCode = 403;
                 else if (path == "/geo.m3u8") c.Response.StatusCode = 451;
                 else if (path == "/needsref.m3u8") { if (c.Request.Headers["Referer"] == "https://ok.example/") { var b = Encoding.UTF8.GetBytes("#EXTM3U\n#EXTINF:6,\n/direct.ts\n"); await c.Response.OutputStream.WriteAsync(b); } else c.Response.StatusCode = 403; }
@@ -589,6 +602,14 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check((await Probe("/nosegment/index.m3u8")).Reason!.Contains("no longer exists"), "check: playlist whose video segments are missing is dead");
     Check((await Probe("/empty/index.m3u8")).Reason!.Contains("empty"), "check: empty playlist means nothing on air");
     Check((await Probe("/needsref.m3u8")).Status == HealthStatus.Dead && (await Probe("/needsref.m3u8", "https://ok.example/")).Status == HealthStatus.Ok, "check: uses the playlist's referrer like the player does");
+    Check((await Probe("/json/index.m3u8")).Reason!.Contains("error message"), "check (strict): a JSON error instead of a video segment is not video");
+    Check((await Probe("/text/index.m3u8")).Reason!.Contains("does not look like video"), "check (strict): text instead of a video segment is not video");
+    Check((await Probe("/aes/index.m3u8")).Status == HealthStatus.Ok, "check (strict): AES-128 encrypted HLS segments are fine (they look random on purpose)");
+    Check((await Probe("/wv/index.m3u8")).Reason!.Contains("DRM"), "check (strict): SAMPLE-AES with a DRM key system is not playable");
+    Check((await Probe("/norange/index.m3u8")).Status == HealthStatus.Ok, "check (strict): a server that refuses byte ranges is retried without them");
+    Check((await Probe("/fmp4/index.m3u8")).Status == HealthStatus.Ok, "check (strict): fMP4 HLS segments are recognised");
+    Check((await Probe("/flaky.ts")).Status == HealthStatus.Ok && flakyHits == 2, "check (strict): a single 503 is retried before hiding a channel");
+    Check(StreamProbe.LooksLikeMedia(new byte[] { 0x1A, 0x45, 0xDF, 0xA3 }, 4) && !StreamProbe.LooksLikeMedia("hello"u8.ToArray(), 5), "media signatures: WebM yes, text no");
     Check((await Probe("/dash.mpd")).Status == HealthStatus.Ok, "check: DASH (.mpd) is a stream, not a web page");
     Check((await Probe("/drm.mpd")).Reason!.Contains("DRM"), "check: DRM-protected DASH is reported as not playable");
     var rtmp = await StreamProbe.CheckAsync(new Channel("r", "r", "rtmp://example.invalid/live", null, "T", StreamKind.Direct), ph, nowH);
@@ -618,6 +639,18 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     var pr = new CommandRouter(new ChannelLineup(), new FakeHost());
     Check(pr.Handle(new(null, "playlist.add", "https://raw.githubusercontent.com/IPTV-Philippines/IPTV-Philippines/main/ph.m3u")).Ok, "a playlist link longer than 64 characters can be sent from the phone");
     Check(!pr.Handle(new(null, "playlist.add", "javascript:alert(1)")).Ok && !pr.Handle(new(null, "playlist.add", "file:///c:/x.m3u")).Ok && !pr.Handle(new(null, "nav.up", new string('x', 100))).Ok, "phone links are checked and other commands keep the short limit");
+}
+
+// ---- free channel pack, only verified channels, tidy groups
+{
+    Check(IptvOrg.FreePack.Count == 4 && IptvOrg.FreePack.All(s => AppSettings.IsHttpsUrl(s.Url)) && IptvOrg.FreePack[0].Url.EndsWith("countries/ph.m3u"), "free channel pack: Philippines, Filipino, Tagalog and English lists");
+    Check(M3uParser.CleanGroup("Animation;Kids", "X") == "Animation" && M3uParser.CleanGroup("Undefined", "BBC News") == "News" && M3uParser.CleanGroup("", "Zzz") == "Other" && M3uParser.CleanGroup("Movies", "Disney") == "Movies", "groups: first of several, Undefined guessed, a real group kept");
+    var two = M3uParser.Parse(Sample).Take(2).ToList();
+    var vp = new PlaylistEntry("v", "V", "x", null);
+    var loadedV = new Dictionary<string, IReadOnlyList<Channel>> { ["v"] = two };
+    var onlyOne = new Dictionary<string, ChannelHealth> { [two[1].Id] = new(HealthStatus.Ok, null, DateTimeOffset.UtcNow) };
+    Check(ChannelCatalog.BuildLineup(new[] { vp }, loadedV, onlyOne, onlyVerified: true).Single().Id == two[1].Id, "only verified: a channel not checked yet stays hidden until it passes");
+    Check(ChannelCatalog.BuildLineup(new[] { vp }, loadedV, onlyOne, onlyVerified: false).Count == 2, "without only-verified the unchecked channel shows");
 }
 
 Console.WriteLine($"{pass} passed, {fail} failed");
