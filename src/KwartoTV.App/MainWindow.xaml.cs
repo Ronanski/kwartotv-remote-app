@@ -104,6 +104,7 @@ public partial class MainWindow : Window, IShell
     private void Navigate(string name)
     {
         _currentName = name;
+        AppPaths.LogLine("page: " + name);
         _current = name switch
         {
             "Library" => new LibraryView(this),
@@ -369,6 +370,24 @@ public partial class MainWindow : Window, IShell
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
+        // Arrow keys (the remote's d-pad): our own TV-style focus movement, everywhere on this window.
+        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            // In a text box, left/right move the cursor; up/down leave the box.
+            if (Keyboard.FocusedElement is TextBox && e.Key is Key.Left or Key.Right) return;
+            FrameworkElement scope = KeyboardOpen ? OskHost : DialogOpen ? DialogCard : (FrameworkElement)Content;
+            SpatialNav.Move(scope, e.Key);
+            e.Handled = true;
+            return;
+        }
+        // OK with nothing selected (focus was lost): select the first control instead of doing nothing.
+        if (e.Key == Key.Enter && Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.ButtonBase or TextBox))
+        {
+            FrameworkElement scope = KeyboardOpen ? OskHost : DialogOpen ? DialogCard : (FrameworkElement)Content;
+            SpatialNav.Move(scope, Key.Down);
+            e.Handled = true;
+            return;
+        }
         if (e.Key is Key.Escape or Key.BrowserBack)
         {
             if (KeyboardOpen) HideKeyboard();

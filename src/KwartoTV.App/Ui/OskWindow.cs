@@ -80,7 +80,8 @@ public sealed class OskWindow : Window
     {
         base.OnPreviewKeyDown(e);
         // A physical keyboard or the phone's keyboard tab types through to the page.
-        if (e.Key is Key.Escape or Key.BrowserBack) { Finish(); e.Handled = true; }
+        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right) { SpatialNav.Move(_osk, e.Key); e.Handled = true; }
+        else if (e.Key is Key.Escape or Key.BrowserBack) { Finish(); e.Handled = true; }
         else if (e.Key == Key.Back) { _target.Backspace(); e.Handled = true; }
     }
 

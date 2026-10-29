@@ -81,6 +81,25 @@ Check (($null -ne $mdns) -or ($logText -match "mdns: advertising")) "mDNS respon
 Shot "00-first-run-pairing"
 Keys "{ESC}"
 Shot "01-home"
+# Only the d-pad (arrow keys + OK), like the phone remote: up to the menu, right to Settings, OK.
+Keys "{UP}"
+Keys "{RIGHT}{RIGHT}{RIGHT}"
+Keys "{ENTER}"
+Start-Sleep -Seconds 1
+Shot "01b-settings-by-dpad"
+Check ((Get-Content (Join-Path $data "log.txt") -Raw) -match "page: Settings") "d-pad: up, right, OK reaches Settings"
+# Settings must be scrollable to the end with the d-pad
+Keys "{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}"
+Shot "01c-settings-bottom-by-dpad"
+Keys "{ESC}"
+# down from the top of Home into the channel rows, OK plays the channel
+Keys "{DOWN}{DOWN}"
+Shot "01d-channel-row-by-dpad"
+Keys "{ENTER}"
+Start-Sleep -Seconds 6
+Check ((Get-Content (Join-Path $data "log.txt") -Raw) -match "player: opening Test Stream") "d-pad: down to a channel row and OK plays it"
+Keys "{ESC}"
+Start-Sleep -Seconds 1
 Keys "{DOWN}{DOWN}"
 Shot "02-home-scrolled"
 Keys "{F4}"

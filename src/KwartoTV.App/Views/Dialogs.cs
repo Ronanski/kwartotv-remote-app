@@ -87,13 +87,15 @@ public static class Dialogs
         var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 6) };
         var filter = new TextBox { Style = (Style)Application.Current.FindResource("Field"), Margin = new Thickness(0, 4, 0, 8) };
         var results = new StackPanel();
+        var resultsScroll = new ScrollViewer { Content = results, MaxHeight = 380, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false };
+        SmoothScroll.Attach(results);
         var shown = new TextBlock { FontSize = 15, Foreground = UiKit.B("Dim"), Margin = new Thickness(0, 6, 0, 0) };
 
         void Render()
         {
             results.Children.Clear();
             var matches = IptvOrg.Filter(Current(), filter.Text);
-            foreach (var m in matches.Take(8))
+            foreach (var m in matches.Take(400))
             {
                 var pick = m;
                 var b = new Button { Style = (Style)Application.Current.FindResource("Pill"), Tag = "action", HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 2) };
@@ -101,7 +103,7 @@ public static class Dialogs
                 b.Click += (_, _) => { w.CloseDialog(); onPick(pick); };
                 results.Children.Add(b);
             }
-            shown.Text = matches.Count == 0 ? "Nothing matches. Check the spelling." : matches.Count > 8 ? $"Showing 8 of {matches.Count}. Type more letters to narrow it down." : "";
+            shown.Text = matches.Count == 0 ? "Nothing matches. Check the spelling." : $"{matches.Count} lists · use ▲▼ to scroll, or type to narrow it down";
         }
 
         Button TabButton(string label, int index) => UiKit.ActionButton(label, () => { tab = index; filter.Clear(); Render(); });
@@ -125,7 +127,7 @@ public static class Dialogs
         panel.Children.Add(tabs);
         panel.Children.Add(new TextBlock { Text = "Type to search (for example: phil)", FontSize = 16, Foreground = UiKit.B("Dim") });
         panel.Children.Add(filter);
-        panel.Children.Add(results);
+        panel.Children.Add(resultsScroll);
         panel.Children.Add(shown);
         panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0), Children = { UiKit.ActionButton("Cancel", w.CloseDialog) } });
         Render();
