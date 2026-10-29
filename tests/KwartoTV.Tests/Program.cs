@@ -538,6 +538,68 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(lr.Handle(new(null, "channel.list", null)).Ok && lh.Last == "channel.list:", "router channel.list reaches the host");
 }
 
+// ---- channel checks: blocked, gone, web pages, empty, and good HLS
+{
+    int hport = 19950 + Random.Shared.Next(40);
+    using var hl = new HttpListener();
+    hl.Prefixes.Add($"http://127.0.0.1:{hport}/");
+    hl.Start();
+    _ = Task.Run(async () =>
+    {
+        while (hl.IsListening)
+        {
+            HttpListenerContext c;
+            try { c = await hl.GetContextAsync(); } catch { break; }
+            _ = Task.Run(async () =>
+            {
+                var path = c.Request.Url!.AbsolutePath;
+                string? body = path switch
+                {
+                    "/good/master.m3u8" => "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow/index.m3u8\n",
+                    "/good/low/index.m3u8" => "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nseg1.ts\n",
+                    "/nosegment/index.m3u8" => "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nmissing.ts\n",
+                    "/empty/index.m3u8" => "#EXTM3U\n#EXT-X-TARGETDURATION:6\n",
+                    "/signup" => "<html><body>Please register</body></html>",
+                    _ => null,
+                };
+                if (path == "/good/low/seg1.ts" || path == "/direct.ts") { await c.Response.OutputStream.WriteAsync(new byte[] { 0x47, 1, 2, 3, 4 }); }
+                else if (path == "/blocked.m3u8") c.Response.StatusCode = 403;
+                else if (path == "/geo.m3u8") c.Response.StatusCode = 451;
+                else if (path == "/needsref.m3u8") { if (c.Request.Headers["Referer"] == "https://ok.example/") { var b = Encoding.UTF8.GetBytes("#EXTM3U\n#EXTINF:6,\n/direct.ts\n"); await c.Response.OutputStream.WriteAsync(b); } else c.Response.StatusCode = 403; }
+                else if (body is not null) { if (path == "/signup") c.Response.ContentType = "text/html"; var b = Encoding.UTF8.GetBytes(body); await c.Response.OutputStream.WriteAsync(b); }
+                else c.Response.StatusCode = 404;
+                c.Response.Close();
+            });
+        }
+    });
+    using var ph = new HttpClient();
+    var nowH = DateTimeOffset.UtcNow;
+    Channel Ch(string path, string? referrer = null) => new(Channel.StableId(path), path, $"http://127.0.0.1:{hport}{path}", null, "T", StreamKind.Hls, referrer);
+    async Task<ChannelHealth> Probe(string path, string? referrer = null) => await StreamProbe.CheckAsync(Ch(path, referrer), ph, nowH);
+
+    Check((await Probe("/good/master.m3u8")).Status == HealthStatus.Ok, "check: HLS master -> variant -> segment works");
+    Check((await Probe("/direct.ts")).Status == HealthStatus.Ok, "check: a direct video stream works");
+    var blocked = await Probe("/blocked.m3u8");
+    Check(blocked.Status == HealthStatus.Dead && blocked.Reason!.Contains("403"), "check: 403 is blocked / needs an account");
+    Check((await Probe("/geo.m3u8")).Reason!.Contains("not available in your country"), "check: 451 is a country block");
+    Check((await Probe("/gone.m3u8")).Reason!.Contains("no longer exists"), "check: 404 is gone");
+    Check((await Probe("/signup")).Reason!.Contains("web page"), "check: a sign-up web page is not a stream");
+    Check((await Probe("/nosegment/index.m3u8")).Reason!.Contains("no longer exists"), "check: playlist whose video segments are missing is dead");
+    Check((await Probe("/empty/index.m3u8")).Reason!.Contains("empty"), "check: empty playlist means nothing on air");
+    Check((await Probe("/needsref.m3u8")).Status == HealthStatus.Dead && (await Probe("/needsref.m3u8", "https://ok.example/")).Status == HealthStatus.Ok, "check: uses the playlist's referrer like the player does");
+    var rtmp = await StreamProbe.CheckAsync(new Channel("r", "r", "rtmp://example.invalid/live", null, "T", StreamKind.Direct), ph, nowH);
+    Check(rtmp.Status == HealthStatus.Unknown, "check: rtmp cannot be checked ahead and is kept");
+    hl.Stop();
+
+    var two = M3uParser.Parse(Sample).Take(2).ToList();
+    var hp = new PlaylistEntry("h", "H", "x", null);
+    var healthMap = new Dictionary<string, ChannelHealth> { [two[0].Id] = new(HealthStatus.Dead, "403", nowH), [two[1].Id] = new(HealthStatus.Ok, null, nowH) };
+    var loadedH = new Dictionary<string, IReadOnlyList<Channel>> { ["h"] = two };
+    Check(ChannelCatalog.BuildLineup(new[] { hp }, loadedH, healthMap).Single().Id == two[1].Id, "lineup leaves out channels that do not work here");
+    Check(ChannelCatalog.BuildLineup(new[] { hp }, loadedH, null).Count == 2, "lineup keeps everything when unavailable channels are shown");
+    Check(new AppSettings().HideUnavailable, "unavailable channels are hidden by default");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

@@ -23,6 +23,8 @@ public sealed class AppSettings
     public string? NetflixAppId { get; set; }
     /// <summary>Netflix opens inside KwartoTV (website). Turn off to use the Microsoft Store app instead.</summary>
     public bool NetflixInApp { get; set; } = true;
+    /// <summary>Channels that were checked and do not work here (blocked, gone, no video) stay out of the lineup.</summary>
+    public bool HideUnavailable { get; set; } = true;
 
     public static bool IsPlaylistFile(string path) =>
         Path.IsPathRooted(path) && (path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));

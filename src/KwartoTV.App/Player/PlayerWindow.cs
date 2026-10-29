@@ -19,6 +19,7 @@ public sealed class PlayerWindow : Window
     private string? _problem;
     private DateTime _streamStarted;
     private bool _startedLogged;
+    private bool _healthMarked;
 
     private readonly TvServices _tv;
     private readonly MainWindow _main;
@@ -124,6 +125,7 @@ public sealed class PlayerWindow : Window
     private void StartStream(Channel ch, int attempt)
     {
         _channel = ch; _attempt = attempt; _problem = null; _failed = false; _startedLogged = false;
+        if (attempt == 0) _healthMarked = false;
         _osd.ShowMessage(attempt == 0 ? null : "Trying another way to connect…");
         var ua = ch.UserAgent ?? UserAgents[Math.Min(attempt, UserAgents.Length - 1)];
         _mpv!.SetHeaders(ch.Referrer, ua);
@@ -195,6 +197,18 @@ public sealed class PlayerWindow : Window
                 _problem = ev.Problem;
                 if (_attempt < UserAgents.Length - 1) { StartStream(_channel, _attempt + 1); return; }
             }
+            // Opened but nothing moves (no picture or sound) after a while: treat it as not working.
+            var since = DateTime.UtcNow - _streamStarted;
+            if (_startedLogged && !_healthMarked && since > TimeSpan.FromSeconds(4) && _mpv.Position > 1.5)
+            { _healthMarked = true; _tv.MarkHealth(_channel, HealthStatus.Ok, null); }
+            if (_startedLogged && !_healthMarked && !_failed && since > TimeSpan.FromSeconds(18) && _mpv.Position < 0.5 && !_mpv.Paused)
+            {
+                _problem = "no picture or sound";
+                _failed = true; _healthMarked = true;
+                _tv.MarkHealth(_channel, HealthStatus.Dead, _problem);
+                _osd.ShowMessage(_mode == Mode.Preview ? "Can't play this stream.\nNo picture or sound.\nPress Back to return." : "Can't play this channel.\nNo picture or sound. It is hidden from your list now.\nPress ▲ or ▼ for another one.");
+                return;
+            }
         }
 
         var age = DateTime.UtcNow - _loadedAt;
@@ -208,11 +222,12 @@ public sealed class PlayerWindow : Window
                 return;
             }
             _failed = true;
+            if (_channel is not null && !_healthMarked) { _healthMarked = true; _tv.MarkHealth(_channel, HealthStatus.Dead, _problem ?? "cannot be opened"); }
             // "loading failed" alone says little: the usual causes are an offline address, a country block, or a login requirement.
             var why = string.IsNullOrEmpty(_problem) ? "" : "\n" + (_problem.StartsWith("loading failed") ? _problem + "\nThe stream may be offline, blocked in your country, or need a login." : _problem);
             _osd.ShowMessage(_mode == Mode.Preview
                 ? "Can't play this stream." + why + "\nPress Back to return."
-                : "Can't play this channel." + why + "\nPress ▲ or ▼ for another one.");
+                : "Can't play this channel." + why + "\nIt is hidden from your list now. Press ▲ or ▼ for another one.");
             return;
         }
         if (_failed && !_mpv.Idle) { _failed = false; _osd.ShowMessage(null); }
@@ -317,6 +332,7 @@ public sealed class PlayerWindow : Window
     public void OpenGuide()
     {
         if (_mode != Mode.Live || _tv.Lineup.Channels.Count == 0) return;
+        _tv.RebuildLineup();   // channels found not to work since the last time drop out of the list
         _guideGroups = new List<string> { AllGroup };
         if (_tv.Lineup.Favorites.Count > 0) _guideGroups.Add(FavoritesGroup);
         _guideGroups.AddRange(_tv.Lineup.Groups);

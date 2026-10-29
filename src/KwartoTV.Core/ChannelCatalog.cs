@@ -28,7 +28,8 @@ public static class ChannelCatalog
     }
 
     /// <summary>The numbered lineup: only the channels the user selected, playlist by playlist, without duplicate addresses.</summary>
-    public static IReadOnlyList<Channel> BuildLineup(IEnumerable<PlaylistEntry> playlists, IReadOnlyDictionary<string, IReadOnlyList<Channel>> loaded)
+    public static IReadOnlyList<Channel> BuildLineup(IEnumerable<PlaylistEntry> playlists, IReadOnlyDictionary<string, IReadOnlyList<Channel>> loaded,
+        IReadOnlyDictionary<string, ChannelHealth>? health = null)
     {
         var result = new List<Channel>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -37,8 +38,12 @@ public static class ChannelCatalog
             if (!loaded.TryGetValue(p.Id, out var all)) continue;
             var chosen = p.Selected is null ? null : new HashSet<string>(p.Selected);
             foreach (var c in all)
-                if ((chosen is null || chosen.Contains(c.Id)) && seen.Add(c.Url)) result.Add(c);
+                if ((chosen is null || chosen.Contains(c.Id)) && !IsDead(c, health) && seen.Add(c.Url)) result.Add(c);
         }
         return result;
     }
+
+    /// <summary>Channels found not to work on this PC are left out (when the user keeps unavailable channels hidden).</summary>
+    public static bool IsDead(Channel c, IReadOnlyDictionary<string, ChannelHealth>? health) =>
+        health is not null && health.TryGetValue(c.Id, out var h) && h.Status == HealthStatus.Dead;
 }

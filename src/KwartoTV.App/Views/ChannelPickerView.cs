@@ -21,6 +21,8 @@ public sealed class ChannelPickerView : PageBase
     private string _query = "";
     private int _group = -1;   // -1 = all groups
     private int _limit = PageSize;
+    private bool _hideDead;
+    private CancellationTokenSource? _checkCts;
     private StackPanel _list = new();
     private TextBlock _count = new();
 
@@ -31,7 +33,10 @@ public sealed class ChannelPickerView : PageBase
         _all = shell.Tv.Library.GetValueOrDefault(playlistId) ?? Array.Empty<Channel>();
         _selected = _playlist.Selected is null ? _all.Select(c => c.Id).ToHashSet() : _playlist.Selected.ToHashSet();
         _groups = _all.Select(c => c.Group).Distinct().OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList();
-        Unloaded += (_, _) => Commit();
+        _hideDead = shell.Tv.Settings.HideUnavailable;
+        Unloaded += (_, _) => { _checkCts?.Cancel(); Commit(); };
+        // Check this playlist's channels from this PC right away (first 300, so a huge list does not take forever).
+        Loaded += (_, _) => { if (_all.Count > 0 && _checkCts is null) _ = CheckAsync(_all.Take(300), force: false); };
     }
 
     public override void Refresh() => Rebuild(Build);
@@ -43,10 +48,11 @@ public sealed class ChannelPickerView : PageBase
         Shell.Tv.Settings.SetSelection(_playlistId, ordered);
         Shell.Tv.SaveSettings();
         Shell.Tv.RebuildLineup();
+        Shell.Tv.CheckChosenInBackground();
     }
 
     private IEnumerable<Channel> Matches() =>
-        _all.Where(c => (_group < 0 || c.Group == _groups[_group]) &&
+        _all.Where(c => (!_hideDead || Shell.Tv.StatusOf(c) != HealthStatus.Dead) && (_group < 0 || c.Group == _groups[_group]) &&
                         (_query.Length == 0 || c.Name.Contains(_query, StringComparison.OrdinalIgnoreCase)));
 
     private void Build()
@@ -70,6 +76,8 @@ public sealed class ChannelPickerView : PageBase
         controls.Children.Add(UiKit.ActionButton("Group: " + (_group < 0 ? "All" : _groups[_group]), () => { _group = _group + 1 >= _groups.Count ? -1 : _group + 1; _limit = PageSize; Refresh(); }));
         controls.Children.Add(UiKit.ActionButton("Select all shown", () => { foreach (var c in Matches()) _selected.Add(c.Id); RenderList(); UpdateCount(); }));
         controls.Children.Add(UiKit.ActionButton("Clear shown", () => { foreach (var c in Matches()) _selected.Remove(c.Id); RenderList(); UpdateCount(); }));
+        controls.Children.Add(UiKit.ActionButton("Check all", () => _ = CheckAsync(_all, force: true)));
+        controls.Children.Add(UiKit.ActionButton(_hideDead ? "Not working: hidden" : "Not working: shown", () => { _hideDead = !_hideDead; Refresh(); }));
         controls.Children.Add(UiKit.ActionButton("Done", () => { Commit(); Shell.ShowToast($"{_selected.Count} channels in your lineup"); Shell.ShowSettings(); }));
         Body.Children.Add(controls);
 
@@ -79,7 +87,24 @@ public sealed class ChannelPickerView : PageBase
         UpdateCount();
     }
 
-    private void UpdateCount() => _count.Text = $"{_selected.Count} selected of {_all.Count}";
+    private string _checkText = "";
+
+    private void UpdateCount()
+    {
+        int dead = _all.Count(c => Shell.Tv.StatusOf(c) == HealthStatus.Dead), ok = _all.Count(c => Shell.Tv.StatusOf(c) == HealthStatus.Ok);
+        _count.Text = $"{_selected.Count} selected of {_all.Count}   ·   {ok} work, {dead} do not" + (_hideDead && dead > 0 ? " (hidden)" : "") + _checkText;
+    }
+
+    private async Task CheckAsync(IEnumerable<Channel> channels, bool force)
+    {
+        _checkCts?.Cancel();
+        var cts = _checkCts = new CancellationTokenSource();
+        var progress = new Progress<(int Done, int Total)>(p => { _checkText = p.Done < p.Total ? $"   ·   checking {p.Done}/{p.Total}…" : ""; UpdateCount(); });
+        try { await Shell.Tv.CheckChannelsAsync(channels.ToList(), force, progress, cts.Token); }
+        catch (OperationCanceledException) { return; }
+        if (cts.IsCancellationRequested || !IsLoaded) return;
+        _checkText = ""; RenderList(); UpdateCount();
+    }
 
     private void OpenSearch()
     {
@@ -110,7 +135,14 @@ public sealed class ChannelPickerView : PageBase
 
         var label = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         label.Children.Add(new TextBlock { Text = ch.Name, FontSize = 22, FontWeight = FontWeights.SemiBold });
-        label.Children.Add(new TextBlock { Text = ch.Group, FontSize = 14, Foreground = UiKit.B("Dim") });
+        var status = Shell.Tv.Health.TryGetValue(ch.Id, out var h) ? h : null;
+        var statusText = status?.Status switch
+        {
+            HealthStatus.Ok => "  ·  ✓ works here",
+            HealthStatus.Dead => "  ·  ✕ " + (status.Reason ?? "does not work"),
+            _ => "  ·  not checked yet",
+        };
+        label.Children.Add(new TextBlock { Text = ch.Group + statusText, FontSize = 14, Foreground = status?.Status == HealthStatus.Dead ? UiKit.B("Danger") : UiKit.B("Dim"), TextTrimming = TextTrimming.CharacterEllipsis });
         var content = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(check, Dock.Left);
         content.Children.Add(check); content.Children.Add(label);

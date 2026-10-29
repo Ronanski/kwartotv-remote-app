@@ -35,7 +35,8 @@ public sealed class TvServices : IDisposable
 
         // Start with what was loaded last time, so the channels are there even before (or without) the internet.
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, List<Channel>>>(AppPaths.PlaylistCache)) Library[kv.Key] = kv.Value;
-        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library));
+        foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, ChannelHealth>>(AppPaths.Health)) Health[kv.Key] = kv.Value;
+        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null));
         Lineup.Restore(Settings.Lineup);
         Lineup.Tuned += (_, _) => SaveSettingsSoon();
         Lineup.FavoritesChanged += SaveSettingsSoon;
@@ -66,12 +67,78 @@ public sealed class TvServices : IDisposable
     public Dictionary<string, IReadOnlyList<Channel>> Library { get; } = new();
     private readonly Dictionary<string, string> _errors = new();
 
+    /// <summary>Whether each channel works on this PC (checked here, so country blocks are seen as they are for this connection).</summary>
+    public System.Collections.Concurrent.ConcurrentDictionary<string, ChannelHealth> Health { get; } = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _checking = new();
+    private static readonly HttpClient ProbeHttp = ResilientHttp.Create(TimeSpan.FromSeconds(30));
+    public static readonly TimeSpan RecheckAfter = TimeSpan.FromHours(24);
+
+    public HealthStatus StatusOf(Channel c) => Health.TryGetValue(c.Id, out var h) ? h.Status : HealthStatus.Unknown;
+
+    /// <summary>Remembers what happened when a channel was played (the player knows best) and saves it.</summary>
+    public void MarkHealth(Channel c, HealthStatus status, string? reason)
+    {
+        Health[c.Id] = new ChannelHealth(status, reason, DateTimeOffset.UtcNow);
+        SaveHealthSoon();
+    }
+
+    private int _healthQueued;
+    private void SaveHealthSoon()
+    {
+        if (Interlocked.Exchange(ref _healthQueued, 1) == 1) return;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(1500); Interlocked.Exchange(ref _healthQueued, 0);
+            try { JsonFile.Save(AppPaths.Health, Health.ToDictionary(k => k.Key, k => k.Value)); } catch (Exception ex) { AppPaths.LogLine("health save: " + ex.Message); }
+        });
+    }
+
+    /// <summary>
+    /// Checks channels from this PC, 8 at a time. Channels checked within the last day are skipped unless [force].
+    /// The lineup is rebuilt at the end so the ones that do not work disappear.
+    /// </summary>
+    public async Task<(int Ok, int Dead)> CheckChannelsAsync(IEnumerable<Channel> channels, bool force = false, IProgress<(int Done, int Total)>? progress = null, CancellationToken ct = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var todo = channels.Where(c => force || !Health.TryGetValue(c.Id, out var h) || now - h.CheckedAt > RecheckAfter)
+                           .Where(c => _checking.TryAdd(c.Id, 0)).ToList();
+        int done = 0, ok = 0, dead = 0;
+        using var gate = new SemaphoreSlim(8);
+        var tasks = todo.Select(async c =>
+        {
+            await gate.WaitAsync(ct);
+            try
+            {
+                var h = await StreamProbe.CheckAsync(c, ProbeHttp, DateTimeOffset.UtcNow, ct);
+                Health[c.Id] = h;
+                if (h.Status == HealthStatus.Dead) { Interlocked.Increment(ref dead); AppPaths.LogLine($"health: {c.Name}: dead ({h.Reason})"); }
+                else if (h.Status == HealthStatus.Ok) Interlocked.Increment(ref ok);
+            }
+            finally
+            {
+                gate.Release(); _checking.TryRemove(c.Id, out _);
+                progress?.Report((Interlocked.Increment(ref done), todo.Count));
+            }
+        });
+        try { await Task.WhenAll(tasks); }
+        catch (OperationCanceledException) { }
+        SaveHealthSoon();
+        if (todo.Count > 0) { AppPaths.LogLine($"health: checked {todo.Count} channels: {ok} work, {dead} do not"); RebuildLineup(); }
+        return (ok, dead);
+    }
+
+    /// <summary>The channels the user chose (what the lineup is made from), before hiding the ones that do not work.</summary>
+    public IReadOnlyList<Channel> ChosenChannels() => ChannelCatalog.BuildLineup(Settings.Playlists, Library);
+
+    /// <summary>Checks the chosen channels that have not been checked lately, in the background.</summary>
+    public void CheckChosenInBackground() => _ = Task.Run(() => CheckChannelsAsync(ChosenChannels()));
+
     public string? ErrorFor(string playlistId) => _errors.GetValueOrDefault(playlistId);
 
     /// <summary>The numbered lineup again, from the playlists and the user's selection. No download.</summary>
     public void RebuildLineup()
     {
-        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library));
+        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null));
         if (Lineup.Current is null && Lineup.Channels.Count > 0) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites });
         ChannelsChanged?.Invoke();
     }
@@ -121,6 +188,7 @@ public sealed class TvServices : IDisposable
         }
         finally { ChannelsLoading = false; }
         RebuildLineup();
+        CheckChosenInBackground();
         // The network may simply be slow to wake up (just started, Wi-Fi joining): try again once and then every few minutes.
         if (PlaylistErrors.Count > 0 && Library.Count < Settings.Playlists.Count && ++_retries <= 6)
         {

@@ -148,6 +148,7 @@ public partial class MainWindow : Window, IShell
     public void ClosePlayer()
     {
         _player?.Hide();
+        _tv.RebuildLineup();
         Native.BringToFront(Handle);
         Activate();
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _current?.FocusFirst());

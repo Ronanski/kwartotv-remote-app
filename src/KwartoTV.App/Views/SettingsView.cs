@@ -27,16 +27,27 @@ public sealed class SettingsView : PageBase
             var pl = p;
             var total = Tv.Library.GetValueOrDefault(pl.Id)?.Count;
             var chosen = pl.IsStream ? 1 : pl.Selected?.Count ?? total ?? 0;
-            var info = pl.IsStream ? "One stream" : total is null ? "Not downloaded yet" : $"{chosen} of {total} channels in your lineup";
+            var chosenList = Tv.Library.TryGetValue(pl.Id, out var lib) ? lib.Where(c => pl.IsStream || pl.Selected is null || pl.Selected.Contains(c.Id)).ToList() : new List<Channel>();
+            int deadCount = chosenList.Count(c => Tv.StatusOf(c) == HealthStatus.Dead), okCount = chosenList.Count(c => Tv.StatusOf(c) == HealthStatus.Ok);
+            var info = pl.IsStream ? "One stream" : total is null ? "Not downloaded yet" : $"{chosen} of {total} channels chosen";
+            if (chosenList.Count > 0) info += $"  ·  {okCount} work, {deadCount} do not" + (deadCount > 0 && Tv.Settings.HideUnavailable ? " (hidden)" : "");
             var err = Tv.ErrorFor(pl.Id);
             var actions = new List<(string, Action, bool)>();
             if (!pl.IsStream) actions.Add(("Choose channels", () => { if (Tv.Library.ContainsKey(pl.Id)) Shell.ShowChannelPicker(pl.Id); else Shell.ShowToast(err is null ? "This playlist is not downloaded yet. Use Reload channels." : "This playlist did not download. Use Reload channels."); }, false));
+            if (chosenList.Count > 0) actions.Add(("Check channels", async () =>
+            {
+                Shell.ShowToast($"Checking {chosenList.Count} channels…");
+                var (ok, dead) = await Tv.CheckChannelsAsync(chosenList, force: true);
+                Shell.ShowToast($"{ok} work, {dead} do not" + (dead > 0 && Tv.Settings.HideUnavailable ? " (hidden)" : ""));
+                Refresh();
+            }, false));
             actions.Add(("Remove", () => Dialogs.Confirm(Shell, $"Remove {pl.Name} and its channels?", "Remove", () => { Tv.RemovePlaylist(pl.Id); Refresh(); }), true));
             Body.Children.Add(ItemRow(pl.Name, err is null ? $"{info}  ·  {pl.Source}" : "⚠ " + err, actions.ToArray()));
         }
         foreach (var err in Tv.PlaylistErrors) Body.Children.Add(new TextBlock { Text = "⚠ " + err, FontSize = 17, Foreground = UiKit.B("Danger"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap });
         Body.Children.Add(Buttons(
             UiKit.ActionButton("Add channels…", Shell.AddChannelsMenu),
+            UiKit.ActionButton(Tv.Settings.HideUnavailable ? "Channels that do not work: hidden" : "Channels that do not work: shown", () => { Tv.Settings.HideUnavailable = !Tv.Settings.HideUnavailable; Tv.SaveSettings(); Tv.RebuildLineup(); Refresh(); }),
             UiKit.ActionButton(Tv.ChannelsLoading ? "Loading…" : $"Reload channels ({Tv.Lineup.Channels.Count})", () => _ = Tv.RefreshChannelsAsync())));
 
         // ---- website tiles

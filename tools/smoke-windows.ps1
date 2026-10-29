@@ -149,13 +149,15 @@ Shot "07-mini-guide"
 Keys "{RIGHT}"
 Shot "07b-guide-next-category"
 Keys "{ESC}"
-# a dead channel must say so (and have tried the other ways to connect)
-Keys "{F1}"
-Keys "3"
-Start-Sleep -Seconds 20
-Shot "06b-dead-channel"
+# the dead test address must have been found by the channel check and left out of the list
 $logText = Get-Content (Join-Path $data "log.txt") -Raw
-Check ($logText -match "opening Dead Stream \(attempt 3\)") "a dead channel is retried the other ways before giving up"
+Check ($logText -match "health: Dead Stream: dead") "the channel check found the dead address ($([regex]::Match($logText, 'health: Dead Stream: dead \(([^)]*)\)').Groups[1].Value))"
+Check ($logText -notmatch "health: Test Stream 1: dead") "the working test stream was not marked as dead"
+Keys "{F1}"
+Keys "{F2}"
+Start-Sleep -Seconds 3
+Keys "{ENTER}"
+Shot "06b-channel-list-without-dead"
 Keys "{ESC}"
 Keys "{ESC}"
 Start-Sleep -Seconds 1
