@@ -1,0 +1,14 @@
+name: Research probe
+
+on:
+  push:
+    paths: ["tools/probe/**"]
+  workflow_dispatch:
+
+jobs:
+  bilibili:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm i playwright@1.47.2 && npx playwright install --with-deps chromium
+      - run: node tools/probe/bilibili.js
