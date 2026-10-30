@@ -49,6 +49,12 @@ public sealed class SettingsView : PageBase
         Body.Children.Add(Buttons(
             UiKit.ActionButton("Add channels…", Shell.AddChannelsMenu),
             UiKit.ActionButton(Tv.Settings.HideUnavailable ? "Channels that do not work: hidden" : "Channels that do not work: shown", () => { Tv.Settings.HideUnavailable = !Tv.Settings.HideUnavailable; Tv.SaveSettings(); Tv.RebuildLineup(); Refresh(); }),
+            UiKit.ActionButton(Tv.Settings.MaxChannels > 0 ? $"Most channels: {Tv.Settings.MaxChannels}" : "Most channels: all", () =>
+            {
+                // 100 → 200 → 300 → all → 100
+                Tv.Settings.MaxChannels = Tv.Settings.MaxChannels switch { 100 => 200, 200 => 300, 300 => 0, _ => 100 };
+                Tv.SaveSettings(); Tv.RebuildLineup(); Tv.CheckChosenInBackground(); Refresh();
+            }),
             UiKit.ActionButton(Tv.ChannelsLoading ? "Loading…" : $"Reload channels ({Tv.Lineup.Channels.Count})", () => _ = Tv.RefreshChannelsAsync())));
 
         // ---- website tiles

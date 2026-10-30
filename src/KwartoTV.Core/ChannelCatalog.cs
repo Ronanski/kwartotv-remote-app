@@ -30,8 +30,10 @@ public static class ChannelCatalog
     /// <summary>The numbered lineup: only the channels the user selected, playlist by playlist, without duplicate addresses.</summary>
     /// <param name="health">When given, channels found not to work are left out.</param>
     /// <param name="onlyVerified">Also leave out channels that have not been checked yet (they appear once they pass).</param>
+    /// <param name="maxChannels">At most this many channels (0 = no limit); earlier playlists come first.</param>
+    /// <remarks>A big list the user did not pick from by hand is kept to its best channels (see <see cref="ChannelCurator"/>).</remarks>
     public static IReadOnlyList<Channel> BuildLineup(IEnumerable<PlaylistEntry> playlists, IReadOnlyDictionary<string, IReadOnlyList<Channel>> loaded,
-        IReadOnlyDictionary<string, ChannelHealth>? health = null, bool onlyVerified = false)
+        IReadOnlyDictionary<string, ChannelHealth>? health = null, bool onlyVerified = false, int maxChannels = 0)
     {
         var result = new List<Channel>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -39,10 +41,12 @@ public static class ChannelCatalog
         {
             if (!loaded.TryGetValue(p.Id, out var all)) continue;
             var chosen = p.Selected is null ? null : new HashSet<string>(p.Selected);
-            foreach (var c in all)
-                if ((chosen is null || chosen.Contains(c.Id)) && !IsDead(c, health) && (!onlyVerified || health is null || health.ContainsKey(c.Id)) && seen.Add(c.Url)) result.Add(c);
+            var usable = all.Where(c => (chosen is null || chosen.Contains(c.Id)) && !IsDead(c, health) && (!onlyVerified || health is null || health.ContainsKey(c.Id)));
+            if (chosen is null && ChannelCurator.IsLarge(all.Count)) usable = ChannelCurator.Best(usable, health);
+            foreach (var c in usable)
+                if (seen.Add(c.Url)) result.Add(c);
         }
-        return result;
+        return maxChannels > 0 && result.Count > maxChannels ? result.Take(maxChannels).ToList() : result;
     }
 
     /// <summary>Channels found not to work on this PC are left out (when the user keeps unavailable channels hidden).</summary>

@@ -74,7 +74,7 @@ lu.ToggleFavorite(parsed[1].Id);
 var state = lu.Export();
 var lu2 = new ChannelLineup(); lu2.Load(parsed); lu2.Restore(state);
 Check(lu2.Favorites.Single().Id == parsed[1].Id && lu2.Current?.Id == lu.Current?.Id, "state round trip");
-Check(lu.Groups.SequenceEqual(new[] { "Kids, Fun", "News", "Other" }), "groups");
+Check(lu.Groups.SequenceEqual(new[] { "News", "Kids, Fun", "Other" }), "groups: known categories first (News), then alphabetical");
 
 lu.TuneNumber(2);
 lu.Load(parsed.Skip(1)); 
@@ -652,6 +652,34 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     var onlyOne = new Dictionary<string, ChannelHealth> { [two[1].Id] = new(HealthStatus.Ok, null, DateTimeOffset.UtcNow) };
     Check(ChannelCatalog.BuildLineup(new[] { vp }, loadedV, onlyOne, onlyVerified: true).Single().Id == two[1].Id, "only verified: a channel not checked yet stays hidden until it passes");
     Check(ChannelCatalog.BuildLineup(new[] { vp }, loadedV, onlyOne, onlyVerified: false).Count == 2, "without only-verified the unchecked channel shows");
+}
+
+// ---- big lists are cut to their best channels per category; the lineup has a limit
+{
+    Channel Ch(int i, string name, string group, string? logo = null) => new($"id{i}", name, $"https://example.invalid/{i}.m3u8", logo, group, StreamKind.Hls);
+    var big = new List<Channel>();
+    for (int i = 0; i < 300; i++) big.Add(Ch(i, $"News {i:000}", "News"));
+    for (int i = 300; i < 600; i++) big.Add(Ch(i, $"Shop {i}", "Shop"));
+    big.Add(Ch(900, "Late Show (1080p) [Not 24/7]", "Movies"));
+    big.Add(Ch(901, "US Only (720p) [Geo-blocked]", "Movies"));
+    big.Add(Ch(902, "Film A (480p)", "Movies"));
+    big.Add(Ch(903, "Film B (1080p)", "Movies"));
+    big.Add(Ch(904, "Film C", "Movies", "https://example.invalid/c.png"));
+    var health = new Dictionary<string, ChannelHealth> { ["id250"] = new(HealthStatus.Ok, null, DateTimeOffset.UtcNow) };
+    var best = ChannelCurator.Best(big, health);
+    Check(best.Count(c => c.Group == "News") == ChannelCurator.PerCategory && best.All(c => c.Group != "Shop"), "curated: at most 20 per category, shopping left out");
+    Check(best.Any(c => c.Id == "id250"), "curated: a channel that works is picked first");
+    Check(best.Where(c => c.Group == "Movies").Select(c => c.Id).SequenceEqual(new[] { "id902", "id903", "id904" }), "curated: part-time and geo-blocked channels left out, the rest shown by name");
+    Check(best.First().Group == "News", "curated: categories in TV order");
+
+    var ph = new PlaylistEntry("ph", "Philippines", "x");
+    var eng = new PlaylistEntry("eng", "English", "y");
+    var small = Enumerable.Range(1000, 50).Select(i => Ch(i, $"PH {i}", "General")).ToList();
+    var loadedC = new Dictionary<string, IReadOnlyList<Channel>> { ["ph"] = small, ["eng"] = big };
+    var lineupC = ChannelCatalog.BuildLineup(new[] { ph, eng }, loadedC);
+    Check(lineupC.Take(50).SequenceEqual(small) && lineupC.Count == 50 + best.Count, "a small list is kept whole and first; the big one is curated");
+    Check(ChannelCatalog.BuildLineup(new[] { ph, eng }, loadedC, maxChannels: 60).Count == 60, "the lineup stops at the limit");
+    Check(ChannelCatalog.BuildLineup(new[] { eng with { Selected = big.Take(500).Select(c => c.Id).ToList() } }, loadedC).Count == 500, "channels picked by hand are all kept");
 }
 
 Console.WriteLine($"{pass} passed, {fail} failed");

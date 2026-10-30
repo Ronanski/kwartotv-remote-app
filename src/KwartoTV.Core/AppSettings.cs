@@ -26,6 +26,8 @@ public sealed class AppSettings
     public bool NetflixInApp { get; set; } = true;
     /// <summary>Channels that were checked and do not work here (blocked, gone, no video) stay out of the lineup.</summary>
     public bool HideUnavailable { get; set; } = true;
+    /// <summary>The lineup holds at most this many channels (0 = all); the first playlists come first.</summary>
+    public int MaxChannels { get; set; } = 300;
 
     public static bool IsPlaylistFile(string path) =>
         Path.IsPathRooted(path) && (path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));

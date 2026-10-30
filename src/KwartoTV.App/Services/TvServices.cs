@@ -36,7 +36,7 @@ public sealed class TvServices : IDisposable
         // Start with what was loaded last time, so the channels are there even before (or without) the internet.
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, List<Channel>>>(AppPaths.PlaylistCache)) Library[kv.Key] = kv.Value;
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, ChannelHealth>>(AppPaths.Health)) Health[kv.Key] = kv.Value;
-        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable));
+        Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable, maxChannels: Settings.MaxChannels));
         Lineup.Restore(Settings.Lineup);
         Lineup.Tuned += (_, _) => SaveSettingsSoon();
         Lineup.FavoritesChanged += SaveSettingsSoon;
@@ -168,15 +168,26 @@ public sealed class TvServices : IDisposable
     /// <summary>The channels the user chose (what the lineup is made from), before hiding the ones that do not work.</summary>
     public IReadOnlyList<Channel> ChosenChannels() => ChannelCatalog.BuildLineup(Settings.Playlists, Library);
 
-    /// <summary>Checks the chosen channels that have not been checked lately, in the background.</summary>
-    public void CheckChosenInBackground() => _ = Task.Run(() => CheckChannelsAsync(ChosenChannels()));
+    /// <summary>
+    /// Checks, in the background, the channels that would be in the lineup and have not been checked lately.
+    /// Channels found not to work make room for the next ones, which are checked in turn until the lineup is full.
+    /// </summary>
+    public void CheckChosenInBackground() => _ = Task.Run(async () =>
+    {
+        for (int round = 0; round < 10; round++)
+        {
+            var pool = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, maxChannels: Settings.MaxChannels);
+            var (_, dead) = await CheckChannelsAsync(pool);
+            if (dead == 0 || !Settings.HideUnavailable) break;
+        }
+    });
 
     public string? ErrorFor(string playlistId) => _errors.GetValueOrDefault(playlistId);
 
     /// <summary>The numbered lineup again, from the playlists and the user's selection. No download.</summary>
     public void RebuildLineup()
     {
-        var next = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable);
+        var next = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable, maxChannels: Settings.MaxChannels);
         // Nothing changed: do nothing (a rebuild redraws the home screen, which is slow with many channels).
         if (next.Select(c => c.Id).SequenceEqual(Lineup.Channels.Select(c => c.Id))) return;
         Lineup.Load(next);

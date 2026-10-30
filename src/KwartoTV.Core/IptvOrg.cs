@@ -38,6 +38,7 @@ public static class IptvOrg
     /// <summary>
     /// One press for free channels in English and Filipino plus the Philippines list. The channels are sorted into
     /// their categories (movies, series, animation, kids, sports, news, ...) and only the ones that work are shown.
+    /// The Philippine lists come first and are kept whole; the big English list is cut to its best channels per category.
     /// </summary>
     public static readonly IReadOnlyList<PlaylistSuggestion> FreePack = new[]
     {
