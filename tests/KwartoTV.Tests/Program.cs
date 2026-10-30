@@ -695,8 +695,8 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     var at = new DateTimeOffset(2026, 10, 30, 12, 30, 0, TimeSpan.FromHours(8));
     var g = ProgramGuide.Parse(new MemoryStream(Encoding.UTF8.GetBytes(Xml)), at.AddHours(-2), at.AddHours(12));
     var gma = new Channel("g", "GMA Network (1080p)", "https://example.invalid/g.m3u8", null, "Local TV", StreamKind.Hls, TvgId: "GMA.ph@SD");
-    var (now, next) = g.NowNext(gma, at);
-    Check(now?.Title == "Eat Bulaga" && now.Description == "Noontime show" && next?.Title == "Afternoon Drama", "guide: now and next by guide id (feed suffix ignored), description kept");
+    var (onNow, onNext) = g.NowNext(gma, at);
+    Check(onNow?.Title == "Eat Bulaga" && onNow.Description == "Noontime show" && onNext?.Title == "Afternoon Drama", "guide: now and next by guide id (feed suffix ignored), description kept");
     Check(g.NowNext(gma with { TvgId = null }, at).Now?.Title == "Eat Bulaga", "guide: matched by name when there is no guide id");
     Check(g.NowNext(new Channel("t", "TV5 (720p) [Geo-blocked]", "https://example.invalid/t.m3u8", null, "Local TV", StreamKind.Hls), at).Now?.Title == "Movie Block", "guide: 'TV5 (720p) [Geo-blocked]' matches 'TV5 HD'");
     Check(g.NowNext(new Channel("x", "Unknown", "https://example.invalid/x.m3u8", null, "Other", StreamKind.Hls), at) == (null, null), "guide: unknown channel has nothing");
