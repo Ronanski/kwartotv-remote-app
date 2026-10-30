@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: node tools/probe/epg.js
+      - run: node tools/probe/ph-youtube-live.js
 
   bilibili:
     runs-on: ubuntu-latest
