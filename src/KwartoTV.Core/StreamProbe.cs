@@ -21,7 +21,7 @@ public static class StreamProbe
     {
         if (!Uri.TryCreate(ch.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             return new(HealthStatus.Unknown, "cannot be checked before playing (" + (uri?.Scheme ?? "bad address") + ")", now);
-        if (ch.Kind == StreamKind.YouTube) return new(HealthStatus.Unknown, "YouTube: opens in the YouTube player", now);
+        if (ch.Kind == StreamKind.YouTube) return IsYouTubeLiveLink(uri) ? await CheckYouTubeLiveAsync(uri, http, now, ct) : new(HealthStatus.Unknown, "YouTube: opens in the YouTube player", now);
         // A busy server or a slow moment should not hide a good channel: transient failures get one more try.
         string? reason = null;
         for (int attempt = 0; attempt < 2; attempt++)
@@ -40,6 +40,35 @@ public static class StreamProbe
             catch (Exception ex) { reason = ex.Message; break; }
         }
         return new(HealthStatus.Dead, reason, now);
+    }
+
+    /// <summary>A channel's live link ("https://www.youtube.com/@name/live"): it plays only while the channel is live.</summary>
+    public static bool IsYouTubeLiveLink(Uri uri) =>
+        uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) && uri.AbsolutePath.TrimEnd('/').EndsWith("/live", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The page of a live link says whether the channel is live right now.</summary>
+    public static bool YouTubePageIsLive(string html) =>
+        html.Contains("\"isLiveNow\":true", StringComparison.Ordinal) || html.Contains("\"isLive\":true", StringComparison.Ordinal);
+
+    public const string NotLiveNow = "not live right now";
+
+    private static async Task<ChannelHealth> CheckYouTubeLiveAsync(Uri uri, HttpClient http, DateTimeOffset now, CancellationToken ct)
+    {
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromSeconds(20));
+            using var req = new HttpRequestMessage(HttpMethod.Get, uri);
+            req.Headers.TryAddWithoutValidation("Accept-Language", "en-US");
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36");
+            using var resp = await http.SendAsync(req, limit.Token);
+            if (!resp.IsSuccessStatusCode) return new(HealthStatus.Dead, Explain(resp.StatusCode), now);
+            var html = await resp.Content.ReadAsStringAsync(limit.Token);
+            return YouTubePageIsLive(html) ? new(HealthStatus.Ok, null, now) : new(HealthStatus.Dead, NotLiveNow, now);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) { return new(HealthStatus.Dead, "no answer in 20 seconds", now); }
+        catch (HttpRequestException ex) { return new(HealthStatus.Dead, ex.StatusCode is { } s ? Explain(s) : "cannot connect", now); }
     }
 
     private static bool IsTransient(string reason) =>

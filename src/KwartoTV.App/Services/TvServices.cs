@@ -38,7 +38,8 @@ public sealed class TvServices : IDisposable
         while (true)
         {
             await LoadGuideAsync();
-            await Task.Delay(TimeSpan.FromHours(1));
+            // every 20 minutes: which YouTube live channels are on air (the rest is checked once a day)
+            for (int i = 0; i < 3; i++) { CheckChosenInBackground(); await Task.Delay(LiveRecheckAfter); }
         }
     });
 
@@ -134,6 +135,10 @@ public sealed class TvServices : IDisposable
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _checking = new();
     private static readonly HttpClient ProbeHttp = ResilientHttp.Create(TimeSpan.FromSeconds(30));
     public static readonly TimeSpan RecheckAfter = TimeSpan.FromHours(24);
+    /// <summary>YouTube live links come and go during the day, so they are checked much more often.</summary>
+    public static readonly TimeSpan LiveRecheckAfter = TimeSpan.FromMinutes(20);
+
+    private static TimeSpan RecheckFor(Channel c) => c.Kind == StreamKind.YouTube ? LiveRecheckAfter : RecheckAfter;
 
     public HealthStatus StatusOf(Channel c) => Health.TryGetValue(c.Id, out var h) ? h.Status : HealthStatus.Unknown;
 
@@ -162,7 +167,7 @@ public sealed class TvServices : IDisposable
     public async Task<(int Ok, int Dead)> CheckChannelsAsync(IEnumerable<Channel> channels, bool force = false, IProgress<(int Done, int Total)>? progress = null, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
-        var todo = channels.Where(c => force || !Health.TryGetValue(c.Id, out var h) || now - h.CheckedAt > RecheckAfter)
+        var todo = channels.Where(c => force || !Health.TryGetValue(c.Id, out var h) || now - h.CheckedAt > RecheckFor(c))
                            .Where(c => _checking.TryAdd(c.Id, 0)).ToList();
         int done = 0, ok = 0, dead = 0, network = 0;
         var results = new System.Collections.Concurrent.ConcurrentDictionary<string, ChannelHealth>();
@@ -238,7 +243,9 @@ public sealed class TvServices : IDisposable
     {
         for (int round = 0; round < 10; round++)
         {
-            var pool = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, maxChannels: Settings.MaxChannels);
+            // YouTube live links that are off air now stay in the check, so they come back when they go live again.
+            var pool = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, maxChannels: Settings.MaxChannels)
+                .Concat(ChosenChannels().Where(c => c.Kind == StreamKind.YouTube)).DistinctBy(c => c.Id).ToList();
             var (_, dead) = await CheckChannelsAsync(pool);
             if (dead == 0 || !Settings.HideUnavailable) break;
         }
