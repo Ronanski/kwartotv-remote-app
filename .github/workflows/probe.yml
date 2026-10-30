@@ -6,6 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  epg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node tools/probe/epg.js
+
   bilibili:
     runs-on: ubuntu-latest
     steps:
