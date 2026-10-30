@@ -23,6 +23,7 @@ public sealed class WebAppWindow : Window
 
     public ForegroundKind Kind { get; }
     private OskWindow? _osk;
+    private int _focusLogs;
 
     /// <summary>The embedded browser could not start (runtime missing). The caller falls back to an external browser.</summary>
     public event Action<string>? Failed;
@@ -108,6 +109,7 @@ public sealed class WebAppWindow : Window
                 if (msg == "home") Dispatcher.BeginInvoke(() => HomeRequested?.Invoke());
                 else if (msg == "chup") Dispatcher.BeginInvoke(() => ChannelUp?.Invoke());
                 else if (msg == "chdown") Dispatcher.BeginInvoke(() => ChannelDown?.Invoke());
+                else if (msg?.StartsWith("tvfocus:") == true && _focusLogs++ < 40) AppPaths.LogLine("web highlight: " + msg[8..]);
                 else if (msg == "textfocus" && Kind != ForegroundKind.YouTube) Dispatcher.BeginInvoke(ShowKeyboard);
             };
             core.Navigate(_url);

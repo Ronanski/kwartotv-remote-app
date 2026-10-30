@@ -236,6 +236,19 @@ $packLines | ForEach-Object { Write-Host "pack: $_" }
 Check ($logText -match "playlist: English channels: \d+ channels") "free channel pack downloaded"
 Check (-not $p.HasExited) "app survived navigation and the player"
 
+# Netflix inside KwartoTV: the remote's arrow keys must move the TV highlight on the real netflix.com (signed-out pages here).
+Keys "{F6}"
+Start-Sleep -Seconds 15
+Shot "30-netflix-opened"
+Keys "{DOWN}"; Keys "{DOWN}"; Keys "{RIGHT}"
+Start-Sleep -Seconds 1
+Shot "31-netflix-after-arrows"
+$hl = @(Get-Content (Join-Path $data "log.txt") | Where-Object { $_ -match "web highlight:" })
+$hl | Select-Object -First 12 | ForEach-Object { Write-Host "netflix: $_" }
+Check ($hl.Count -ge 3) "Netflix: arrow keys move the TV highlight ($($hl.Count) moves)"
+Keys "{F1}"
+Start-Sleep -Seconds 2
+
 $log = Join-Path $data "log.txt"
 if (Test-Path $log) { Write-Host "---- app log ----"; Get-Content $log; Check (-not (Select-String -Path $log -Pattern "UI error|Fatal|Task error" -Quiet)) "no errors in the app log" } else { Check $true "no errors in the app log (no log file)" }
 
