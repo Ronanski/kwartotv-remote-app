@@ -34,6 +34,13 @@ const script = src.slice(src.indexOf('@"') + 2, src.lastIndexOf('";')).replace(/
     await p.screenshot({ path: path.join(out, `${String(++shot).padStart(2, '0')}-${label}.png`) });
   }
   async function key(k, n = 1, label = k) { for (let i = 0; i < n; i++) { await p.keyboard.press(k); await p.waitForTimeout(450); } await log(label); }
+  // A notice pop-up may open first (region, cookies): Back closes it, as on the TV. Only pressed when one shows,
+  // since Back on a normal page leaves it.
+  async function closePopup(label) {
+    const open = await p.evaluate(() => [...document.querySelectorAll('[role=dialog],[aria-modal=true],.dialog__close')]
+      .some(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }));
+    if (open) await key('Escape', 1, label); else console.log(`##${label} no pop-up`);
+  }
   async function go(u, label) {
     try { await p.goto(u, { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch (e) { console.log('nav: ' + e.message); }
     await p.waitForTimeout(6000);
@@ -41,6 +48,7 @@ const script = src.slice(src.indexOf('@"') + 2, src.lastIndexOf('";')).replace(/
   }
 
   await go('https://www.bilibili.tv/en', 'home');
+  await closePopup('close-popup');
   await key('ArrowDown', 2, 'down2');
   await key('ArrowRight', 6, 'right6');
   await key('ArrowRight', 6, 'right12');
@@ -55,6 +63,7 @@ const script = src.slice(src.indexOf('@"') + 2, src.lastIndexOf('";')).replace(/
       .slice(0, 25).map(e => e.tagName + '.' + String(e.className).slice(0, 80) + ' aria=' + (e.getAttribute('aria-label') || '')))));
 
   await go('https://www.bilibili.tv/en/play/34695', 'play-page');
+  await closePopup('play-close-popup');
   await key('Enter', 1, 'ok-on-play');
   await key('ArrowRight', 1, 'skip');
   await key('Escape', 1, 'back-1');

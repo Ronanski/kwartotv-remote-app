@@ -44,7 +44,7 @@ public static class TvWebScript
   var SEL = 'a[href],button,input,select,textarea,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],video,[tabindex]:not([tabindex=""-1""])';
   // What to highlight first on each screen (the main Play button, the first profile, the first title).
   var PREFER = ['[data-uia=""play-button""]', '[data-uia*=""play-button""]', 'button.color-primary', '.profile-link', '[data-uia=""action-select-profile+primary""]',
-    '.title-card-container a', '.slider-refocus', '[data-uia=""login-submit-button""]', 'input'];
+    '.title-card-container a', '.slider-refocus', '[data-uia=""login-submit-button""]'];
   var cur = null, lastRect = null;
 
   function rectOf(el) {
@@ -95,6 +95,11 @@ public static class TvWebScript
       var list = s.querySelectorAll(PREFER[i]);
       for (var j = 0; j < list.length; j++) if (visible(list[j]) && onScreen(list[j])) return list[j];
     }
+    // A page built around a video (a Bilibili episode): start on the video, so OK plays it instead of a header link.
+    var vids = s.querySelectorAll('video');
+    for (var k = 0; k < vids.length; k++) if (visible(vids[k]) && onScreen(vids[k]) && rectOf(vids[k]).width > window.innerWidth * 0.3) return vids[k];
+    var box = s.querySelector('input');
+    if (box && visible(box) && onScreen(box)) return box;
     var c = candidates().filter(onScreen);
     c.sort(function (a, b) { var ra = rectOf(a), rb = rectOf(b); return (ra.top * 3 + ra.left) - (rb.top * 3 + rb.left); });
     return c[0] || null;
@@ -142,9 +147,9 @@ public static class TvWebScript
   // At the end of a row, press the row's own next/previous arrow, then highlight the first new title.
   function pageRow(dir) {
     if (!cur) return false;
-    var row = cur.closest('.lolomoRow,.rowContainer,[data-list-context],.slider');
+    var row = cur.closest('.lolomoRow,.rowContainer,[data-list-context],.slider,.scroll-wrap');
     if (!row) return false;
-    var h = row.querySelector(dir === 'right' ? '.handleNext,.handle.next,[aria-label*=""next"" i],[aria-label*=""more titles"" i]' : '.handlePrev,.handle.prev,[aria-label*=""previous"" i]');
+    var h = row.querySelector(dir === 'right' ? '.handleNext,.handle.next,.scroll-wrap__btn.next,[aria-label*=""next"" i],[aria-label*=""more titles"" i]' : '.handlePrev,.handle.prev,.scroll-wrap__btn.prev,[aria-label*=""previous"" i]');
     if (!h) return false;
     h.click();
     var was = cur;
