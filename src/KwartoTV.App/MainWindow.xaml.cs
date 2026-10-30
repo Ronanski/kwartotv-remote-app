@@ -242,7 +242,7 @@ public partial class MainWindow : Window, IShell
     {
         if (_tv.Settings.NetflixInApp)
         {
-            // Inside KwartoTV, like YouTube. Move the pointer with the phone's Mouse pad (Netflix's website is built for a mouse).
+            // Inside KwartoTV, like YouTube, with TV-style remote navigation (TvWebScript). The phone's Mouse pad still works too.
             const string url = "https://www.netflix.com/browse";
             OpenWeb(url, "netflix", ForegroundKind.Netflix, null, "Netflix", () => _tv.Apps.LaunchWeb(new WebTile("netflix", "Netflix", url)));
             return;

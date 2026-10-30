@@ -22,8 +22,8 @@ public static class HostKeyMap
         "nav.right" => One(VkRight, true),
         "nav.ok" or "key.enter" => One(VkReturn),
         "key.backspace" => One(VkBack),
-        // YouTube TV treats Esc as Back. Netflix and ordinary sites use browser-style Alt+Left.
-        "nav.back" => fg is ForegroundKind.Netflix or ForegroundKind.Web ? One(VkLeft, true, alt: true) : One(VkEscape),
+        // YouTube TV and Netflix (KwartoTV's TV navigation, and the Store app) treat Esc as Back. Ordinary sites use browser-style Alt+Left.
+        "nav.back" => fg is ForegroundKind.Web ? One(VkLeft, true, alt: true) : One(VkEscape),
         _ => null,
     };
 

@@ -76,6 +76,10 @@ jobs:
         shell: pwsh
         run: ./tools/smoke-windows.ps1 -Exe C:\KwartoTV-test\KwartoTV.exe -OutDir qa-shots
 
+      - name: In-app update (close, install silently, open again)
+        shell: pwsh
+        run: ./tools/check-update.ps1 -Exe C:\KwartoTV-test\KwartoTV.exe -Installer dist/KwartoTV.exe
+
       - name: Uninstall cleanly
         shell: pwsh
         run: |

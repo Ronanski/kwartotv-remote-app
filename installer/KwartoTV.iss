@@ -23,7 +23,6 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
-AppMutex=KwartoTV.SingleInstance
 CloseApplications=yes
 
 [Tasks]
@@ -52,7 +51,7 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""K
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV discovery"" dir=in action=allow protocol=UDP localport=5353 profile=any"; Flags: runhidden
 Filename: "{app}\KwartoTV.exe"; Description: "Start KwartoTV"; Flags: nowait postinstall skipifsilent
-; In-app update: the app starts the installer with /RELAUNCH=1, and it opens the new version (as the normal user, not elevated).
+; Older in-app updates start the installer with /RELAUNCH=1, and it opens the new version (as the normal user).
 Filename: "{app}\KwartoTV.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
 
 [UninstallRun]
@@ -62,6 +61,46 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden; RunOnceId: "DelFw2"
 
 [Code]
+const
+  AppMutexName = 'KwartoTV.SingleInstance';
+
+// An in-app update starts this installer just before KwartoTV closes. Wait for it to close
+// instead of quitting (a silent install used to stop right here, so nothing was updated).
+function InitializeSetup: Boolean;
+var
+  I, Code: Integer;
+begin
+  Result := True;
+  I := 0;
+  while CheckForMutexes(AppMutexName) and (I < 60) do
+  begin
+    Sleep(500);
+    I := I + 1;
+  end;
+  if CheckForMutexes(AppMutexName) then
+  begin
+    if WizardSilent then
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KwartoTV.exe', '', SW_HIDE, ewWaitUntilTerminated, Code)
+    else
+      while CheckForMutexes(AppMutexName) do
+        if MsgBox('KwartoTV is open. Close it, then click OK to continue.', mbError, MB_OKCANCEL) = IDCANCEL then
+        begin
+          Result := False;
+          Exit;
+        end;
+    Sleep(1000);
+  end;
+end;
+
+function InitializeUninstall: Boolean;
+var
+  Code: Integer;
+begin
+  Result := True;
+  if CheckForMutexes(AppMutexName) then
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KwartoTV.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+end;
+
 function RelaunchRequested: Boolean;
 begin
   Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
