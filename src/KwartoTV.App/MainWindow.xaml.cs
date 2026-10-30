@@ -318,6 +318,17 @@ public partial class MainWindow : Window, IShell
     public async void AddFreePack()
     {
         int added = 0;
+        // The networks' own YouTube live streams (GMA, Kapamilya, TV5, ...) first, so they get the first channel numbers.
+        if (!_tv.Settings.Playlists.Any(p => string.Equals(p.Source, AppPaths.PinoyLivePlaylist, StringComparison.OrdinalIgnoreCase))
+            && _tv.Settings.AddPlaylist(PinoyLive.Name, AppPaths.PinoyLivePlaylist) is null)
+        {
+            var pinoy = _tv.Settings.Playlists.Last();
+            _tv.Settings.Playlists.Remove(pinoy);
+            _tv.Settings.Playlists.Insert(0, pinoy);
+            _tv.Settings.SetSelectionAll(pinoy.Id);
+            _tv.Settings.SetSpace(pinoy.Id, true);
+            added++;
+        }
         foreach (var s in IptvOrg.FreePack)
         {
             if (_tv.Settings.Playlists.Any(p => p.Source == s.Url)) continue;

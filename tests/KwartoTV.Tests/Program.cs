@@ -682,6 +682,13 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(ChannelCatalog.BuildLineup(new[] { eng with { Selected = big.Take(500).Select(c => c.Id).ToList() } }, loadedC).Count == 500, "channels picked by hand are all kept");
 }
 
+// ---- Pinoy Live pack: the networks' own YouTube live streams, as a playlist
+{
+    var pinoy = M3uParser.Parse(PinoyLive.Playlist());
+    Check(pinoy.Count == PinoyLive.Channels.Count && pinoy.All(c => c.Kind == StreamKind.YouTube && c.Url.StartsWith("https://www.youtube.com/@") && c.Url.EndsWith("/live")), "Pinoy Live: every channel is a YouTube live link");
+    Check(pinoy[0].Name == "Kapamilya Online Live" && pinoy[0].TvgId == "Kapamilya.Channel.ph" && pinoy[0].Group == "Local TV", "Pinoy Live: names, guide ids and categories come through");
+}
+
 // ---- programme guide (XMLTV): now and next, matched by guide id or by name
 {
     const string Xml = "<?xml version=\"1.0\"?><!DOCTYPE tv SYSTEM \"xmltv.dtd\"><tv>" +

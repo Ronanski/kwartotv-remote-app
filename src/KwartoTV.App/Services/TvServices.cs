@@ -92,6 +92,9 @@ public sealed class TvServices : IDisposable
         try { if (File.Exists(AppPaths.Devices)) Pairing.Import(File.ReadAllText(AppPaths.Devices)); } catch (Exception ex) { AppPaths.LogLine("devices: " + ex.Message); }
         Pairing.Changed += SaveDevices;
 
+        // The Pinoy Live pack is written fresh each start, so app updates bring its newest channel list.
+        try { Directory.CreateDirectory(AppPaths.PastedPlaylists); File.WriteAllText(AppPaths.PinoyLivePlaylist, PinoyLive.Playlist()); } catch (Exception ex) { AppPaths.LogLine("pinoy live: " + ex.Message); }
+
         // Start with what was loaded last time, so the channels are there even before (or without) the internet.
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, List<Channel>>>(AppPaths.PlaylistCache)) Library[kv.Key] = kv.Value;
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, ChannelHealth>>(AppPaths.Health)) Health[kv.Key] = kv.Value;
