@@ -85,3 +85,49 @@ class UpdateTest {
         org.junit.Assert.assertNull(Updates.parse("{}")); org.junit.Assert.assertNull(Updates.parse("junk")); org.junit.Assert.assertNull(Updates.parse(null))
     }
 }
+
+class LineupTest {
+    // What RemoteServer.LineupMessage on the TV sends.
+    private val json = """{"type":"lineup","id":"7","total":3,"channels":[
+        {"number":1,"name":"GMA","group":"News","favorite":true,"now":"Eat Bulaga  ·  12:00–1:00 PM"},
+        {"number":2,"name":"Cartoon Fun","group":"Kids","favorite":false,"now":null},
+        {"number":12,"name":"News 12","group":"News","favorite":false},
+        {"number":0,"name":"broken"}, "junk"]}"""
+
+    private fun lineup() = (parseTvMessage(json) as TvMessage.Channels).lineup
+
+    @Test fun parsesTheLineupMessage() {
+        val l = lineup()
+        assertEquals(3, l.channels.size)
+        assertEquals(3, l.total)
+        assertEquals(LineupChannel(1, "GMA", "News", true, "Eat Bulaga  ·  12:00–1:00 PM"), l.channels[0])
+        assertNull(l.channels[1].now) // JSON null, not the text "null"
+        assertNull(l.channels[2].now)
+        assertEquals(listOf("News", "Kids"), lineupGroups(l.channels))
+    }
+
+    @Test fun totalIsNeverLessThanTheRows() {
+        val l = parseLineup(org.json.JSONObject("""{"channels":[{"number":5,"name":"","group":""}]}"""))
+        assertEquals(1, l.total)
+        assertEquals(LineupChannel(5, "Channel 5", "Other", false, null), l.channels[0])
+        assertTrue(parseLineup(org.json.JSONObject("{}")).channels.isEmpty())
+    }
+
+    @Test fun searchMatchesNameOrNumber() {
+        val c = lineup().channels
+        assertEquals(listOf("Cartoon Fun"), filterLineup(c, "cartoon", null).map { it.name })
+        // Digits match the start of the number, the exact number first; "News 12" also matches by name.
+        assertEquals(listOf(1, 12), filterLineup(c, "1", null).map { it.number })
+        assertEquals(listOf(12), filterLineup(c, " 12 ", null).map { it.number })
+        assertEquals(3, filterLineup(c, "", null).size)
+        assertTrue(filterLineup(c, "zzz", null).isEmpty())
+    }
+
+    @Test fun categoryAndFavoriteChips() {
+        val c = lineup().channels
+        assertEquals(listOf(1, 12), filterLineup(c, "", "News").map { it.number })
+        assertEquals(listOf(12), filterLineup(c, "12", "News").map { it.number })
+        assertEquals(listOf(1), filterLineup(c, "", FAVORITES_FILTER).map { it.number })
+        assertFalse(filterLineup(c, "", "Kids").any { it.group != "Kids" })
+    }
+}

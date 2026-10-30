@@ -2,6 +2,7 @@ package com.kwartotv.remote.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,10 +53,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kwartotv.remote.AppViewModel
 import com.kwartotv.remote.Cmd
+import com.kwartotv.remote.FAVORITES_FILTER
+import com.kwartotv.remote.LineupChannel
+import com.kwartotv.remote.filterLineup
+import com.kwartotv.remote.lineupGroups
 import com.kwartotv.remote.Haptics
 import com.kwartotv.remote.net.Conn
 import kotlin.math.abs
@@ -155,7 +165,7 @@ fun RemoteScreen(vm: AppViewModel) {
                 when (tab) {
                     Tab.Remote -> NavTab(vm, send)
                     Tab.Media -> MediaTab(send)
-                    Tab.Channels -> ChannelsTab(send)
+                    Tab.Channels -> ChannelsTab(vm, send)
                     Tab.Keys -> KeysTab(send)
                     Tab.Power -> PowerTab(send)
                 }
@@ -300,7 +310,119 @@ private fun MediaTab(send: (String, String?) -> Unit) {
 }
 
 @Composable
-private fun ChannelsTab(send: (String, String?) -> Unit) {
+private fun ChannelsTab(vm: AppViewModel, send: (String, String?) -> Unit) {
+    val ctx = LocalContext.current
+    var guide by rememberSaveable { mutableStateOf(true) }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = guide, onClick = { Haptics.click(ctx); guide = true }, label = { Text("Channel list") })
+            FilterChip(selected = !guide, onClick = { Haptics.click(ctx); guide = false }, label = { Text("Keypad") })
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (guide) ChannelGuide(vm, send) else ChannelKeypad(send)
+        }
+    }
+}
+
+/** The TV's channels on the phone, like a cable guide: search, category chips, tap a row to watch it. */
+@Composable
+private fun ChannelGuide(vm: AppViewModel, send: (String, String?) -> Unit) {
+    val client = vm.client
+    val context = LocalContext.current
+    val conn by client.conn.collectAsState()
+    val lineup by client.lineup.collectAsState()
+    val unsupported by client.lineupUnsupported.collectAsState()
+    val now by client.now.collectAsState()
+    var query by rememberSaveable { mutableStateOf("") }
+    var group by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Ask when the list opens, and again after every reconnect (the TV only pushes changes to a live connection).
+    LaunchedEffect(conn) { if (conn == Conn.Connected) client.requestLineup() }
+
+    val channels = lineup?.channels.orEmpty()
+    val groups = remember(channels) { lineupGroups(channels) }
+    val hasFavorites = remember(channels) { channels.any { it.favorite } }
+    // A category that disappeared from the lineup (or favorites that were all removed) falls back to "All".
+    val chosen = group?.takeIf { it in groups || (it == FAVORITES_FILTER && hasFavorites) }
+    val rows = remember(channels, query, chosen) { filterLineup(channels, query, chosen) }
+
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = query, onValueChange = { query = it.take(40) }, singleLine = true,
+                label = { Text("Search name or number") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, autoCorrectEnabled = false),
+            )
+            RemoteKey("↻", "Refresh the channel list", Modifier.size(56.dp), fontSize = 22, height = 56.dp) {
+                if (!client.requestLineup()) {
+                    Toast.makeText(context, "Not connected to the TV. Reconnecting…", Toast.LENGTH_SHORT).show()
+                    vm.reconnect()
+                }
+            }
+        }
+        if (channels.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { FilterChip(selected = chosen == null, onClick = { Haptics.click(context); group = null }, label = { Text("All") }) }
+                if (hasFavorites) item {
+                    FilterChip(selected = chosen == FAVORITES_FILTER, onClick = { Haptics.click(context); group = FAVORITES_FILTER }, label = { Text("★ Favorites") })
+                }
+                items(groups, key = { it }) { g ->
+                    FilterChip(selected = chosen == g, onClick = { Haptics.click(context); group = g }, label = { Text(g, maxLines = 1) })
+                }
+            }
+        }
+        val message = when {
+            unsupported -> "This TV app is too old to send its channel list. Update KwartoTV on the PC, or use the keypad."
+            lineup == null && conn != Conn.Connected -> "Connect to the TV to see its channels."
+            lineup == null -> "Loading channels…"
+            channels.isEmpty() -> "The TV has no channels yet. Add a playlist on the TV."
+            rows.isEmpty() -> "No channel matches \"${query.trim()}\"."
+            else -> null
+        }
+        if (message != null) {
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+        } else {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(rows, key = { it.number }) { ch ->
+                    ChannelRow(ch, watching = ch.number == now.number) {
+                        Haptics.click(context)
+                        send(Cmd.CH_NUMBER, ch.number.toString())
+                    }
+                }
+                val total = lineup?.total ?: 0
+                if (total > channels.size) item {
+                    Text(
+                        "Showing the first ${channels.size} of $total channels. Use the keypad for the rest.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelRow(ch: LineupChannel, watching: Boolean, onTune: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(if (watching) colors.surfaceVariant else colors.surfaceContainer)
+            .clickable(onClickLabel = "Watch ${ch.name}", onClick = onTune)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(ch.number.toString(), Modifier.width(52.dp), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = if (watching) Accent else AccentSoft)
+        Column(Modifier.weight(1f)) {
+            Text((if (ch.favorite) "★ " else "") + ch.name, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(ch.now ?: ch.group, fontSize = 13.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (watching) Text("ON", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ok)
+    }
+}
+
+@Composable
+private fun ChannelKeypad(send: (String, String?) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // Opens the channel list on the TV, grouped by category: ◀ ▶ change category, ▲ ▼ choose, OK watches.
         RemoteKey("☰  Channel list", "Open the channel list on the TV", Modifier.fillMaxWidth(), primary = true, fontSize = 20, height = 64.dp) { send(Cmd.CH_LIST, null) }

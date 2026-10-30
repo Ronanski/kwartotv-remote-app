@@ -17,6 +17,8 @@ public sealed class ChannelLineup
     public event Action<Channel, int>? Tuned;
     /// <summary>Raised after a favorite is added or removed, so the shell can save.</summary>
     public event Action? FavoritesChanged;
+    /// <summary>Raised after Load replaced the channels, so phones showing the lineup can refresh it.</summary>
+    public event Action? Changed;
 
     public IReadOnlyList<Channel> Channels { get { lock (_gate) return _channels.ToList(); } }
     public Channel? Current { get { lock (_gate) return At(_current); } }
@@ -36,6 +38,7 @@ public sealed class ChannelLineup
             _current = keepId is null ? -1 : _channels.FindIndex(c => c.Id == keepId);
             _previous = prevId is null ? -1 : _channels.FindIndex(c => c.Id == prevId);
         }
+        Changed?.Invoke();
     }
 
     private Channel? Go(int index)

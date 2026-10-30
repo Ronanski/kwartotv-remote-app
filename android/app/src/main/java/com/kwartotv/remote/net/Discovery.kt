@@ -16,16 +16,21 @@ object Discovery {
     fun discover(context: Context): Flow<List<FoundTv>> = callbackFlow {
         val nsd = context.getSystemService(Context.NSD_SERVICE) as NsdManager
         val found = linkedMapOf<String, FoundTv>()
+        // NSD calls back on its own threads; the resolve queue is shared between them. Android resolves one at a time.
+        val lock = Any()
         val queue = ArrayDeque<NsdServiceInfo>()
         var resolving = false
 
         fun next() {
-            if (resolving) return
-            val info = queue.removeFirstOrNull() ?: return
-            resolving = true
+            val info = synchronized(lock) {
+                if (resolving) return
+                val head = queue.removeFirstOrNull() ?: return
+                resolving = true
+                head
+            }
             @Suppress("DEPRECATION")
             nsd.resolveService(info, object : NsdManager.ResolveListener {
-                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) { resolving = false; next() }
+                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) { synchronized(lock) { resolving = false }; next() }
                 override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
                     @Suppress("DEPRECATION")
                     val host = serviceInfo.host?.hostAddress
@@ -33,7 +38,7 @@ object Discovery {
                         synchronized(found) { found[serviceInfo.serviceName] = FoundTv(serviceInfo.serviceName, host, serviceInfo.port) }
                         trySend(synchronized(found) { found.values.toList() })
                     }
-                    resolving = false; next()
+                    synchronized(lock) { resolving = false }; next()
                 }
             })
         }
@@ -43,7 +48,7 @@ object Discovery {
             override fun onDiscoveryStopped(serviceType: String) {}
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {}
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
-            override fun onServiceFound(serviceInfo: NsdServiceInfo) { queue.addLast(serviceInfo); next() }
+            override fun onServiceFound(serviceInfo: NsdServiceInfo) { synchronized(lock) { queue.addLast(serviceInfo) }; next() }
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
                 synchronized(found) { found.remove(serviceInfo.serviceName) }
                 trySend(synchronized(found) { found.values.toList() })

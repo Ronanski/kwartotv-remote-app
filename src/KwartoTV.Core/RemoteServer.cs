@@ -35,6 +35,8 @@ public sealed class RemoteServer : IAsyncDisposable
     private readonly CommandRouter _router;
     private readonly ChannelLineup _lineup;
     private readonly ConcurrentDictionary<Guid, (string DeviceId, WebSocket Socket)> _clients = new();
+    // Phones that asked for the lineup once get it again when it changes.
+    private readonly ConcurrentDictionary<Guid, WebSocket> _lineupWatchers = new();
     private readonly Func<DateTimeOffset> _clock;
     private Task? _loop;
 
@@ -52,6 +54,12 @@ public sealed class RemoteServer : IAsyncDisposable
 
     public int Port { get; }
 
+    /// <summary>Most channels sent to a phone in one lineup message (keeps the message small).</summary>
+    public const int MaxLineupChannels = 500;
+
+    /// <summary>"Programme  ·  8:00–9:00 PM" for a channel, or null. Set by the shell (the guide lives there).</summary>
+    public Func<Channel, string?>? OnAir { get; set; }
+
     public RemoteServer(string prefix, PairingService pairing, CommandRouter router, ChannelLineup lineup, Func<DateTimeOffset>? clock = null)
     {
         (var ip, Port) = ParsePrefix(prefix);
@@ -59,6 +67,7 @@ public sealed class RemoteServer : IAsyncDisposable
         _pairing = pairing; _router = router; _lineup = lineup;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _lineup.Tuned += OnTuned;
+        _lineup.Changed += NotifyLineupChanged;
         _pairing.Changed += DropRevoked;
     }
 
@@ -87,6 +96,7 @@ public sealed class RemoteServer : IAsyncDisposable
             if (!_pairing.IsKnownAndAllowed(c.DeviceId))
             {
                 _clients.TryRemove(id, out _);
+                _lineupWatchers.TryRemove(id, out _);
                 _ = Task.Run(async () => { try { await c.Socket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "revoked", CancellationToken.None); } catch { } });
             }
         }
@@ -323,6 +333,13 @@ public sealed class RemoteServer : IAsyncDisposable
 
                 RemoteCommand? cmd;
                 try { cmd = JsonSerializer.Deserialize<RemoteCommand>(ms.ToArray(), Json); } catch { cmd = null; }
+                if (cmd?.Cmd == "lineup.get")
+                {
+                    // Answered here, not by the router: the reply is the lineup itself, not an ack.
+                    _lineupWatchers[id] = ws;
+                    await Send(ws, LineupMessage(_lineup.Channels, OnAir, _lineup.IsFavorite, cmd.Id));
+                    continue;
+                }
                 var res = cmd is null ? new CommandResult(false, "bad json") : _router.Handle(cmd);
                 await Send(ws, JsonSerializer.Serialize(new { type = "ack", id = cmd?.Id, ok = res.Ok, error = res.Error }, Json));
             }
@@ -330,6 +347,7 @@ public sealed class RemoteServer : IAsyncDisposable
         catch { }
         done:
         _clients.TryRemove(id, out _);
+        _lineupWatchers.TryRemove(id, out _);
         if (ws.State == WebSocketState.CloseReceived)
         {
             try { await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); } catch { }
@@ -343,6 +361,35 @@ public sealed class RemoteServer : IAsyncDisposable
     {
         var msg = StateMessage(ch, number);
         foreach (var c in _clients.Values) _ = Send(c.Socket, msg);
+    }
+
+    /// <summary>
+    /// {"type":"lineup","id":..,"total":N,"channels":[{"number":1,"name":"..","group":"..","favorite":false,"now":".." or null}]}.
+    /// At most MaxLineupChannels channels (the first ones), texts cut to a sane length.
+    /// </summary>
+    public static string LineupMessage(IReadOnlyList<Channel> channels, Func<Channel, string?>? onAir, Func<string, bool>? isFavorite = null, string? id = null)
+    {
+        static string? Cut(string? s, int max) => s is null ? null : s.Length <= max ? s : s[..max];
+        var list = channels.Take(MaxLineupChannels).Select((ch, i) =>
+        {
+            string? now = null;
+            try { now = onAir?.Invoke(ch); } catch { }
+            return new { number = i + 1, name = Cut(ch.Name, 80), group = Cut(ch.Group, 40), favorite = isFavorite?.Invoke(ch.Id) ?? false, now = Cut(now, 120) };
+        }).ToList();
+        return JsonSerializer.Serialize(new { type = "lineup", id, total = channels.Count, channels = list }, Json);
+    }
+
+    /// <summary>Sends the lineup again to every phone that asked for it (channels or guide changed).</summary>
+    public void NotifyLineupChanged()
+    {
+        if (_lineupWatchers.IsEmpty) return;
+        // Off the caller's thread (often the UI thread): building the "on now" lines walks the guide for every channel.
+        _ = Task.Run(() =>
+        {
+            string msg;
+            try { msg = LineupMessage(_lineup.Channels, OnAir, _lineup.IsFavorite); } catch { return; }
+            foreach (var ws in _lineupWatchers.Values) _ = Send(ws, msg);
+        });
     }
 
     private static readonly ConditionalWeakTable<WebSocket, SemaphoreSlim> SendGates = new();
@@ -366,6 +413,7 @@ public sealed class RemoteServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _lineup.Tuned -= OnTuned;
+        _lineup.Changed -= NotifyLineupChanged;
         _pairing.Changed -= DropRevoked;
         _cts.Cancel();
         try { _listener.Stop(); } catch { }

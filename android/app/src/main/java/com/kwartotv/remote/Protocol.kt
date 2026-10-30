@@ -30,6 +30,9 @@ object Cmd {
     const val CH_COMMIT = "channel.commit"
     const val CH_FAVORITE = "channel.favorite"
     const val CH_LIST = "channel.list"
+    const val CH_NUMBER = "channel.number"
+    /** Asks for the numbered lineup (the TV answers with a "lineup" message, and sends it again when it changes). */
+    const val LINEUP = "lineup.get"
     const val PLAYLIST_ADD = "playlist.add"
 
     const val MOUSE_MOVE = "mouse.move"
@@ -93,6 +96,7 @@ fun hostForUrl(host: String) = if (host.contains(':') && !host.startsWith("[")) 
 sealed interface TvMessage {
     data class State(val number: Int, val channelName: String?) : TvMessage
     data class Ack(val id: String?, val ok: Boolean, val error: String?) : TvMessage
+    data class Channels(val lineup: Lineup) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -101,10 +105,54 @@ fun parseTvMessage(text: String): TvMessage = try {
     when (o.optString("type")) {
         "state" -> TvMessage.State(o.optInt("number", 0), o.optJSONObject("channel")?.optString("name"))
         "ack" -> TvMessage.Ack(o.optString("id").ifEmpty { null }, o.optBoolean("ok"), if (o.isNull("error")) null else o.optString("error"))
+        "lineup" -> TvMessage.Channels(parseLineup(o))
         else -> TvMessage.Unknown
     }
 } catch (_: Exception) {
     TvMessage.Unknown
+}
+
+/** One row of the TV's channel list, as the phone shows it. [now] is "Programme  ·  8:00–9:00 PM" or null. */
+data class LineupChannel(val number: Int, val name: String, val group: String, val favorite: Boolean, val now: String?)
+
+/** The TV's lineup. [total] can be more than [channels] when the TV has more channels than it sends (it caps the list). */
+data class Lineup(val channels: List<LineupChannel>, val total: Int)
+
+private const val MAX_LINEUP_ROWS = 1000
+
+private fun JSONObject.text(key: String): String? = if (isNull(key)) null else optString(key).ifBlank { null }
+
+fun parseLineup(o: JSONObject): Lineup {
+    val a = o.optJSONArray("channels")
+    val rows = ArrayList<LineupChannel>()
+    if (a != null) {
+        for (i in 0 until minOf(a.length(), MAX_LINEUP_ROWS)) {
+            val c = a.optJSONObject(i) ?: continue
+            val number = c.optInt("number", 0)
+            if (number <= 0) continue
+            rows += LineupChannel(number, c.text("name") ?: "Channel $number", c.text("group") ?: "Other", c.optBoolean("favorite"), c.text("now"))
+        }
+    }
+    return Lineup(rows, maxOf(o.optInt("total", rows.size), rows.size))
+}
+
+/** Chip value that shows only the favorites (not a real category name). */
+const val FAVORITES_FILTER = "\u0001favorites"
+
+/** Categories in lineup order, each once. */
+fun lineupGroups(channels: List<LineupChannel>): List<String> = channels.map { it.group }.distinct()
+
+/**
+ * The rows matching the search box and the chosen category chip ([group] null = all).
+ * The search matches the name (any case) or, for digits, the start of the channel number; an exact number comes first.
+ */
+fun filterLineup(channels: List<LineupChannel>, query: String, group: String?): List<LineupChannel> {
+    val q = query.trim()
+    val digits = q.isNotEmpty() && q.all(Char::isDigit)
+    return channels.filter { ch ->
+        val inGroup = group == null || (if (group == FAVORITES_FILTER) ch.favorite else ch.group == group)
+        inGroup && (q.isEmpty() || ch.name.contains(q, ignoreCase = true) || (digits && ch.number.toString().startsWith(q)))
+    }.sortedByDescending { digits && it.number.toString() == q }
 }
 
 fun commandJson(id: String, cmd: String, arg: String?): String {

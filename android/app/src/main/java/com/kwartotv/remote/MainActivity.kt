@@ -28,8 +28,8 @@ class MainActivity : ComponentActivity() {
                 val tvs by vm.tvs.collectAsState()
                 val adding by vm.adding.collectAsState()
                 // Connect while the app is on screen, drop the connection when it is not.
-                LifecycleEventEffect(Lifecycle.Event.ON_START) { vm.connectSelected() }
-                LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.disconnect() }
+                LifecycleEventEffect(Lifecycle.Event.ON_START) { vm.onStart() }
+                LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.onStop() }
                 Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
                     if (tvs.isEmpty() || adding) PairScreen(vm, canCancel = tvs.isNotEmpty()) else RemoteScreen(vm)
                 }

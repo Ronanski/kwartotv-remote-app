@@ -58,22 +58,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val updater = Updater(app)
     val update = MutableStateFlow<UpdateState>(UpdateState.None)
 
+    private val connectivity = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    /** True between ON_START and ON_STOP. Nothing connects while the app is in the background. */
+    private val foreground get() = client.foreground
+
     init {
         checkForUpdate(manual = false)
         // When the Wi-Fi comes back (or changes) reconnect right away instead of waiting for the next retry.
-        val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        try {
-            cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) { if (!client.isConnected()) viewModelScope.launch { connectSelected() } }
-            })
-        } catch (_: Exception) { }
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            // Called on a ConnectivityManager thread: hop to the main thread before touching the client.
+            override fun onAvailable(network: Network) { viewModelScope.launch { if (foreground && !client.isConnected()) connectSelected() } }
+        }
+        try { connectivity.registerDefaultNetworkCallback(callback); networkCallback = callback } catch (_: Exception) { }
         // The TV's IP address can change (router lease). Look for it by name on the Wi-Fi.
         client.onTvUnreachable = { lost ->
             viewModelScope.launch {
+                // Only a service with the saved TV's own name, never "the only TV that answered": the token goes to it.
                 val found = withTimeoutOrNull(7000) {
-                    Discovery.discover(getApplication()).first { list -> list.any { it.name == lost.name } || (list.size == 1 && tvs.value.size == 1) }
-                }?.let { list -> list.firstOrNull { it.name == lost.name } ?: list.first() }
-                if (found != null && (found.host != lost.host || found.port != lost.port)) {
+                    Discovery.discover(getApplication()).first { list -> list.any { it.name == lost.name } }
+                }?.firstOrNull { it.name == lost.name }
+                if (found != null && foreground && (found.host != lost.host || found.port != lost.port)
+                    // Ask the new address who it is before saving it or sending the token there.
+                    && client.infoName(found.host, found.port) == lost.name && foreground
+                ) {
                     val moved = lost.copy(host = found.host, port = found.port)
                     val list = tvs.value.map { if (it.deviceId == moved.deviceId) moved else it }
                     tvs.value = list; store.save(list)
@@ -109,7 +118,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         list.firstOrNull()?.let { select(it) } ?: run { selectedId.value = null; store.selectedId = null }
     }
 
-    fun connectSelected() { selected()?.let { client.connect(it) } }
+    fun connectSelected() { if (foreground) selected()?.let { client.connect(it) } }
+
+    /** The app came on screen: connect. */
+    fun onStart() { client.foreground = true; connectSelected() }
+
+    /** The app left the screen: drop the connection and stop every reconnect path. */
+    fun onStop() { client.foreground = false; client.disconnect() }
 
     /** Connect again now (the connection may be stale after the phone was idle). */
     fun reconnect() { if (selected() != null) connectSelected() }
@@ -136,5 +151,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun disconnect() = client.disconnect()
 
-    override fun onCleared() { client.disconnect() }
+    override fun onCleared() {
+        client.foreground = false
+        networkCallback?.let { try { connectivity.unregisterNetworkCallback(it) } catch (_: Exception) { } }
+        networkCallback = null
+        client.disconnect()
+    }
 }

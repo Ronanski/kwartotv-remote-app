@@ -752,6 +752,46 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(b3 == "" && a3.EndsWith("…") && a3.Length == 21, "long text shows its start when the caret is there");
 }
 
+// ---- Lineup for the phone's channel list (lineup.get)
+{
+    var lgChannels = Enumerable.Range(1, 520).Select(i => new Channel($"id{i}", i == 2 ? new string('n', 300) : $"Ch {i}", $"https://example.invalid/{i}.m3u8", null, i % 2 == 0 ? "News" : "Movies", StreamKind.Hls)).ToList();
+    var lgMsg = JsonDocument.Parse(RemoteServer.LineupMessage(lgChannels, ch => ch.Id == "id1" ? "Morning Show  ·  8:00–9:00 AM" : ch.Id == "id3" ? throw new InvalidOperationException() : null, id => id == "id4", "q1")).RootElement;
+    var lgList = lgMsg.GetProperty("channels");
+    Check(lgMsg.GetProperty("type").GetString() == "lineup" && lgMsg.GetProperty("id").GetString() == "q1" && lgMsg.GetProperty("total").GetInt32() == 520, "lineup message type, id and total");
+    Check(lgList.GetArrayLength() == RemoteServer.MaxLineupChannels, "lineup capped at MaxLineupChannels");
+    Check(lgList[0].GetProperty("number").GetInt32() == 1 && lgList[0].GetProperty("name").GetString() == "Ch 1" && lgList[0].GetProperty("group").GetString() == "Movies" && lgList[0].GetProperty("now").GetString()!.StartsWith("Morning Show"), "lineup row fields");
+    Check(lgList[1].GetProperty("name").GetString()!.Length == 80 && lgList[1].GetProperty("now").ValueKind == JsonValueKind.Null, "lineup cuts long names, null when nothing on");
+    Check(lgList[2].GetProperty("now").ValueKind == JsonValueKind.Null && lgList[3].GetProperty("favorite").GetBoolean() && !lgList[0].GetProperty("favorite").GetBoolean(), "lineup survives a guide error, marks favorites");
+
+    int lgPort = 19400 + Random.Shared.Next(200);
+    var lgPair = new PairingService(); var lgLineup = new ChannelLineup(); lgLineup.Load(parsed);
+    await using (var lgServer = new RemoteServer($"http://127.0.0.1:{lgPort}/", lgPair, new CommandRouter(lgLineup, new FakeHost()), lgLineup) { OnAir = ch => ch.Name == "Channel A" ? "News at Eight" : null })
+    {
+        lgServer.Start();
+        using var lgHttp = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{lgPort}/") };
+        using (var lgAnon = new ClientWebSocket())
+        {
+            bool lgRefused = false;
+            try { await lgAnon.ConnectAsync(new Uri($"ws://127.0.0.1:{lgPort}/ws?device=x&token=y"), CancellationToken.None); } catch { lgRefused = true; }
+            Check(lgRefused, "lineup needs a paired phone");
+        }
+        var lgCred = await (await lgHttp.PostAsJsonAsync("/pair", new { pin = lgPair.StartPairing(DateTimeOffset.UtcNow), name = "Phone" })).Content.ReadFromJsonAsync<JsonElement>();
+        using var lgWs = new ClientWebSocket();
+        await lgWs.ConnectAsync(new Uri($"ws://127.0.0.1:{lgPort}/ws?device={lgCred.GetProperty("deviceId").GetString()}&token={lgCred.GetProperty("token").GetString()}"), CancellationToken.None);
+        await Recv(lgWs); // initial state
+        await SendJson(lgWs, new { id = "7", cmd = "lineup.get" });
+        var lgReply = JsonDocument.Parse(await RecvWhole(lgWs)).RootElement;
+        Check(lgReply.GetProperty("type").GetString() == "lineup" && lgReply.GetProperty("id").GetString() == "7" && lgReply.GetProperty("channels").GetArrayLength() == parsed.Count, "ws lineup.get answers with the lineup");
+        Check(lgReply.GetProperty("channels")[0].GetProperty("now").GetString() == "News at Eight", "ws lineup has on-now from the shell");
+        lgLineup.Load(parsed.Take(2));
+        var lgPush = JsonDocument.Parse(await RecvWhole(lgWs)).RootElement;
+        Check(lgPush.GetProperty("type").GetString() == "lineup" && lgPush.GetProperty("channels").GetArrayLength() == 2, "lineup is sent again when it changes");
+        await SendJson(lgWs, new { id = "8", cmd = "channel.list" });
+        var lgAck = JsonDocument.Parse(await Recv(lgWs)).RootElement;
+        Check(lgAck.GetProperty("type").GetString() == "ack" && lgAck.GetProperty("ok").GetBoolean(), "channel.list still opens the list on the TV");
+    }
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 
@@ -765,6 +805,16 @@ static async Task<string> Recv(ClientWebSocket ws)
     using var cts = new CancellationTokenSource(5000);
     var r = await ws.ReceiveAsync(buf, cts.Token);
     return Encoding.UTF8.GetString(buf, 0, r.Count);
+}
+
+static async Task<string> RecvWhole(ClientWebSocket ws)
+{
+    var buf = new byte[8192];
+    using var cts = new CancellationTokenSource(5000);
+    using var ms = new MemoryStream();
+    WebSocketReceiveResult r;
+    do { r = await ws.ReceiveAsync(buf, cts.Token); ms.Write(buf, 0, r.Count); } while (!r.EndOfMessage);
+    return Encoding.UTF8.GetString(ms.ToArray());
 }
 
 sealed class FakeHost : IHostActions

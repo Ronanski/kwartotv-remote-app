@@ -2,6 +2,8 @@ package com.kwartotv.remote.net
 
 import android.os.Handler
 import android.os.Looper
+import com.kwartotv.remote.Cmd
+import com.kwartotv.remote.Lineup
 import com.kwartotv.remote.SavedTv
 import com.kwartotv.remote.TvMessage
 import com.kwartotv.remote.commandJson
@@ -31,6 +33,10 @@ sealed interface Conn {
 
 data class Now(val number: Int, val name: String?)
 
+/**
+ * The WebSocket to one TV. Everything that changes the connection (socket, tv, generation, retry) runs on the main
+ * thread: OkHttp and the port search post their results there.
+ */
 class RemoteClient {
     private val http = OkHttpClient.Builder()
         .pingInterval(10, TimeUnit.SECONDS)
@@ -46,24 +52,39 @@ class RemoteClient {
     private val _lastError = MutableStateFlow<String?>(null)
     /** Last "not done" message from the TV, e.g. "no such channel". Cleared by the UI after showing. */
     val lastError: StateFlow<String?> = _lastError
+    private val _lineup = MutableStateFlow<Lineup?>(null)
+    /** The TV's channel list, once asked for with [requestLineup]. Null until it arrives. */
+    val lineup: StateFlow<Lineup?> = _lineup
+    private val _lineupUnsupported = MutableStateFlow(false)
+    /** The TV app is too old to send its channel list. */
+    val lineupUnsupported: StateFlow<Boolean> = _lineupUnsupported
+
+    /**
+     * True while the app is on screen. In the background nothing reconnects (no retries, no watchdog, no move),
+     * so the phone does not keep waking the radio.
+     */
+    @Volatile var foreground = false
 
     private val probeHttp = http.newBuilder().connectTimeout(1500, TimeUnit.MILLISECONDS).readTimeout(2, TimeUnit.SECONDS).build()
 
-    /** Called (on a worker thread) when the TV turned up on a different port; the caller saves the new port. */
+    /** Called (on the main thread) when the TV turned up on a different port; the caller saves the new port. */
     var onTvMoved: ((SavedTv) -> Unit)? = null
 
     private var lastRx = 0L
 
-    /** Called when the saved address does not answer: the VM looks for the TV again on the Wi-Fi (its IP may have changed). */
+    /** Called (on the main thread) when the saved address does not answer: the VM looks for the TV again on the Wi-Fi (its IP may have changed). */
     var onTvUnreachable: ((SavedTv) -> Unit)? = null
 
     private var socket: WebSocket? = null
     private var tv: SavedTv? = null
-    private var generation = 0
+    // Read from OkHttp threads to drop callbacks of an old socket early; written only on the main thread.
+    @Volatile private var generation = 0
     private var retry = 0
     private var seq = 0
+    private var lineupRequest: String? = null
 
     fun connect(target: SavedTv) {
+        if (tv?.deviceId != target.deviceId) { _lineup.value = null; _lineupUnsupported.value = false }
         disconnect()
         tv = target
         val gen = ++generation
@@ -77,8 +98,13 @@ class RemoteClient {
         _conn.value = if (retry == 0) Conn.Connecting else Conn.Retrying
         val req = try { Request.Builder().url(target.wsUrl()).build() } catch (e: Exception) { _conn.value = Conn.Rejected("Bad TV address"); return }
         socket = http.newWebSocket(req, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
+            // OkHttp calls these on its own threads: hop to the main thread, then check the generation again there.
+            private fun onMain(block: () -> Unit) {
                 if (gen != generation) return
+                main.post { if (gen == generation) block() }
+            }
+
+            override fun onOpen(webSocket: WebSocket, response: Response) = onMain {
                 lastRx = android.os.SystemClock.elapsedRealtime()
                 retry = 0
                 _conn.value = Conn.Connected
@@ -86,49 +112,61 @@ class RemoteClient {
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 if (gen != generation) return
-                lastRx = android.os.SystemClock.elapsedRealtime()
-                when (val m = parseTvMessage(text)) {
-                    is TvMessage.State -> _now.value = Now(m.number, m.channelName)
-                    is TvMessage.Ack -> if (!m.ok) _lastError.value = m.error ?: "Not done"
-                    TvMessage.Unknown -> Unit
+                // Parse here, off the main thread: a lineup can hold hundreds of channels.
+                val m = parseTvMessage(text)
+                onMain {
+                    lastRx = android.os.SystemClock.elapsedRealtime()
+                    when (m) {
+                        is TvMessage.State -> _now.value = Now(m.number, m.channelName)
+                        is TvMessage.Channels -> { _lineup.value = m.lineup; _lineupUnsupported.value = false }
+                        is TvMessage.Ack -> when {
+                            m.ok -> Unit
+                            // An older TV app does not know the lineup request: say so on the list, not as an error toast.
+                            m.id != null && m.id == lineupRequest -> _lineupUnsupported.value = true
+                            else -> _lastError.value = m.error ?: "Not done"
+                        }
+                        TvMessage.Unknown -> Unit
+                    }
                 }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 webSocket.close(1000, null)
                 // onClosed or onFailure always follows and does the retry; retrying here too doubled every reconnect.
-                if (gen != generation) return
-                if (code == 1008) _conn.value = Conn.Rejected("This phone was removed on the TV.")
+                if (code == 1008) onMain { _conn.value = Conn.Rejected("This phone was removed on the TV.") }
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (gen != generation) return
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = onMain {
                 if (code == 1008) _conn.value = Conn.Rejected("This phone was removed on the TV.") else scheduleRetry(gen)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (gen != generation) return
-                if (response?.code == 401) _conn.value = Conn.Rejected("The TV does not accept this phone. Pair again.") else scheduleRetry(gen)
+                val code = response?.code
+                onMain { if (code == 401) _conn.value = Conn.Rejected("The TV does not accept this phone. Pair again.") else scheduleRetry(gen) }
             }
         })
     }
 
     private fun scheduleRetry(gen: Int) {
         if (gen != generation) return
+        if (!foreground) { _conn.value = Conn.Idle; return }
         _conn.value = Conn.Retrying
         val delay = minOf(1000L shl minOf(retry, 3), 8000L)
         retry++
         if (retry == 3) {
             // The PC may have restarted on another port (Windows reserves port ranges) or got another IP address: look for it once.
             val target = tv
-            Thread {
-                val found = target?.let { findPortBlocking(it.host, it.port) }
-                if (found != null && target != null && found != target.port && gen == generation) {
-                    val moved = target.copy(port = found)
-                    tv = moved
-                    onTvMoved?.invoke(moved)
-                } else if (found == null && target != null && gen == generation) {
-                    onTvUnreachable?.invoke(target)
+            if (target != null) Thread {
+                val found = findPortBlocking(target.host, target.port)
+                main.post {
+                    if (gen != generation || !foreground) return@post
+                    if (found != null && found != target.port) {
+                        val moved = target.copy(port = found)
+                        tv = moved
+                        onTvMoved?.invoke(moved)
+                    } else if (found == null) {
+                        onTvUnreachable?.invoke(target)
+                    }
                 }
             }.start()
         }
@@ -151,12 +189,34 @@ class RemoteClient {
 
     suspend fun findPort(host: String, preferred: Int? = null): Int? = withContext(Dispatchers.IO) { findPortBlocking(host, preferred) }
 
-    fun send(cmd: String, arg: String? = null): Boolean {
-        val s = socket ?: return false
-        if (_conn.value != Conn.Connected) return false
-        val ok = s.send(commandJson((++seq).toString(), cmd, arg))
-        if (ok) armWatchdog()
-        return ok
+    /** The TV's name from GET /info, or null when no KwartoTV answers there. */
+    suspend fun infoName(host: String, port: Int): String? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder().url("http://${com.kwartotv.remote.hostForUrl(host)}:$port/info").build()
+            probeHttp.newCall(req).execute().use { r ->
+                val o = JSONObject(r.body?.string() ?: "{}")
+                if (r.isSuccessful && o.optString("app") == "KwartoTV") o.optString("name").ifBlank { null } else null
+            }
+        } catch (_: Exception) { null }
+    }
+
+    fun send(cmd: String, arg: String? = null): Boolean = sendWithId(cmd, arg) != null
+
+    /** Sends a command; returns its id, or null when not connected. Call on the main thread. */
+    private fun sendWithId(cmd: String, arg: String?): String? {
+        val s = socket ?: return null
+        if (_conn.value != Conn.Connected) return null
+        val id = (++seq).toString()
+        if (!s.send(commandJson(id, cmd, arg))) return null
+        armWatchdog()
+        return id
+    }
+
+    /** Asks the TV for its channel list (the answer arrives in [lineup]). False when not connected. */
+    fun requestLineup(): Boolean {
+        val id = sendWithId(Cmd.LINEUP, null) ?: return false
+        lineupRequest = id
+        return true
     }
 
     /**
@@ -167,7 +227,7 @@ class RemoteClient {
         val gen = generation
         val sentAt = android.os.SystemClock.elapsedRealtime()
         main.postDelayed({
-            if (gen == generation && lastRx < sentAt && _conn.value == Conn.Connected) tv?.let { connect(it) }
+            if (gen == generation && foreground && lastRx < sentAt && _conn.value == Conn.Connected) tv?.let { connect(it) }
         }, 3500)
     }
 
@@ -176,8 +236,8 @@ class RemoteClient {
 
     fun isConnected() = _conn.value == Conn.Connected
 
-    /** The TV was found at a new address. */
-    fun moveTo(moved: SavedTv) { tv = moved; connect(moved) }
+    /** The TV was found at a new address. Ignored while the app is in the background. */
+    fun moveTo(moved: SavedTv) { if (foreground) { tv = moved; connect(moved) } }
 
     fun clearError() { _lastError.value = null }
 

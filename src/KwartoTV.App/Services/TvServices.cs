@@ -104,6 +104,8 @@ public sealed class TvServices : IDisposable
         Lineup.Tuned += (_, _) => SaveSettingsSoon();
         Lineup.FavoritesChanged += SaveSettingsSoon;
         Router = new CommandRouter(Lineup, host);
+        // A new guide changes the "on now" lines phones show in their channel list.
+        GuideChanged += () => Server?.NotifyLineupChanged();
     }
 
     private int _saveQueued;
@@ -357,7 +359,7 @@ public sealed class TvServices : IDisposable
         var failures = new List<string>();
         foreach (var port in RemoteServer.PortsToTry(Settings.Port))
         {
-            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name };
+            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now };
             try
             {
                 server.Start();
