@@ -106,7 +106,7 @@ public sealed class PlayerWindow : Window
         WhenReady(() =>
         {
             StartStream(ch, 0);
-            _osd.ShowBanner(ch, number, _tv.Lineup.IsFavorite(ch.Id));
+            ShowLiveBanner(ch, number);
         });
     }
 
@@ -186,6 +186,13 @@ public sealed class PlayerWindow : Window
         if (_mpv is null) return;
         _osd.SetDigits(_tv.Lineup.DigitBuffer);
 
+        // Like cable: when a new programme starts on the channel being watched, say what it is.
+        if (_mode == Mode.Live && !_guideOpen && _tv.Lineup.Current is { } watching)
+        {
+            var onNow = _tv.OnAir(watching).Now;
+            if (onNow != _lastOnNow) { if (_lastOnNow is not null && onNow is not null) ShowLiveBanner(watching, _tv.Lineup.CurrentNumber); _lastOnNow = onNow; }
+        }
+
         if (_mode != Mode.Files && _channel is not null)
         {
             var ev = _mpv.TakeEvents();
@@ -242,13 +249,47 @@ public sealed class PlayerWindow : Window
         if (_mode == Mode.Files && _osd.ProgressVisible && !_failed) ShowStatus();
     }
 
+    private string? _lastOnNow;
+
+    private void ShowLiveBanner(Channel ch, int number)
+    {
+        var (now, next) = _tv.OnAir(ch);
+        _lastOnNow = now;
+        _osd.ShowBanner(ch, number, _tv.Lineup.IsFavorite(ch.Id), now, next);
+    }
+
     // ---------- keys
+
+    // Only five keys are needed (arrows and OK): a short OK acts when it is let go, holding OK for half a second is Back.
+    private static readonly TimeSpan HoldForBack = TimeSpan.FromMilliseconds(500);
+    private DateTime _okDownAt;
+    private bool _okDown, _okHeldDone;
+
+    private bool Back() => _mode switch { Mode.Live => LiveKey(Key.Escape), Mode.Preview => PreviewKey(Key.Escape), _ => FileKey(Key.Escape) };
+
+    protected override void OnPreviewKeyUp(KeyEventArgs e)
+    {
+        base.OnPreviewKeyUp(e);
+        if (e.Key != Key.Enter || !_okDown) return;
+        _okDown = false;
+        e.Handled = true;
+        if (_okHeldDone) return;
+        AppPaths.LogLine($"player key: Enter (guide {(_guideOpen ? "open" : "closed")})");
+        _ = _mode switch { Mode.Live => LiveKey(Key.Enter), Mode.Preview => PreviewKey(Key.Enter), _ => FileKey(Key.Enter) };
+    }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.Enter or Key.Up or Key.Down) AppPaths.LogLine($"player key: {key} (guide {(_guideOpen ? "open" : "closed")})");
+        if (key == Key.Enter)
+        {
+            e.Handled = true;
+            if (!e.IsRepeat) { _okDown = true; _okHeldDone = false; _okDownAt = DateTime.UtcNow; }
+            else if (_okDown && !_okHeldDone && DateTime.UtcNow - _okDownAt >= HoldForBack) { _okHeldDone = true; Back(); }
+            return;
+        }
+        if (key is Key.Up or Key.Down) AppPaths.LogLine($"player key: {key} (guide {(_guideOpen ? "open" : "closed")})");
         if (key is Key.OemPlus or Key.Add) { SystemVolume.Change(+5); e.Handled = true; return; }
         if (key is Key.OemMinus or Key.Subtract) { SystemVolume.Change(-5); e.Handled = true; return; }
         if (key is Key.M) { SystemVolume.ToggleMute(); e.Handled = true; return; }
@@ -286,9 +327,9 @@ public sealed class PlayerWindow : Window
             case Key.Enter or Key.Left or Key.G or Key.Right: OpenGuide(); return true;
             case Key.Space or Key.MediaPlayPause or Key.P: TogglePause(); return true;
             case Key.F:
-                if (lineup.Current is { } cur) { lineup.ToggleFavorite(cur.Id); _osd.ShowBanner(cur, lineup.CurrentNumber, lineup.IsFavorite(cur.Id)); }
+                if (lineup.Current is { } cur) { lineup.ToggleFavorite(cur.Id); ShowLiveBanner(cur, lineup.CurrentNumber); }
                 return true;
-            case Key.I when lineup.Current is { } c2: _osd.ShowBanner(c2, lineup.CurrentNumber, lineup.IsFavorite(c2.Id)); return true;
+            case Key.I when lineup.Current is { } c2: ShowLiveBanner(c2, lineup.CurrentNumber); return true;
             case Key.Escape or Key.BrowserBack or Key.MediaStop: _main.GoHome(); return true;
         }
         return false;
@@ -393,8 +434,12 @@ public sealed class PlayerWindow : Window
         const int rows = 11;
         int n = _guideList.Count;
         int start = Math.Clamp(_guideIndex - rows / 2, 0, Math.Max(0, n - rows));
-        var slice = new List<(int, Channel, bool)>();
-        for (int i = start; i < Math.Min(n, start + rows); i++) slice.Add((_guideList[i].Number, _guideList[i].Channel, _tv.Lineup.IsFavorite(_guideList[i].Channel.Id)));
+        var slice = new List<(int, Channel, bool, string?)>();
+        for (int i = start; i < Math.Min(n, start + rows); i++)
+        {
+            var ch = _guideList[i].Channel;
+            slice.Add((_guideList[i].Number, ch, _tv.Lineup.IsFavorite(ch.Id), _tv.OnAir(ch).Now));
+        }
         var title = _guideGroups[_guideGroup];
         _osd.ShowGuide(slice, _guideIndex - start, n == 0 ? title + "  (empty)" : title,
             $"{(n == 0 ? 0 : _guideIndex + 1)} of {n}   ·   category {_guideGroup + 1}/{_guideGroups.Count}");

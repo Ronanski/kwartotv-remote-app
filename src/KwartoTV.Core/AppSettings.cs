@@ -28,6 +28,8 @@ public sealed class AppSettings
     public bool HideUnavailable { get; set; } = true;
     /// <summary>The lineup holds at most this many channels (0 = all); the first playlists come first.</summary>
     public int MaxChannels { get; set; } = 300;
+    /// <summary>Free TV guides (XMLTV) for the "on now" line of Live TV; the first one that has a channel wins.</summary>
+    public List<string> GuideUrls { get; set; } = new(ProgramGuideSources.Default);
 
     public static bool IsPlaylistFile(string path) =>
         Path.IsPathRooted(path) && (path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));

@@ -72,6 +72,7 @@ public partial class MainWindow : Window, IShell
             // First run: nothing is paired yet, so show the pairing code straight away (no need to find Settings).
             if (_tv.Server is not null && _tv.Pairing.Devices.Count == 0) Dialogs.Pair(this);
             _ = CheckForUpdateAsync(userAsked: false);
+            _tv.StartGuide();
             await _tv.RefreshChannelsAsync();
         };
         Closed += (_, _) => { CloseWeb(); _player?.Close(); _tv.Apps.Close(); _tv.Dispose(); };

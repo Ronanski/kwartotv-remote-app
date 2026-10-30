@@ -5,7 +5,7 @@ namespace KwartoTV.Core;
 
 public enum StreamKind { Hls, Direct, YouTube }
 
-public sealed record Channel(string Id, string Name, string Url, string? LogoUrl, string Group, StreamKind Kind, string? Referrer = null, string? UserAgent = null)
+public sealed record Channel(string Id, string Name, string Url, string? LogoUrl, string Group, StreamKind Kind, string? Referrer = null, string? UserAgent = null, string? TvgId = null)
 {
     public static StreamKind DetectKind(string url)
     {

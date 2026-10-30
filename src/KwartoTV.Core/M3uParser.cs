@@ -28,7 +28,7 @@ public static class M3uParser
     {
         var result = new List<Channel>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string? name = null, logo = null, group = null, referrer = null, userAgent = null;
+        string? name = null, logo = null, group = null, referrer = null, userAgent = null, tvgId = null;
         bool pending = false;
 
         foreach (var raw in text.Split('\n'))
@@ -49,6 +49,7 @@ public static class M3uParser
                 if (name.Length == 0) name = attrs.GetValueOrDefault("tvg-name") ?? "";
                 logo = attrs.GetValueOrDefault("tvg-logo");
                 group = attrs.GetValueOrDefault("group-title");
+                tvgId = attrs.GetValueOrDefault("tvg-id");
                 pending = true;
                 continue;
             }
@@ -82,8 +83,8 @@ public static class M3uParser
                 if (Uri.TryCreate(baseUri, line, out uri) && uri.IsAbsoluteUri) line = uri.AbsoluteUri;
             }
             if (uri is null || !uri.IsAbsoluteUri || !IsStreamUri(uri))
-            { pending = false; referrer = userAgent = null; continue; }
-            if (!seen.Add(line)) { pending = false; referrer = userAgent = null; continue; }
+            { pending = false; referrer = userAgent = tvgId = null; continue; }
+            if (!seen.Add(line)) { pending = false; referrer = userAgent = tvgId = null; continue; }
 
             var finalName = pending && !string.IsNullOrWhiteSpace(name)
                 ? name!
@@ -92,8 +93,8 @@ public static class M3uParser
                 Channel.StableId(line), finalName, line,
                 string.IsNullOrWhiteSpace(logo) ? null : logo,
                 CleanGroup(group, finalName),
-                Channel.DetectKind(line), referrer, userAgent));
-            name = logo = group = referrer = userAgent = null; pending = false;
+                Channel.DetectKind(line), referrer, userAgent, string.IsNullOrWhiteSpace(tvgId) ? null : tvgId));
+            name = logo = group = referrer = userAgent = tvgId = null; pending = false;
         }
         return result;
     }

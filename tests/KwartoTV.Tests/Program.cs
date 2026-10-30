@@ -682,6 +682,32 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(ChannelCatalog.BuildLineup(new[] { eng with { Selected = big.Take(500).Select(c => c.Id).ToList() } }, loadedC).Count == 500, "channels picked by hand are all kept");
 }
 
+// ---- programme guide (XMLTV): now and next, matched by guide id or by name
+{
+    const string Xml = "<?xml version=\"1.0\"?><!DOCTYPE tv SYSTEM \"xmltv.dtd\"><tv>" +
+        "<channel id=\"GMA.ph\"><display-name>GMA</display-name><display-name lang=\"en\">GMA Network</display-name></channel>" +
+        "<channel id=\"tv5x\"><display-name>TV5 HD</display-name></channel>" +
+        "<programme start=\"20261030120000 +0800\" stop=\"20261030130000 +0800\" channel=\"GMA.ph\"><title>Eat Bulaga</title><desc>Noontime show</desc></programme>" +
+        "<programme start=\"20261030130000 +0800\" stop=\"20261030140000 +0800\" channel=\"GMA.ph\"><title lang=\"tl\">Afternoon Drama</title></programme>" +
+        "<programme start=\"20261029000000 +0800\" stop=\"20261029010000 +0800\" channel=\"GMA.ph\"><title>Too Old</title></programme>" +
+        "<programme start=\"20261030110000 +0800\" stop=\"20261030150000 +0800\" channel=\"tv5x\"><title>Movie Block</title></programme>" +
+        "</tv>";
+    var at = new DateTimeOffset(2026, 10, 30, 12, 30, 0, TimeSpan.FromHours(8));
+    var g = ProgramGuide.Parse(new MemoryStream(Encoding.UTF8.GetBytes(Xml)), at.AddHours(-2), at.AddHours(12));
+    var gma = new Channel("g", "GMA Network (1080p)", "https://example.invalid/g.m3u8", null, "Local TV", StreamKind.Hls, TvgId: "GMA.ph@SD");
+    var (now, next) = g.NowNext(gma, at);
+    Check(now?.Title == "Eat Bulaga" && now.Description == "Noontime show" && next?.Title == "Afternoon Drama", "guide: now and next by guide id (feed suffix ignored), description kept");
+    Check(g.NowNext(gma with { TvgId = null }, at).Now?.Title == "Eat Bulaga", "guide: matched by name when there is no guide id");
+    Check(g.NowNext(new Channel("t", "TV5 (720p) [Geo-blocked]", "https://example.invalid/t.m3u8", null, "Local TV", StreamKind.Hls), at).Now?.Title == "Movie Block", "guide: 'TV5 (720p) [Geo-blocked]' matches 'TV5 HD'");
+    Check(g.NowNext(new Channel("x", "Unknown", "https://example.invalid/x.m3u8", null, "Other", StreamKind.Hls), at) == (null, null), "guide: unknown channel has nothing");
+    Check(ProgramGuide.TryParseTime("20261030120000 +0800", out var t8) && t8.UtcDateTime == new DateTime(2026, 10, 30, 4, 0, 0) && ProgramGuide.TryParseTime("20261030120000", out var tz) && tz.Offset == TimeSpan.Zero && !ProgramGuide.TryParseTime("junk", out _), "guide: XMLTV times with and without a zone");
+    var gz = new MemoryStream();
+    using (var z = new System.IO.Compression.GZipStream(gz, System.IO.Compression.CompressionLevel.Fastest, leaveOpen: true)) z.Write(Encoding.UTF8.GetBytes(Xml));
+    gz.Position = 0;
+    Check(ProgramGuide.Parse(gz, at.AddHours(-2), at.AddHours(12)).NowNext(gma, at).Now?.Title == "Eat Bulaga", "guide: gzip guide is read too");
+    Check(M3uParser.Parse("#EXTM3U\n#EXTINF:-1 tvg-id=\"GMA.ph@SD\" group-title=\"General\",GMA\nhttps://example.invalid/g.m3u8\n").Single().TvgId == "GMA.ph@SD", "playlist keeps the guide id (tvg-id)");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

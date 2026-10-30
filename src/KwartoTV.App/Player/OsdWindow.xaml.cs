@@ -25,11 +25,15 @@ public partial class OsdWindow : Window
         _progressTimer.Tick += (_, _) => { _progressTimer.Stop(); Progress.Visibility = Visibility.Collapsed; };
     }
 
-    public void ShowBanner(Channel ch, int number, bool favorite)
+    public void ShowBanner(Channel ch, int number, bool favorite, string? onNow = null, string? onNext = null)
     {
         BannerNumber.Text = number.ToString();
         BannerName.Text = ch.Name + (favorite ? "  ★" : "");
         BannerGroup.Text = ch.Group;
+        BannerNow.Text = onNow is null ? "" : "▶ Now: " + onNow;
+        BannerNow.Visibility = onNow is null ? Visibility.Collapsed : Visibility.Visible;
+        BannerNext.Text = onNext is null ? "" : "Next: " + onNext;
+        BannerNext.Visibility = onNext is null ? Visibility.Collapsed : Visibility.Visible;
         Banner.Visibility = Visibility.Visible;
         _bannerTimer.Stop(); _bannerTimer.Start();
     }
@@ -46,14 +50,14 @@ public partial class OsdWindow : Window
         MessageBox.Visibility = string.IsNullOrEmpty(text) || Guide.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public void ShowGuide(IReadOnlyList<(int Number, Channel Channel, bool Favorite)> rows, int selected, string category, string position)
+    public void ShowGuide(IReadOnlyList<(int Number, Channel Channel, bool Favorite, string? OnNow)> rows, int selected, string category, string position)
     {
         GuideTitle.Text = category;
         GuideSub.Text = position;
         GuideRows.Children.Clear();
         for (int i = 0; i < rows.Count; i++)
         {
-            var (num, ch, fav) = rows[i];
+            var (num, ch, fav, onNow) = rows[i];
             var on = i == selected;
             var row = new Grid { Margin = new Thickness(0, 2, 0, 2) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(78) });
@@ -61,12 +65,15 @@ public partial class OsdWindow : Window
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var n = new TextBlock { Text = num.ToString(), FontSize = 24, FontWeight = FontWeights.Bold, Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             var name = new TextBlock { Text = ch.Name, FontSize = 24, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            // the programme on now, under the channel name (when the TV guide has this channel)
+            var now = new TextBlock { Text = onNow ?? "", FontSize = 17, TextTrimming = TextTrimming.CharacterEllipsis, Visibility = onNow is null ? Visibility.Collapsed : Visibility.Visible };
+            var nameCol = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { name, now } };
             var star = new TextBlock { Text = fav ? "★" : "", FontSize = 22, Margin = new Thickness(8, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(name, 1); Grid.SetColumn(star, 2);
-            row.Children.Add(n); row.Children.Add(name); row.Children.Add(star);
+            Grid.SetColumn(nameCol, 1); Grid.SetColumn(star, 2);
+            row.Children.Add(n); row.Children.Add(nameCol); row.Children.Add(star);
             var fg = on ? new SolidColorBrush(Color.FromRgb(0x1A, 0x0D, 0x05)) : Brushes.White;
             n.Foreground = on ? fg : new SolidColorBrush(Color.FromRgb(0xFF, 0xB3, 0x6B));
-            name.Foreground = fg; star.Foreground = on ? fg : new SolidColorBrush(Color.FromRgb(0xFF, 0x7A, 0x45));
+            name.Foreground = fg; now.Foreground = on ? fg : new SolidColorBrush(Color.FromRgb(0x9A, 0xA3, 0xB8)); star.Foreground = on ? fg : new SolidColorBrush(Color.FromRgb(0xFF, 0x7A, 0x45));
             GuideRows.Children.Add(new Border
             {
                 Child = row, CornerRadius = new CornerRadius(12), Padding = new Thickness(0, 9, 0, 9),

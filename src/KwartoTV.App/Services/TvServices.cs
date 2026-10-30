@@ -26,6 +26,65 @@ public sealed class TvServices : IDisposable
 
     public event Action? ChannelsChanged;
 
+    // ---------- TV guide: what is on now and next
+
+    /// <summary>The merged TV guide (empty until the first download, or when no guide covers the channels).</summary>
+    public ProgramGuide Guide { get; private set; } = ProgramGuide.Empty;
+    public event Action? GuideChanged;
+
+    /// <summary>Loads the guides from the cache, downloads the ones that are old, and does it again every few hours.</summary>
+    public void StartGuide() => _ = Task.Run(async () =>
+    {
+        while (true)
+        {
+            await LoadGuideAsync();
+            await Task.Delay(TimeSpan.FromHours(1));
+        }
+    });
+
+    private async Task LoadGuideAsync()
+    {
+        var now = DateTimeOffset.Now;
+        var guides = new List<ProgramGuide>();
+        var urls = Settings.GuideUrls.ToList();
+        for (int i = 0; i < urls.Count; i++)
+        {
+            var file = AppPaths.GuideCache(i);
+            try
+            {
+                if (!File.Exists(file) || DateTime.UtcNow - File.GetLastWriteTimeUtc(file) > ProgramGuideSources.RefreshAfter)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                    var tmp = file + ".tmp";
+                    using (var resp = await Http.GetAsync(urls[i], HttpCompletionOption.ResponseHeadersRead))
+                    {
+                        resp.EnsureSuccessStatusCode();
+                        await using var src = await resp.Content.ReadAsStreamAsync();
+                        await using var dst = File.Create(tmp);
+                        await src.CopyToAsync(dst);
+                    }
+                    File.Move(tmp, file, overwrite: true);
+                }
+                await using var read = File.OpenRead(file);
+                var g = ProgramGuide.Parse(read, now.AddHours(-3), now.AddHours(24));
+                guides.Add(g);
+                AppPaths.LogLine($"guide: {urls[i]}: {g.ChannelCount} channels");
+            }
+            catch (Exception ex) { AppPaths.LogLine($"guide: {urls[i]}: {ex.Message}"); }
+        }
+        if (guides.Count == 0) return;
+        Guide = ProgramGuide.Merge(guides);
+        GuideChanged?.Invoke();
+    }
+
+    /// <summary>"Eat Bulaga  ·  12:00–1:00 PM" for a channel, or null when the guide has nothing for it.</summary>
+    public (string? Now, string? Next) OnAir(Channel ch)
+    {
+        var (now, next) = Guide.NowNext(ch, DateTimeOffset.Now);
+        static string Fmt(Programme p) => $"{p.Title}  ·  {p.Start.ToLocalTime():h:mm}–{p.Stop.ToLocalTime():h:mm tt}";
+        return (now is null ? null : Fmt(now), next is null ? null : Fmt(next));
+    }
+
     public TvServices(IHostActions host)
     {
         AppPaths.Ensure();
