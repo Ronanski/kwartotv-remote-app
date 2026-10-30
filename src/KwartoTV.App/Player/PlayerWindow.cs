@@ -310,7 +310,10 @@ public sealed class PlayerWindow : Window
                 case Key.Down: MoveGuide(1); return true;
                 case Key.PageUp: MoveGuide(-8); return true;
                 case Key.PageDown: MoveGuide(8); return true;
-                case Key.Enter: if (_guideIndex < _guideList.Count) lineup.TuneNumber(_guideList[_guideIndex].Number); return true;
+                case Key.Enter:
+                    if (_guideIndex < _guideList.Count && _guideList[_guideIndex].Number == 0) OpenSearchKeyboard();
+                    else if (_guideIndex < _guideList.Count) lineup.TuneNumber(_guideList[_guideIndex].Number);
+                    return true;
                 case Key.Left: SwitchGroup(-1); return true;
                 case Key.Right: SwitchGroup(+1); return true;
                 case Key.F: ToggleGuideFavorite(); return true;
@@ -369,7 +372,11 @@ public sealed class PlayerWindow : Window
     private int _guideGroup;
     private List<(int Number, Channel Channel)> _guideList = new();
 
-    private const string AllGroup = "All channels", FavoritesGroup = "★ Favorites";
+    private const string AllGroup = "All channels", FavoritesGroup = "★ Favorites", SearchGroup = "🔍 Search";
+    // The first row of the search list: OK on it opens the keyboard.
+    private static readonly Channel SearchRow = new("search", "", "", null, "", StreamKind.Hls);
+    private string _search = "";
+    private Ui.OskWindow? _searchKeyboard;
 
     /// <summary>Opens (or closes) the channel list. Used by the OK key and by the phone's "Channel list" button.</summary>
     public void ToggleGuide() { if (_guideOpen) CloseGuide(); else OpenGuide(); }
@@ -386,6 +393,8 @@ public sealed class PlayerWindow : Window
         _spaceMembers = _tv.Spaces().ToDictionary(s => "📺 " + s.Playlist.Name, s => s.Channels.Select(c => c.Channel.Id).ToHashSet());
         _guideGroups.AddRange(_spaceMembers.Keys);
         _guideGroups.AddRange(_tv.Lineup.Groups);
+        // last, so ◀ from "All channels" reaches it in one press
+        _guideGroups.Add(SearchGroup);
         // Start in the category of the channel being watched, so "where am I" is obvious.
         var cur = _tv.Lineup.Current;
         _guideGroup = category is not null && _guideGroups.IndexOf(category) is >= 0 and var gi ? gi : 0;
@@ -403,6 +412,26 @@ public sealed class PlayerWindow : Window
         var all = _tv.Lineup.Channels;
         var name = _guideGroups[_guideGroup];
         var list = new List<(int, Channel)>();
+        if (name == SearchGroup)
+        {
+            list.Add((0, SearchRow));
+            var q = _search.Trim().ToLowerInvariant();
+            if (q.Length > 0)
+            {
+                var digits = q.All(char.IsDigit);
+                var squeezed = q.Replace(" ", "");
+                var hits = new List<(int, Channel)>();
+                for (int i = 0; i < all.Count; i++)
+                {
+                    var hit = digits ? (i + 1).ToString().StartsWith(q, StringComparison.Ordinal) : all[i].Name.ToLowerInvariant().Replace(" ", "").Contains(squeezed, StringComparison.Ordinal);
+                    if (hit) hits.Add((i + 1, all[i]));
+                }
+                // an exact number first ("12" → channel 12 before 120-129)
+                list.AddRange(digits ? hits.OrderBy(h => h.Item1.ToString() == q ? 0 : 1).ThenBy(h => h.Item1) : hits);
+            }
+            _guideList = list;
+            return;
+        }
         for (int i = 0; i < all.Count; i++)
         {
             var c = all[i];
@@ -429,6 +458,35 @@ public sealed class PlayerWindow : Window
         DrawGuide();
     }
 
+    private void OpenSearchKeyboard()
+    {
+        if (_searchKeyboard is not null) return;
+        var osk = new Ui.OskWindow(new SearchTarget(this)) { Owner = this };
+        _searchKeyboard = osk;
+        osk.Closed += (_, _) => { _searchKeyboard = null; Dispatcher.BeginInvoke(() => { Activate(); Focus(); }); };
+        osk.Show();
+    }
+
+    private void SearchChanged(string text, bool done)
+    {
+        _search = text;
+        BuildGuideList();
+        // after typing, the first match is ready for OK
+        _guideIndex = done && _guideList.Count > 1 ? 1 : 0;
+        DrawGuide();
+    }
+
+    /// <summary>The on-screen keyboard types into the channel search.</summary>
+    private sealed class SearchTarget : Ui.ITextTarget
+    {
+        private readonly PlayerWindow _w;
+        public SearchTarget(PlayerWindow w) => _w = w;
+        public void Insert(string text) => _w.SearchChanged(_w._search + text, false);
+        public void Backspace() => _w.SearchChanged(_w._search.Length > 0 ? _w._search[..^1] : "", false);
+        public void Clear() => _w.SearchChanged("", false);
+        public void Submit() { _w.SearchChanged(_w._search, true); _w._searchKeyboard?.Close(); }
+    }
+
     private void DrawGuide()
     {
         const int rows = 11;
@@ -441,6 +499,7 @@ public sealed class PlayerWindow : Window
             slice.Add((_guideList[i].Number, ch, _tv.Lineup.IsFavorite(ch.Id), _tv.OnAir(ch).Now));
         }
         var title = _guideGroups[_guideGroup];
+        if (title == SearchGroup && _search.Length > 0) title += ": " + _search;
         _osd.ShowGuide(slice, _guideIndex - start, n == 0 ? title + "  (empty)" : title,
             $"{(n == 0 ? 0 : _guideIndex + 1)} of {n}   ·   category {_guideGroup + 1}/{_guideGroups.Count}");
     }

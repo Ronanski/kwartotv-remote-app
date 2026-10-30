@@ -63,7 +63,9 @@ public partial class OsdWindow : Window
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(78) });
             row.ColumnDefinitions.Add(new ColumnDefinition());
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var n = new TextBlock { Text = num.ToString(), FontSize = 24, FontWeight = FontWeights.Bold, Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            // number 0 is the search row: OK on it opens the keyboard
+            if (num == 0) ch = ch with { Name = "⌨  Type a channel name or number" };
+            var n = new TextBlock { Text = num == 0 ? "🔍" : num.ToString(), FontSize = 24, FontWeight = FontWeights.Bold, Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             var name = new TextBlock { Text = ch.Name, FontSize = 24, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
             // the programme on now, under the channel name (when the TV guide has this channel)
             var now = new TextBlock { Text = onNow ?? "", FontSize = 17, TextTrimming = TextTrimming.CharacterEllipsis, Visibility = onNow is null ? Visibility.Collapsed : Visibility.Visible };
