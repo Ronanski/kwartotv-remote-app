@@ -66,6 +66,16 @@ public static class TvWebScript
   function scope() {
     var m = document.querySelectorAll('[role=dialog],[aria-modal=true],.previewModal--container.detail-modal,.detail-modal-container');
     for (var i = m.length - 1; i >= 0; i--) if (visible(m[i]) && m[i].getBoundingClientRect().width > window.innerWidth * 0.3) return m[i];
+    // A pop-up without those marks (a notice, a sign-in box): whatever covers the middle of the screen in a fixed layer.
+    var el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+    for (; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+      var st = getComputedStyle(el);
+      if (st.position === 'fixed' && el.getBoundingClientRect().width > window.innerWidth * 0.2 && el.querySelector(SEL)) {
+        // the page's own fixed frame (a full-page app shell) is not a pop-up
+        if (el.querySelectorAll(SEL).length > 60) break;
+        return el;
+      }
+    }
     return document;
   }
   function candidates() {
@@ -168,6 +178,7 @@ public static class TvWebScript
     var m = scope();
     if (m !== document) {
       var close = m.querySelector('[aria-label*=""close"" i],.previewModal-close,[data-uia*=""close""]');
+      if (!close) close = Array.prototype.find.call(m.querySelectorAll('[class*=""close"" i],' + SEL), function (b) { return /^\s*[x×✕✖]\s*$/i.test(b.textContent || '') || /close/i.test(String(b.className)); });
       if (close) { close.click(); cur = null; return; }
     }
     if (fullVideo()) { document.exitFullscreen().catch(function () { }); return; }
