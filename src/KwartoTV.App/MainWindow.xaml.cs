@@ -427,9 +427,47 @@ public partial class MainWindow : Window, IShell
         if (_focusBeforeDialog is UIElement u && u.IsVisible) Keyboard.Focus(u); else _current?.FocusFirst();
     }
 
+    // Only five keys are needed (arrows and OK): on buttons a short OK acts when it is let go, and holding OK for half a
+    // second is Back. Text boxes and the on-screen keyboard keep OK as it was (the keyboard repeats keys while OK is held).
+    private static readonly TimeSpan HoldForBack = TimeSpan.FromMilliseconds(500);
+    private DateTime _okDownAt;
+    private bool _okDown, _okHeldDone;
+
+    private void GoBack()
+    {
+        if (KeyboardOpen) HideKeyboard();
+        else if (DialogOpen) CloseDialog();
+        else if (_currentName == "Picker") ShowSettings();
+        else if (_currentName != "Home") Navigate("Home");
+    }
+
+    protected override void OnPreviewKeyUp(KeyEventArgs e)
+    {
+        base.OnPreviewKeyUp(e);
+        if (e.Key != Key.Enter || !_okDown) return;
+        _okDown = false;
+        e.Handled = true;
+        if (_okHeldDone) return;
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.ButtonBase b && b.IsEnabled)
+            b.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        else
+        {
+            // OK with nothing selected (focus was lost): select the first control instead of doing nothing.
+            FrameworkElement scope = KeyboardOpen ? OskHost : DialogOpen ? DialogCard : (FrameworkElement)Content;
+            SpatialNav.Move(scope, Key.Down);
+        }
+    }
+
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
+        if (e.Key == Key.Enter && !KeyboardOpen && Keyboard.FocusedElement is not TextBox)
+        {
+            e.Handled = true;
+            if (!e.IsRepeat) { _okDown = true; _okHeldDone = false; _okDownAt = DateTime.UtcNow; }
+            else if (_okDown && !_okHeldDone && DateTime.UtcNow - _okDownAt >= HoldForBack) { _okHeldDone = true; GoBack(); }
+            return;
+        }
         // Arrow keys (the remote's d-pad): our own TV-style focus movement, everywhere on this window.
         if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right && Keyboard.Modifiers == ModifierKeys.None)
         {
@@ -450,10 +488,7 @@ public partial class MainWindow : Window, IShell
         }
         if (e.Key is Key.Escape or Key.BrowserBack)
         {
-            if (KeyboardOpen) HideKeyboard();
-            else if (DialogOpen) CloseDialog();
-            else if (_currentName == "Picker") ShowSettings();
-            else if (_currentName != "Home") Navigate("Home");
+            GoBack();
             e.Handled = true;
             return;
         }
