@@ -59,6 +59,8 @@ $p = $null
 for ($i = 0; $i -lt 20 -and -not $p; $i++) { Start-Sleep -Seconds 1; $p = Get-Process KwartoTV -ErrorAction SilentlyContinue | Select-Object -First 1 }
 Start-Sleep -Seconds 8
 Check ($null -ne $p -and -not $p.HasExited) "app is running as a normal (non-admin) user"
+$task = Get-ScheduledTask -TaskName "KwartoTV Update" -ErrorAction SilentlyContinue
+Check ($null -ne $task -and $task.Principal.RunLevel -eq "Highest" -and $task.Actions[0].Arguments -match "update-task\.ps1") "the installer made the 'KwartoTV Update' task (highest privileges, runs update-task.ps1)"
 if (-not $p) { throw "KwartoTV did not start" }
 
 $base = $null

@@ -71,7 +71,9 @@ public partial class MainWindow : Window, IShell
             _current?.Refresh();
             // First run: nothing is paired yet, so show the pairing code straight away (no need to find Settings).
             if (_tv.Server is not null && _tv.Pairing.Devices.Count == 0) Dialogs.Pair(this);
-            _ = CheckForUpdateAsync(userAsked: false);
+            _updateTimer.Tick += async (_, _) => await AutoUpdateTickAsync();
+            _updateTimer.Start();
+            _ = AutoUpdateTickAsync();
             _tv.StartGuide();
             await _tv.RefreshChannelsAsync();
         };
@@ -79,6 +81,42 @@ public partial class MainWindow : Window, IShell
     }
 
     public TvServices Tv => _tv;
+
+    // ---------- automatic updates
+    // Checked every 6 hours (a TV PC stays on for days). A new version installs by itself once nobody has used the TV for
+    // 15 minutes and nothing is playing, through the update task the installer made (no Windows permission prompt).
+
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(5) };
+    private DateTime _lastUpdateCheck = DateTime.MinValue;
+    private bool _updateToastShown, _updating, _noUpdateTask;
+    private static readonly TimeSpan UpdateCheckEvery = TimeSpan.FromHours(6), IdleBeforeUpdate = TimeSpan.FromMinutes(15);
+
+    private async Task AutoUpdateTickAsync()
+    {
+        if (_updating) return;
+        if (DateTime.UtcNow - _lastUpdateCheck > UpdateCheckEvery)
+        {
+            _lastUpdateCheck = DateTime.UtcNow;
+            await _tv.Updater.CheckAsync();
+            _current?.Refresh();
+        }
+        var info = _tv.Updater.Available;
+        if (info is null) return;
+        bool inUse = _player is { IsVisible: true } || _web is { IsVisible: true } || _tv.Apps.IsRunning || Native.IdleTime < IdleBeforeUpdate;
+        if (!inUse && !_noUpdateTask)
+        {
+            _updating = true;
+            AppPaths.LogLine($"update: installing {info.Version} while the TV is not in use");
+            if (await Updater.StartUpdateTaskAsync()) { await Task.Delay(1500); Application.Current.Shutdown(); return; }
+            // Installed before the update task existed: install from the banner or Settings (Windows asks permission once).
+            _noUpdateTask = true; _updating = false;
+        }
+        if (!_updateToastShown)
+        {
+            _updateToastShown = true;
+            ShowToast(_noUpdateTask ? $"Update {info.Version} is available (Home or Settings → Updates)." : $"Update {info.Version} is ready. It installs by itself when the TV is not in use.");
+        }
+    }
 
     /// <summary>Checks the latest release. On startup it only tells you when something new exists; from Settings it always answers.</summary>
     public async Task CheckForUpdateAsync(bool userAsked)

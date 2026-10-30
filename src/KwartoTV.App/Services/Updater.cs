@@ -36,6 +36,8 @@ public sealed class Updater
     /// </summary>
     public async Task<string?> InstallAsync(UpdateInfo info, IProgress<double>? progress = null)
     {
+        // Installed with the update task: it downloads, checks and installs by itself, with no permission prompt.
+        if (await StartUpdateTaskAsync()) return null;
         try
         {
             var path = Path.Combine(Path.GetTempPath(), "KwartoTV-update", $"KwartoTV-{info.Build}.exe");
@@ -44,6 +46,36 @@ public sealed class Updater
             return null;
         }
         catch (Exception ex) { AppPaths.LogLine("update: " + ex); return "Update failed: " + ex.Message; }
+    }
+
+    public const string TaskName = "KwartoTV Update";
+
+    /// <summary>
+    /// Starts the "KwartoTV Update" scheduled task that the installer made (see installer/update-task.ps1), when it exists for
+    /// the user running KwartoTV. Returns false when there is no such task, so the caller falls back to the permission prompt.
+    /// </summary>
+    public static async Task<bool> StartUpdateTaskAsync()
+    {
+        try
+        {
+            var (code, csv) = await SchTasks($"/Query /TN \"{TaskName}\" /V /FO CSV /NH");
+            // "Run As User" is one of the columns; a task made for another account would never run in this session.
+            if (code != 0 || !csv.Contains(Environment.UserName, StringComparison.OrdinalIgnoreCase)) { AppPaths.LogLine("update: no update task for this user"); return false; }
+            var (run, _) = await SchTasks($"/Run /TN \"{TaskName}\"");
+            AppPaths.LogLine($"update: update task started ({run})");
+            return run == 0;
+        }
+        catch (Exception ex) { AppPaths.LogLine("update task: " + ex.Message); return false; }
+    }
+
+    private static async Task<(int Code, string Output)> SchTasks(string args)
+    {
+        var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe"), args)
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        using var p = Process.Start(psi)!;
+        var output = await p.StandardOutput.ReadToEndAsync();
+        await p.WaitForExitAsync();
+        return (p.ExitCode, output);
     }
 
     /// <summary>

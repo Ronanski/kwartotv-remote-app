@@ -31,6 +31,7 @@ Name: "autostart"; Description: "Start KwartoTV when Windows starts (recommended
 
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "update-task.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\KwartoTV"; Filename: "{app}\KwartoTV.exe"
@@ -50,11 +51,14 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV remote"" dir=in action=allow protocol=TCP localport=8765,8766,8767,8768,8769,18765,28765,38765,48765,58765 profile=any"; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV discovery"" dir=in action=allow protocol=UDP localport=5353 profile=any"; Flags: runhidden
+; In-app updates without a Windows permission prompt: a scheduled task for this user, run with the highest privileges.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\update-task.ps1"" -Register -User ""{username}"""; Flags: runhidden; StatusMsg: "Setting up automatic updates…"
 Filename: "{app}\KwartoTV.exe"; Description: "Start KwartoTV"; Flags: nowait postinstall skipifsilent
 ; Older in-app updates start the installer with /RELAUNCH=1, and it opens the new version (as the normal user).
 Filename: "{app}\KwartoTV.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
 
 [UninstallRun]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\update-task.ps1"" -Unregister"; Flags: runhidden; RunOnceId: "DelUpdateTask"
 Filename: "{sys}\netsh.exe"; Parameters: "http delete urlacl url=http://+:8765/"; Flags: runhidden; RunOnceId: "DelUrlAcl"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV app"""; Flags: runhidden; RunOnceId: "DelFw0"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV remote"""; Flags: runhidden; RunOnceId: "DelFw1"

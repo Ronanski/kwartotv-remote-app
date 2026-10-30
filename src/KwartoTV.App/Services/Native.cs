@@ -22,6 +22,19 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)]
     private struct Input { public uint type; public InputUnion u; }
 
+    [StructLayout(LayoutKind.Sequential)] private struct LastInputInfo { public uint Size; public uint Time; }
+    [DllImport("user32.dll")] private static extern bool GetLastInputInfo(ref LastInputInfo info);
+
+    /// <summary>How long since the last key, mouse or remote input (the phone remote's keys count too).</summary>
+    public static TimeSpan IdleTime
+    {
+        get
+        {
+            var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+            return GetLastInputInfo(ref info) ? TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - info.Time)) : TimeSpan.Zero;
+        }
+    }
+
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint n, Input[] inputs, int size);
     [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
