@@ -96,8 +96,9 @@ class RemoteClient {
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 webSocket.close(1000, null)
+                // onClosed or onFailure always follows and does the retry; retrying here too doubled every reconnect.
                 if (gen != generation) return
-                if (code == 1008) _conn.value = Conn.Rejected("This phone was removed on the TV.") else scheduleRetry(gen)
+                if (code == 1008) _conn.value = Conn.Rejected("This phone was removed on the TV.")
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -183,7 +184,6 @@ class RemoteClient {
     fun disconnect() {
         generation++
         main.removeCallbacksAndMessages(null)
-        socket?.cancel()
         socket = null
         _conn.value = Conn.Idle
     }

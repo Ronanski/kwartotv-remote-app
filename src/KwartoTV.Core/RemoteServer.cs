@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -344,16 +345,22 @@ public sealed class RemoteServer : IAsyncDisposable
         foreach (var c in _clients.Values) _ = Send(c.Socket, msg);
     }
 
-    private static readonly SemaphoreSlim SendGate = new(1, 1);
+    private static readonly ConditionalWeakTable<WebSocket, SemaphoreSlim> SendGates = new();
 
     private static async Task Send(WebSocket ws, string text)
     {
         if (ws.State != WebSocketState.Open) return;
         // WebSocket allows one send at a time; acks and channel broadcasts can overlap.
-        await SendGate.WaitAsync();
-        try { await ws.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, true, CancellationToken.None); }
-        catch { }
-        finally { SendGate.Release(); }
+        // The lock is per phone, and a phone that stops reading is dropped after 5 s, so it cannot stall the others.
+        var gate = SendGates.GetValue(ws, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await ws.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, true, timeout.Token);
+        }
+        catch { try { ws.Abort(); } catch { } }
+        finally { gate.Release(); }
     }
 
     public async ValueTask DisposeAsync()

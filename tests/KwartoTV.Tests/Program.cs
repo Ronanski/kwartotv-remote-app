@@ -436,6 +436,7 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(Updates.IsNewer(ui!, 41) && !Updates.IsNewer(ui!, 42) && !Updates.IsNewer(ui!, 100), "update is newer only when the build number is higher");
     Check(Updates.Parse(Manifest(exeUrl: "https://evil.example/KwartoTV.exe")) is null, "update manifest refuses other hosts");
     Check(Updates.Parse(Manifest(exeUrl: "http://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV.exe")) is null, "update manifest refuses http");
+    Check(Updates.Parse(Manifest(exeUrl: "https://github.com/Ronanski/game-dev-era/releases/download/../../../evil/x/releases/download/v/a.exe")) is null, "update manifest refuses ../ out of this project");
     Check(Updates.Parse(Manifest(sha: "zz")) is null && Updates.Parse("{}") is null && Updates.Parse("junk") is null && Updates.Parse(null) is null, "update manifest refuses bad checksum and garbage");
 
     // download + checksum against a local server (the host check is bypassed by testing the checksum logic on a loopback file)

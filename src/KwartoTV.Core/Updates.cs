@@ -16,7 +16,9 @@ public static class Updates
     /// <summary>Files are only ever downloaded from this project's own releases.</summary>
     public const string AllowedPrefix = "https://github.com/Ronanski/game-dev-era/releases/download/";
 
-    public static bool IsAllowedUrl(string? url) => url is not null && url.StartsWith(AllowedPrefix, StringComparison.Ordinal) && Uri.TryCreate(url, UriKind.Absolute, out _);
+    // Checked on the parsed address, the one actually downloaded: "../" in the text would otherwise lead out of this project.
+    public static bool IsAllowedUrl(string? url) =>
+        url is not null && Uri.TryCreate(url, UriKind.Absolute, out var u) && u.AbsoluteUri.StartsWith(AllowedPrefix, StringComparison.Ordinal);
 
     public static UpdateInfo? Parse(string? json)
     {

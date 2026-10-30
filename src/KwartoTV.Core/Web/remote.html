@@ -206,13 +206,14 @@ $('#pairBtn').onclick=async()=>{
   try{
     const r=await fetch('/pair',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin,name})});
     if(!r.ok){$('#pairMsg').textContent=r.status===403?'Wrong or expired code. Start pairing again on the TV.':'Could not pair ('+r.status+').';return}
-    creds=await r.json();localStorage.setItem(KEY,JSON.stringify(creds));localStorage.setItem('kwartotv.name',name);$('#sendLink').onclick=()=>{const v=$('#linkText').value.trim();if(!/^https?:\/\//.test(v)){toast('Paste a link that starts with https://');return}if(send('playlist.add',v)){toast('Sent. Look at the TV.');$('#linkText').value=''}};
+    creds=await r.json();localStorage.setItem(KEY,JSON.stringify(creds));localStorage.setItem('kwartotv.name',name);
 show();connect();
   }catch{$('#pairMsg').textContent='Cannot reach the TV. Check that you are on the same Wi-Fi.'}
   finally{$('#pairBtn').disabled=false}
 };
 $('#pin').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'');if(e.target.value.length===6)$('#pairBtn').focus()});
 $('#unpair').onclick=()=>forget();
+$('#sendLink').onclick=()=>{const v=$('#linkText').value.trim();if(!/^https?:\/\//.test(v)){toast('Paste a link that starts with https://');return}if(send('playlist.add',v)){toast('Sent. Look at the TV.');$('#linkText').value=''}};
 
 // tabs
 $$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));$$('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+b.dataset.tab))});
