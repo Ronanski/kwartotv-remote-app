@@ -376,6 +376,7 @@ public sealed class PlayerWindow : Window
     // The first row of the search list: OK on it opens the keyboard.
     private static readonly Channel SearchRow = new("search", "", "", null, "", StreamKind.Hls);
     private string _search = "";
+    private event Action? _searchChanged;
     private Ui.OskWindow? _searchKeyboard;
 
     /// <summary>Opens (or closes) the channel list. Used by the OK key and by the phone's "Channel list" button.</summary>
@@ -461,7 +462,7 @@ public sealed class PlayerWindow : Window
     private void OpenSearchKeyboard()
     {
         if (_searchKeyboard is not null) return;
-        var osk = new Ui.OskWindow(new SearchTarget(this)) { Owner = this };
+        var osk = new Ui.OskWindow(new SearchTarget(this), purpose: "live-channel-search", title: "Search channels") { Owner = this };
         _searchKeyboard = osk;
         osk.Closed += (_, _) => { _searchKeyboard = null; Dispatcher.BeginInvoke(() => { Activate(); Focus(); }); };
         osk.Show();
@@ -470,6 +471,7 @@ public sealed class PlayerWindow : Window
     private void SearchChanged(string text, bool done)
     {
         _search = text;
+        _searchChanged?.Invoke();
         BuildGuideList();
         // after typing, the first match is ready for OK
         _guideIndex = done && _guideList.Count > 1 ? 1 : 0;
@@ -485,6 +487,13 @@ public sealed class PlayerWindow : Window
         public void Backspace() => _w.SearchChanged(_w._search.Length > 0 ? _w._search[..^1] : "", false);
         public void Clear() => _w.SearchChanged("", false);
         public void Submit() { _w.SearchChanged(_w._search, true); _w._searchKeyboard?.Close(); }
+        // typing always happens at the end of the search text
+        public void MoveCaret(int delta) { }
+        public string Text => _w._search;
+        public int Caret => _w._search.Length;
+        public bool Secret => false;
+        public bool CanSubmit => false;
+        public event Action? Changed { add => _w._searchChanged += value; remove => _w._searchChanged -= value; }
     }
 
     private void DrawGuide()

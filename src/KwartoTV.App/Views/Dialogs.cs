@@ -12,7 +12,11 @@ namespace KwartoTV.App.Views;
 /// <summary>Modal forms shown over any page. Text fields accept the phone remote's keyboard.</summary>
 public static class Dialogs
 {
-    public sealed record Field(string Label, string Initial = "", Func<string?>? Browse = null);
+    /// <summary>A text box in a form. [Purpose] groups the keyboard's recent entries; by default links share one list and other boxes go by their label.</summary>
+    public sealed record Field(string Label, string Initial = "", Func<string?>? Browse = null, string? Purpose = null)
+    {
+        public string KeyboardPurpose => Purpose ?? (Label.Contains("link", StringComparison.OrdinalIgnoreCase) || Label.Contains("address", StringComparison.OrdinalIgnoreCase) ? "link" : Label.ToLowerInvariant());
+    }
 
     /// <summary>Generic form. onSave returns an error message to keep the dialog open, or null to close it.</summary>
     public static void Form(MainWindow w, string title, string hint, IReadOnlyList<Field> fields, string saveLabel, Func<string[], string?> onSave)
@@ -49,7 +53,11 @@ public static class Dialogs
         buttons.Children.Add(UiKit.ActionButton("Cancel", w.CloseDialog));
         panel.Children.Add(buttons);
         // OK/Enter on a field opens the on-screen keyboard (a physical keyboard can still be typed on directly).
-        foreach (var b in boxes) b.PreviewKeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { w.ShowKeyboard(b); e.Handled = true; } };
+        for (int i = 0; i < boxes.Count; i++)
+        {
+            var b = boxes[i]; var f = fields[i];
+            b.PreviewKeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { w.ShowKeyboard(b, purpose: f.KeyboardPurpose, title: f.Label); e.Handled = true; } };
+        }
         panel.Children.Insert(2, UiKit.Dimmed("Select a box and press OK to type with the on-screen keyboard.", 15));
         w.ShowDialog(panel, boxes.FirstOrDefault());
     }
@@ -112,14 +120,15 @@ public static class Dialogs
         tabs.Children.Add(TabButton("Languages", 2));
         tabs.Children.Add(TabButton("Everything", 3));
         filter.TextChanged += (_, _) => Render();
+        void ShowFilterKeyboard() => w.ShowKeyboard(filter, purpose: "iptv-search", title: "Search the lists");
         // Enter picks the first match; Down moves into the list (a text box would otherwise keep both keys).
         filter.PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == System.Windows.Input.Key.Enter && filter.Text.Length == 0) { w.ShowKeyboard(filter); e.Handled = true; return; }
+            if (e.Key == System.Windows.Input.Key.Enter && filter.Text.Length == 0) { ShowFilterKeyboard(); e.Handled = true; return; }
             if (results.Children.Count == 0 || results.Children[0] is not Button first) return;
             if (e.Key == System.Windows.Input.Key.Enter)
             {
-                if (filter.Text.Length == 0) w.ShowKeyboard(filter); else first.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (filter.Text.Length == 0) ShowFilterKeyboard(); else first.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 e.Handled = true;
             }
             else if (e.Key == System.Windows.Input.Key.Down) { first.Focus(); e.Handled = true; }

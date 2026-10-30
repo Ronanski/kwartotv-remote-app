@@ -10,6 +10,7 @@ public static class AppPaths
     public static string GuideCache(int index) => Path.Combine(Root, "guides", $"guide{index}.xml");
     public static string PastedPlaylists => Path.Combine(Root, "playlists");
     public static string PinoyLivePlaylist => Path.Combine(PastedPlaylists, KwartoTV.Core.PinoyLive.FileName);
+    public static string TypingHistory => Path.Combine(Root, "typing-history.json");
     public static string Log => Path.Combine(Root, "log.txt");
     public static string Profile(string name) => Path.Combine(Root, "profiles", name);
 

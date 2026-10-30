@@ -715,6 +715,41 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(M3uParser.Parse("#EXTM3U\n#EXTINF:-1 tvg-id=\"GMA.ph@SD\" group-title=\"General\",GMA\nhttps://example.invalid/g.m3u8\n").Single().TvgId == "GMA.ph@SD", "playlist keeps the guide id (tvg-id)");
 }
 
+// ---- on-screen keyboard: recent entries, hold-OK alternates, row-to-row movement, the preview window
+{
+    var h = new TypingHistory();
+    Check(!h.Remember("link", "") && !h.Remember("link", "https://") && !h.Remember(null, "x") && h.For("link").Count == 0, "empty, prefix-only and purpose-less entries are not kept");
+    h.Remember("link", "https://a.example"); h.Remember("link", "https://b.example"); h.Remember("link", " https://a.example ");
+    Check(h.For("link").SequenceEqual(new[] { "https://a.example", "https://b.example" }), "newest first, no duplicates, trimmed");
+    for (int i = 0; i < 20; i++) h.Remember("search", "q" + i);
+    Check(h.For("search").Count == TypingHistory.MaxPerPurpose && h.For("search")[0] == "q19", "history is capped per purpose");
+    Check(h.For("other").Count == 0, "purposes are separate");
+    Check(h.Suggest("link", "https://").Count == 2 && h.Suggest("link", "https://B").SequenceEqual(new[] { "https://b.example" }), "suggestions continue what is typed (a bare https:// shows all)");
+    Check(h.Suggest("link", "https://b.example").Count == 0, "an entry already typed in full is not offered again");
+    var file = Path.Combine(Path.GetTempPath(), "kw-typing-" + Guid.NewGuid().ToString("N") + ".json");
+    h.Save(file);
+    Check(TypingHistory.Load(file).For("link").SequenceEqual(h.For("link")), "history survives a save and load");
+    File.Delete(file);
+    Check(TypingHistory.Load(file).Entries.Count == 0, "a missing history file is an empty history");
+
+    Check(OskText.Alternate("a") == "A" && OskText.Alternate("Q") == "q" && OskText.Alternate("1") == "!" && OskText.Alternate("0") == ")", "alternates: case and shifted digits");
+    Check(OskText.Alternate("-") == "_" && OskText.Alternate("%") is null && OskText.Alternate(".com") is null, "alternates: symbols");
+    Check(OskText.IsJustPrefix(" HTTPS:// ") && OskText.IsJustPrefix("") && !OskText.IsJustPrefix("https://x"), "prefix-only text");
+
+    var row = new[] { (0d, 60d), (70d, 130d), (140d, 400d), (410d, 470d) };
+    Check(OskText.Nearest(row, 100) == 1 && OskText.Nearest(row, 300) == 2 && OskText.Nearest(row, 135) == 1, "nearest key under the column (a gap goes to the first)");
+    Check(OskText.Nearest(row, 900) == 3 && OskText.Nearest(row, -50) == 0 && OskText.Nearest(Array.Empty<(double, double)>(), 5) == -1, "nearest key past the ends");
+    Check(OskText.Wrap(0, -1, 5) == 4 && OskText.Wrap(4, 1, 5) == 0 && OskText.Wrap(2, 1, 5) == 3, "arrows wrap round");
+
+    var (b1, a1) = OskText.Window("hello", 2);
+    Check(b1 == "he" && a1 == "llo", "short text is shown whole around the caret");
+    var longText = new string('x', 100) + "END";
+    var (b2, a2) = OskText.Window(longText, longText.Length, 20);
+    Check(b2.StartsWith("…") && b2.EndsWith("END") && a2 == "" && b2.Length == 21, "long text shows its end when the caret is there");
+    var (b3, a3) = OskText.Window(longText, 0, 20);
+    Check(b3 == "" && a3.EndsWith("…") && a3.Length == 21, "long text shows its start when the caret is there");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

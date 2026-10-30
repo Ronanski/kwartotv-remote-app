@@ -23,6 +23,7 @@ public sealed class WebAppWindow : Window
 
     public ForegroundKind Kind { get; }
     private OskWindow? _osk;
+    private WebTextTarget? _text;   // the field the keyboard types into; the page reports its text here
     private int _focusLogs;
 
     /// <summary>The embedded browser could not start (runtime missing). The caller falls back to an external browser.</summary>
@@ -115,7 +116,16 @@ public sealed class WebAppWindow : Window
                 else if (msg == "chup") Dispatcher.BeginInvoke(() => ChannelUp?.Invoke());
                 else if (msg == "chdown") Dispatcher.BeginInvoke(() => ChannelDown?.Invoke());
                 else if (msg?.StartsWith("tvfocus:") == true && _focusLogs++ < 40) AppPaths.LogLine("web highlight: " + msg[8..]);
-                else if (msg == "textfocus" && Kind != ForegroundKind.YouTube) Dispatcher.BeginInvoke(ShowKeyboard);
+                else if (msg?.StartsWith("textfocus") == true && Kind != ForegroundKind.YouTube)
+                {
+                    var kind = msg.Length > 10 ? msg[10..] : "";
+                    Dispatcher.BeginInvoke(() => ShowKeyboard(kind));
+                }
+                else if (msg?.StartsWith("textstate:") == true)
+                {
+                    var state = msg[10..];
+                    Dispatcher.BeginInvoke(() => _text?.Update(state));
+                }
             };
             core.Navigate(_url);
             _web.Focus();
@@ -127,14 +137,20 @@ public sealed class WebAppWindow : Window
         }
     }
 
-    private void ShowKeyboard()
+    /// <summary>Opens the on-screen keyboard for the page's focused field. [kind] is what the page says the field is.</summary>
+    private void ShowKeyboard(string kind)
     {
         if (_osk is not null || !IsVisible) return;
-        var osk = new OskWindow(new WebTextTarget(_web)) { Owner = this };
-        _osk = osk;
-        osk.Closing_ += () => { _osk = null; Dispatcher.BeginInvoke(() => { Activate(); _web.Focus(); }); };
-        osk.Closed += (_, _) => _osk = null;
+        var text = new WebTextTarget(_web, kind);
+        // Recent entries are kept per kind of field (web addresses share them with KwartoTV's own link boxes); never for passwords.
+        string? purpose = kind switch { "password" => null, "search" => "web-search", "email" => "web-email", "url" => "link", _ => "web-text" };
+        string? title = kind switch { "password" => "Password", "search" => "Search", "email" => "E-mail or username", "url" => "Web address", _ => null };
+        var osk = new OskWindow(text, purpose, title) { Owner = this };
+        _osk = osk; _text = text;
+        osk.Closing_ += () => { _osk = null; _text = null; Dispatcher.BeginInvoke(() => { Activate(); _web.Focus(); }); };
+        osk.Closed += (_, _) => { _osk = null; _text = null; };
         osk.Show();
+        text.Refresh();
     }
 
     /// <summary>Give the page keyboard focus again after the window is activated.</summary>

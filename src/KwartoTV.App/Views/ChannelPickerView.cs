@@ -112,7 +112,7 @@ public sealed class ChannelPickerView : PageBase
     {
         var box = new TextBox { Text = _query };
         box.TextChanged += (_, _) => { _query = box.Text.Trim(); _limit = PageSize; RenderList(); };
-        Shell.ShowKeyboard(box, onDone: () => { Refresh(); });
+        Shell.ShowKeyboard(box, onDone: () => { Refresh(); }, purpose: "channel-search", title: "Search channels");
     }
 
     private void RenderList()

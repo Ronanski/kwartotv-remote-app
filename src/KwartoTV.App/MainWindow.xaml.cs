@@ -389,13 +389,17 @@ public partial class MainWindow : Window, IShell
     public bool KeyboardOpen => OskHost.Visibility == Visibility.Visible;
     private TextBox? _oskTarget;
 
-    /// <summary>Opens the on-screen keyboard for a text box (press OK on the box).</summary>
     private Action? _oskDone;
+    private bool _eatEnterRepeat;   // a held OK that pressed Done must not go on to press the next control
 
-    public void ShowKeyboard(TextBox target, Action? onDone = null)
+    /// <summary>
+    /// Opens the on-screen keyboard for a text box (press OK on the box). [purpose] names the kind of field ("link", ...)
+    /// so its recent entries are offered; [title] is shown above the keyboard's preview.
+    /// </summary>
+    public void ShowKeyboard(TextBox target, Action? onDone = null, string? purpose = null, string? title = null)
     {
         _oskTarget = target; _oskDone = onDone;
-        var osk = new OnScreenKeyboard(new TextBoxTarget(target), () => HideKeyboard(next: true));
+        var osk = new OnScreenKeyboard(new TextBoxTarget(target), () => HideKeyboard(next: true), () => HideKeyboard(), purpose, title);
         OskHost.Child = osk;
         OskHost.Visibility = Visibility.Visible;
         // Move the dialog to the top so the keyboard does not cover it.
@@ -406,6 +410,7 @@ public partial class MainWindow : Window, IShell
     public void HideKeyboard(bool next = false)
     {
         if (!KeyboardOpen) return;
+        _eatEnterRepeat = true;
         OskHost.Visibility = Visibility.Collapsed; OskHost.Child = null;
         DialogCard.VerticalAlignment = VerticalAlignment.Center; DialogCard.Margin = new Thickness(0);
         var box = _oskTarget; _oskTarget = null;
@@ -472,6 +477,15 @@ public partial class MainWindow : Window, IShell
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
+        if (e.Key == Key.Enter && e.IsRepeat && _eatEnterRepeat) { e.Handled = true; return; }
+        if (!e.IsRepeat) _eatEnterRepeat = false;
+        // The on-screen keyboard handles the remote itself (wrapping rows, hold OK). Other keys, such as letters typed
+        // on a real keyboard, reach it as text; the page shortcuts below stay off while it is open.
+        if (KeyboardOpen && OskHost.Child is OnScreenKeyboard osk)
+        {
+            if (osk.HandleKey(e)) e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Enter && !KeyboardOpen && Keyboard.FocusedElement is not TextBox)
         {
             e.Handled = true;

@@ -119,7 +119,8 @@
       </Setter>
     </Style>
 
-    <!-- A key of the on-screen keyboard. -->
+    <!-- A key of the on-screen keyboard. The focused key must be easy to spot from the couch: it turns orange,
+         gets a white outline and a glow, and grows a little. Tag "accent" marks Done/Go and an active Shift. -->
     <Style x:Key="Key" TargetType="Button">
       <Setter Property="Focusable" Value="True"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -131,17 +132,41 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="Frame" CornerRadius="10" Background="{StaticResource Surface2}" BorderThickness="2" BorderBrush="Transparent" RenderTransformOrigin="0.5,0.5">
-              <Border.RenderTransform><ScaleTransform x:Name="KeyScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
+            <Grid x:Name="Lift" RenderTransformOrigin="0.5,0.5">
+              <Grid.RenderTransform><ScaleTransform x:Name="FocusScale" ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
+              <Border x:Name="Frame" CornerRadius="10" Background="{StaticResource Surface2}" BorderThickness="3" BorderBrush="Transparent" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform><ScaleTransform x:Name="KeyScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+            </Grid>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Accent}"/>
-                <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
+              <Trigger Property="Tag" Value="accent">
+                <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                <Setter TargetName="Frame" Property="BorderBrush" Value="#66FF7A45"/>
               </Trigger>
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource Accent}"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Accent}"/>
+                <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                <Setter TargetName="Frame" Property="Effect">
+                  <Setter.Value><DropShadowEffect Color="{StaticResource AccentColor}" BlurRadius="26" ShadowDepth="0" Opacity="0.9"/></Setter.Value>
+                </Setter>
+                <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
+                <Setter Property="Panel.ZIndex" Value="5"/>
+                <Trigger.EnterActions>
+                  <BeginStoryboard><Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="FocusScale" Storyboard.TargetProperty="ScaleX" To="1.14" Duration="0:0:0.1"/>
+                    <DoubleAnimation Storyboard.TargetName="FocusScale" Storyboard.TargetProperty="ScaleY" To="1.14" Duration="0:0:0.1"/>
+                  </Storyboard></BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard><Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="FocusScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.08"/>
+                    <DoubleAnimation Storyboard.TargetName="FocusScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.08"/>
+                  </Storyboard></BeginStoryboard>
+                </Trigger.ExitActions>
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
                 <Trigger.EnterActions>
