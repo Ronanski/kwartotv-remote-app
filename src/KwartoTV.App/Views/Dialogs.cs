@@ -225,6 +225,7 @@ public static class Dialogs
             panel.Children.Add(b);
         }
         Option("⭐  Free channel pack: PH, English & Filipino (movies, series, anime, kids, sports, news)", w.AddFreePack);
+        Option("📺  Pinoy Live: GMA, Kapamilya, TV5 and more on YouTube (only while they are live, not 24/7)", w.AddPinoyLive);
         Option("🌐  Playlist link (https://…)", () => Form(w, "Playlist link", "Paste or type the address of an .m3u / .m3u8 playlist.",
             new[] { new Field("Name (optional)"), new Field("Link", "https://") }, "Add", v => { w.AddPlaylistSource(v[0], v[1], false); return null; }));
         Option("📁  Playlist file (.m3u / .m3u8) on this PC", () => { var f = PickPlaylistFile(); if (f is not null) w.AddPlaylistSource(Path.GetFileNameWithoutExtension(f), f, false); });

@@ -13,6 +13,13 @@ jobs:
       - run: node tools/probe/epg.js
       - run: node tools/probe/ph-youtube-live.js
 
+  ph-official:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm i playwright@1.47.2 && npx playwright install --with-deps chromium
+      - run: node tools/probe/ph-official-hls.js
+
   bilibili:
     runs-on: ubuntu-latest
     steps:

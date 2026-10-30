@@ -318,17 +318,6 @@ public partial class MainWindow : Window, IShell
     public async void AddFreePack()
     {
         int added = 0;
-        // The networks' own YouTube live streams (GMA, Kapamilya, TV5, ...) first, so they get the first channel numbers.
-        if (!_tv.Settings.Playlists.Any(p => string.Equals(p.Source, AppPaths.PinoyLivePlaylist, StringComparison.OrdinalIgnoreCase))
-            && _tv.Settings.AddPlaylist(PinoyLive.Name, AppPaths.PinoyLivePlaylist) is null)
-        {
-            var pinoy = _tv.Settings.Playlists.Last();
-            _tv.Settings.Playlists.Remove(pinoy);
-            _tv.Settings.Playlists.Insert(0, pinoy);
-            _tv.Settings.SetSelectionAll(pinoy.Id);
-            _tv.Settings.SetSpace(pinoy.Id, true);
-            added++;
-        }
         foreach (var s in IptvOrg.FreePack)
         {
             if (_tv.Settings.Playlists.Any(p => p.Source == s.Url)) continue;
@@ -344,6 +333,22 @@ public partial class MainWindow : Window, IShell
         await _tv.RefreshChannelsAsync();
         ShowToast($"Checking {_tv.ChosenChannels().Count} channels. The ones that work appear on Home as they pass.");
         GoHome();
+    }
+
+    /// <summary>
+    /// The networks' own YouTube live streams (GMA, Kapamilya, TV5, ...), added only when asked: they are not on around the
+    /// clock, so they show in Live TV only while they are live.
+    /// </summary>
+    public async void AddPinoyLive()
+    {
+        if (_tv.Settings.Playlists.Any(p => string.Equals(p.Source, AppPaths.PinoyLivePlaylist, StringComparison.OrdinalIgnoreCase))) { ShowToast("Pinoy Live is already added."); return; }
+        if (_tv.Settings.AddPlaylist(PinoyLive.Name, AppPaths.PinoyLivePlaylist) is { } err) { ShowToast(err); return; }
+        var pinoy = _tv.Settings.Playlists.Last();
+        _tv.Settings.SetSelectionAll(pinoy.Id);
+        _tv.Settings.SetSpace(pinoy.Id, true);
+        _tv.SaveSettings();
+        ShowToast("Pinoy Live added. Channels show while they are live.");
+        await _tv.RefreshChannelsAsync();
     }
 
     public void AddIptvOrgPlaylist() => Dialogs.IptvOrgPicker(this, pick => AddPlaylistSource(pick.Name + " (iptv-org)", pick.Url, false));
