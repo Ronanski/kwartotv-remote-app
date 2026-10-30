@@ -254,7 +254,9 @@ $before = $hl.Count
 Keys "{F11}"
 Start-Sleep -Seconds 18
 Shot "32-bilibili-opened"
-Keys "{DOWN}"; Keys "{DOWN}"; Keys "{RIGHT}"; Keys "{RIGHT}"
+# Down then Up moves the highlight both on the page and inside the region pop-up that bilibili.tv shows to US runners
+# (the highlight rightly stays inside a pop-up, where Right has nowhere to go).
+Keys "{DOWN}"; Keys "{DOWN}"; Keys "{RIGHT}"; Keys "{UP}"; Keys "{UP}"
 Start-Sleep -Seconds 1
 Shot "33-bilibili-after-arrows"
 $hl2 = @(Get-Content (Join-Path $data "log.txt") | Where-Object { $_ -match "web highlight:" })
