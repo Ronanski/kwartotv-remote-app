@@ -249,6 +249,20 @@ Check ($hl.Count -ge 3) "Netflix: arrow keys move the TV highlight ($($hl.Count)
 Keys "{F1}"
 Start-Sleep -Seconds 2
 
+# Bilibili inside KwartoTV, the same TV highlight; Back from its home page returns to KwartoTV.
+$before = $hl.Count
+Keys "{F11}"
+Start-Sleep -Seconds 18
+Shot "32-bilibili-opened"
+Keys "{DOWN}"; Keys "{DOWN}"; Keys "{RIGHT}"; Keys "{RIGHT}"
+Start-Sleep -Seconds 1
+Shot "33-bilibili-after-arrows"
+$hl2 = @(Get-Content (Join-Path $data "log.txt") | Where-Object { $_ -match "web highlight:" })
+$hl2 | Select-Object -Skip $before -First 12 | ForEach-Object { Write-Host "bilibili: $_" }
+Check (($hl2.Count - $before) -ge 3) "Bilibili: arrow keys move the TV highlight ($($hl2.Count - $before) moves)"
+Keys "{F1}"
+Start-Sleep -Seconds 2
+
 $log = Join-Path $data "log.txt"
 if (Test-Path $log) { Write-Host "---- app log ----"; Get-Content $log; Check (-not (Select-String -Path $log -Pattern "UI error|Fatal|Task error" -Quiet)) "no errors in the app log" } else { Check $true "no errors in the app log (no log file)" }
 

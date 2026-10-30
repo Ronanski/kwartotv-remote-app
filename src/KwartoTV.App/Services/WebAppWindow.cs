@@ -97,8 +97,8 @@ public sealed class WebAppWindow : Window
             // The on-screen keyboard for text fields. YouTube TV has its own keyboard, so skip it there.
             if (Kind != ForegroundKind.YouTube) await core.AddScriptToExecuteOnDocumentCreatedAsync(WebTextTarget.PageScript);
             if (_videoOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(VideoOnlyScript);
-            // Netflix's website is made for a mouse: add TV-style remote navigation and make it bigger for the couch.
-            if (Kind == ForegroundKind.Netflix)
+            // Netflix and other websites are made for a mouse: add TV-style remote navigation and make them bigger for the couch.
+            if (Kind is ForegroundKind.Netflix or ForegroundKind.Web)
             {
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(TvWebScript.Script);
                 _web.ZoomFactor = 1.25;

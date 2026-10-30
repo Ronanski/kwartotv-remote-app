@@ -36,6 +36,7 @@ public sealed class HomeView : PageBase
             UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Live TV", "▶", Color.FromRgb(0x7A, 0x2E, 0x14), Color.FromRgb(0xE8, 0x6A, 0x3A)), Shell.ShowLiveTv, "Live TV"),
             UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("YouTube", "▷", Color.FromRgb(0x5E, 0x10, 0x14), Color.FromRgb(0xC4, 0x1E, 0x24)), Shell.LaunchYouTube, "YouTube"),
             UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Netflix", "N", Color.FromRgb(0x1A, 0x06, 0x08), Color.FromRgb(0x8E, 0x10, 0x18)), Shell.LaunchNetflix, "Netflix"),
+            UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Bilibili", "◉", Color.FromRgb(0x0A, 0x3A, 0x5C), Color.FromRgb(0x00, 0xA1, 0xD6), "anime · dramas"), Shell.LaunchBilibili, "Bilibili"),
             UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Library", "▤", Color.FromRgb(0x14, 0x2A, 0x4A), Color.FromRgb(0x2A, 0x5E, 0xA8)), Shell.ShowLibrary, "Library"),
         };
         foreach (var (space, chs) in tv.Spaces())

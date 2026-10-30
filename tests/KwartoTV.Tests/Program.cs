@@ -341,7 +341,7 @@ using (var ls = new HttpListener())
 
 // ---- Host key map
 Check(HostKeyMap.Navigation("nav.back", ForegroundKind.YouTube)![0].Vk == HostKeyMap.VkEscape && HostKeyMap.Navigation("nav.back", ForegroundKind.KwartoTV)![0].Vk == HostKeyMap.VkEscape, "back is Esc in YouTube and in the app");
-Check(HostKeyMap.Navigation("nav.back", ForegroundKind.Netflix)![0] is { Vk: HostKeyMap.VkEscape, Alt: false } && HostKeyMap.Navigation("nav.back", ForegroundKind.Web)![0].Alt, "back is Esc in Netflix (TV navigation) and Alt+Left in websites");
+Check(HostKeyMap.Navigation("nav.back", ForegroundKind.Netflix)![0] is { Vk: HostKeyMap.VkEscape, Alt: false } && HostKeyMap.Navigation("nav.back", ForegroundKind.Web)![0] is { Vk: HostKeyMap.VkEscape, Alt: false }, "back is Esc in Netflix and websites (TV navigation)");
 Check(HostKeyMap.Navigation("nav.up", ForegroundKind.KwartoTV)![0] is { Vk: HostKeyMap.VkUp, Extended: true } && HostKeyMap.Navigation("nav.ok", ForegroundKind.KwartoTV)![0].Vk == HostKeyMap.VkReturn, "arrows are extended keys");
 Check(HostKeyMap.Navigation("media.mute", ForegroundKind.KwartoTV) is null && HostKeyMap.Media("media.mute")![0].Vk == HostKeyMap.VkVolumeMute && HostKeyMap.Media("media.next")![0].Vk == HostKeyMap.VkMediaNext, "media key mapping");
 Check(HostKeyMap.Seek(-30).Count == 3 && HostKeyMap.Seek(-30)[0].Vk == HostKeyMap.VkLeft && HostKeyMap.Seek(5).Count == 1 && HostKeyMap.Seek(3600).Count == 30, "seek presses");

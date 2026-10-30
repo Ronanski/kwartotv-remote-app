@@ -1,7 +1,7 @@
 namespace KwartoTV.App.Services;
 
 /// <summary>
-/// Makes a website made for a mouse (Netflix) work like a TV app: the arrow keys move a big highlight
+/// Makes a website made for a mouse (Netflix, Bilibili, any website tile) work like a TV app: the arrow keys move a big highlight
 /// between titles and buttons, OK opens, Back goes back, the rows scroll by themselves,
 /// and the mouse pointer and scroll bars are hidden.
 /// The highlight is a separate frame drawn over the page (the page's own styles and layout are not touched),
@@ -11,7 +11,7 @@ public static class TvWebScript
 {
     public const string Script = @"
 (function () {
-  if (window.__kwTv) return; window.__kwTv = true;
+  if (window.__kwTv || window.top !== window) return; window.__kwTv = true;
   var css =
     'html{scrollbar-width:none!important} ::-webkit-scrollbar{display:none!important}' +
     'html.kw-nocursor, html.kw-nocursor *{cursor:none!important}' +
@@ -41,7 +41,7 @@ public static class TvWebScript
     return ring;
   }
 
-  var SEL = 'a[href],button,input,select,textarea,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[tabindex]:not([tabindex=""-1""])';
+  var SEL = 'a[href],button,input,select,textarea,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],video,[tabindex]:not([tabindex=""-1""])';
   // What to highlight first on each screen (the main Play button, the first profile, the first title).
   var PREFER = ['[data-uia=""play-button""]', '[data-uia*=""play-button""]', 'button.color-primary', '.profile-link', '[data-uia=""action-select-profile+primary""]',
     '.title-card-container a', '.slider-refocus', '[data-uia=""login-submit-button""]', 'input'];
@@ -151,14 +151,27 @@ public static class TvWebScript
     return true;
   }
   function typing(el) { return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable); }
-  function watching() { return /\/watch\//.test(location.pathname); }
+  function netflixWatch() { return /netflix\./.test(location.host) && /\/watch\//.test(location.pathname); }
+  function fullVideo() { var f = document.fullscreenElement; return !!f && (f.tagName === 'VIDEO' || !!f.querySelector('video')); }
+  function watching() { return netflixWatch() || fullVideo(); }
+  function theVideo() { var f = document.fullscreenElement, v = (f && (f.tagName === 'VIDEO' ? f : f.querySelector('video'))) || document.querySelector('video'); return v; }
+  // A site's home page (/, /browse, /en, /en-us/ ...): Back from here returns to KwartoTV.
+  function atRoot() { return /^\/(browse|[a-z]{2}(-[a-z]{2})?)?\/?$/i.test(location.pathname); }
+  // OK on a video: play it fullscreen (the site's own player box, so its subtitles stay).
+  function playFull(v) {
+    var box = v.closest('[class*=player i],[id*=player i]') || v;
+    if (box.getBoundingClientRect().width < v.getBoundingClientRect().width * 0.9) box = v;
+    try { var r = box.requestFullscreen(); if (r && r.catch) r.catch(function () { }); } catch (x) { }
+    if (v.paused) v.play().catch(function () { });
+  }
   function back() {
     var m = scope();
     if (m !== document) {
       var close = m.querySelector('[aria-label*=""close"" i],.previewModal-close,[data-uia*=""close""]');
       if (close) { close.click(); cur = null; return; }
     }
-    if (watching() || (history.length > 1 && !/^\/(browse)?\/?$/.test(location.pathname))) { history.back(); cur = null; return; }
+    if (fullVideo()) { document.exitFullscreen().catch(function () { }); return; }
+    if (netflixWatch() || (history.length > 1 && !atRoot())) { history.back(); cur = null; return; }
     window.chrome.webview.postMessage('home');
   }
 
@@ -185,10 +198,15 @@ public static class TvWebScript
   window.addEventListener('keydown', function (e) {
     if (e.key === 'F1') return;
     document.documentElement.classList.add('kw-nocursor');
-    // While a video plays, Netflix's own player keys work (space, ←/→ skip, ↑/↓ volume); OK pauses, Back leaves.
+    // While a video plays: OK pauses/plays, ◀ ▶ skip 10 s, Back leaves. On Netflix its own player keys also work.
     if (watching()) {
+      var v = theVideo();
       if (e.key === 'Escape' || e.key === 'BrowserBack' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); back(); }
-      else if (e.key === 'Enter') { var v = document.querySelector('video'); if (v) { e.preventDefault(); e.stopPropagation(); if (v.paused) v.play(); else v.pause(); } }
+      else if (e.key === 'Enter' || e.key === ' ') { if (v) { e.preventDefault(); e.stopPropagation(); if (v.paused) v.play(); else v.pause(); } }
+      else if (!netflixWatch() && v && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        try { v.currentTime = Math.max(0, v.currentTime + (e.key === 'ArrowRight' ? 10 : -10)); } catch (x) { }
+      }
       return;
     }
     var t = document.activeElement, dir = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.key];
@@ -202,7 +220,7 @@ public static class TvWebScript
     } else if (e.key === 'Enter') {
       if (typing(t)) return;
       var el = cur && document.contains(cur) ? cur : null;
-      if (el) { e.preventDefault(); e.stopImmediatePropagation(); if (typing(el)) el.focus(); el.click(); }
+      if (el) { e.preventDefault(); e.stopImmediatePropagation(); if (el.tagName === 'VIDEO') playFull(el); else { if (typing(el)) el.focus(); el.click(); } }
     } else if (e.key === 'Escape' || e.key === 'BrowserBack' || (e.key === 'Backspace' && !typing(t))) {
       e.preventDefault(); e.stopImmediatePropagation(); back();
     }

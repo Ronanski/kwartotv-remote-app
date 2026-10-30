@@ -13,6 +13,7 @@ public interface IAppLauncher
 public static class AppLaunchPlans
 {
     public const string YouTubeTvUrl = "https://www.youtube.com/tv";
+    public const string BilibiliUrl = "https://www.bilibili.tv/en";
 
     // Netflix from the Microsoft Store. This is only the fallback: the shell looks the real id up on the PC
     // (Get-StartApps | Where Name -like "*Netflix*", see NetflixLocator) and prefers that.

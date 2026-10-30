@@ -267,8 +267,16 @@ public partial class MainWindow : Window, IShell
 
     public void LaunchWeb(WebTile tile)
     {
-        OpenWeb(tile.Url, "web-" + tile.Id, ForegroundKind.Web, null, tile.Name, () => _tv.Apps.LaunchWeb(tile));
+        // Always inside KwartoTV (never an outside browser window), with TV-style remote navigation.
+        OpenWeb(tile.Url, "web-" + tile.Id, ForegroundKind.Web, null, tile.Name, () =>
+        {
+            ShowToast($"Could not open {tile.Name}: Microsoft Edge WebView2 is missing. Install it from microsoft.com/edge/webview2 and try again.");
+            return true;
+        });
     }
+
+    /// <summary>Bilibili (anime, dramas, with English subtitles), inside KwartoTV with TV-style remote navigation.</summary>
+    public void LaunchBilibili() => LaunchWeb(new WebTile("bilibili", "Bilibili", AppLaunchPlans.BilibiliUrl));
 
     /// <summary>Opens a site fullscreen inside KwartoTV. If the embedded browser is not available, uses an external browser window.</summary>
     private void OpenWeb(string url, string profile, ForegroundKind kind, string? userAgent, string name, Func<bool> browserFallback, bool videoOnly = false)
@@ -448,10 +456,10 @@ public partial class MainWindow : Window, IShell
             e.Handled = true;
             return;
         }
-        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube, F6 Netflix, F7 add channels, F8 power menu, F9 iptv-org lists.
-        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or Key.F6 or Key.F7 or Key.F8 or Key.F9 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        // PC keyboard shortcuts: F1 Home, F2 Live TV, F3 Library, F4 Settings, F5 YouTube, F6 Netflix, F7 add channels, F8 power menu, F9 iptv-org lists, F11 Bilibili.
+        if (!DialogOpen && e.Key is Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or Key.F6 or Key.F7 or Key.F8 or Key.F9 or Key.F11 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
-            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; case Key.F6: LaunchNetflix(); break; case Key.F7: AddChannelsMenu(); break; case Key.F9: AddIptvOrgPlaylist(); break; case Key.F8: Dialogs.PowerMenu(this); break; default: ShowSettings(); break; }
+            switch (e.Key) { case Key.F1: GoHome(); break; case Key.F2: ShowLiveTv(); break; case Key.F3: ShowLibrary(); break; case Key.F5: LaunchYouTube(); break; case Key.F6: LaunchNetflix(); break; case Key.F7: AddChannelsMenu(); break; case Key.F9: AddIptvOrgPlaylist(); break; case Key.F11: LaunchBilibili(); break; case Key.F8: Dialogs.PowerMenu(this); break; default: ShowSettings(); break; }
             e.Handled = true;
             return;
         }
