@@ -91,6 +91,11 @@ public sealed class WebAppWindow : Window
                 e.Handled = true;
                 if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps) core.Navigate(e.Uri);
             };
+            // Pages get the TV scripts and can talk to the app, so links stay on https too.
+            core.NavigationStarting += (_, e) =>
+            {
+                if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && u.Scheme != Uri.UriSchemeHttps && u.Scheme != "about") e.Cancel = true;
+            };
             // F1 inside the page returns to the KwartoTV home screen.
             await core.AddScriptToExecuteOnDocumentCreatedAsync(
                 "window.addEventListener('keydown', e => { if (e.key === 'F1') { e.preventDefault(); window.chrome.webview.postMessage('home'); } }, true);");

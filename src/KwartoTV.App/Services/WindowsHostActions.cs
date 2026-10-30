@@ -79,7 +79,8 @@ public sealed class WindowsHostActions : IHostActions
                 Native.TypeText(arg!); return;
 
             case "power.sleep": PowerActions.Sleep(); return;
-            case "power.screenoff": Native.ScreenOff(shell.WindowHandle); return;
+            // The window handle can only be read on the UI thread; this runs on the remote server's thread.
+            case "power.screenoff": Native.ScreenOff(ui.Invoke(() => shell.WindowHandle)); return;
             case "power.screenon": Native.WakeScreen(); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;

@@ -136,6 +136,8 @@ jobs:
     needs: [windows, android]
     # Only main and version tags reach the apps' in-app updater; work branches are built and tested, not shipped.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    # Two runs replacing 'latest' at once could leave an older build published.
+    concurrency: { group: release-latest, cancel-in-progress: false }
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
