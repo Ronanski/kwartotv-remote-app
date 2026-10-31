@@ -82,6 +82,23 @@ public sealed class AppSettings
         if (i >= 0) Playlists[i] = Playlists[i] with { Selected = channelIds.Distinct().ToList() };
     }
 
+    /// <summary>
+    /// Adds or removes one channel of a playlist (the phone's channel finder). A playlist that took every channel
+    /// (no selection yet) first keeps [current], the channels of it that were in the lineup, so picking one by hand
+    /// does not drop the others.
+    /// </summary>
+    public bool SetChosen(string playlistId, string channelId, bool on, IEnumerable<string> current)
+    {
+        var i = Playlists.FindIndex(p => p.Id == playlistId);
+        if (i < 0 || Playlists[i].IsStream) return false;
+        var list = (Playlists[i].Selected ?? current).ToList();
+        var has = list.Contains(channelId);
+        if (on == has) { if (Playlists[i].Selected is null) Playlists[i] = Playlists[i] with { Selected = list }; return false; }
+        if (on) list.Add(channelId); else list.Remove(channelId);
+        Playlists[i] = Playlists[i] with { Selected = list };
+        return true;
+    }
+
     public string? AddWebTile(string name, string url)
     {
         url = (url ?? "").Trim();

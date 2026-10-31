@@ -37,6 +37,14 @@ public sealed class RemoteServer : IAsyncDisposable
     private readonly ConcurrentDictionary<Guid, (string DeviceId, WebSocket Socket)> _clients = new();
     // Phones that asked for the lineup once get it again when it changes.
     private readonly ConcurrentDictionary<Guid, WebSocket> _lineupWatchers = new();
+    // Phones that opened the channel finder get scan progress and the list of working channels as they change.
+    private readonly ConcurrentDictionary<Guid, WebSocket> _catalogWatchers = new();
+
+    /// <summary>
+    /// The channel finder's list (see <see cref="ChannelFinder.CatalogMessage"/>) for a request id. Set by the shell,
+    /// which owns the playlists and the channel checks. Null: this TV has no finder.
+    /// </summary>
+    public Func<string?, string>? Catalog { get; set; }
     private readonly Func<DateTimeOffset> _clock;
     private Task? _loop;
 
@@ -55,7 +63,7 @@ public sealed class RemoteServer : IAsyncDisposable
     public int Port { get; }
 
     /// <summary>Most channels sent to a phone in one lineup message (keeps the message small).</summary>
-    public const int MaxLineupChannels = 500;
+    public const int MaxLineupChannels = 3000;
 
     /// <summary>"Programme  ·  8:00–9:00 PM" for a channel, or null. Set by the shell (the guide lives there).</summary>
     public Func<Channel, string?>? OnAir { get; set; }
@@ -97,6 +105,7 @@ public sealed class RemoteServer : IAsyncDisposable
             {
                 _clients.TryRemove(id, out _);
                 _lineupWatchers.TryRemove(id, out _);
+                _catalogWatchers.TryRemove(id, out _);
                 _ = Task.Run(async () => { try { await c.Socket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "revoked", CancellationToken.None); } catch { } });
             }
         }
@@ -340,6 +349,15 @@ public sealed class RemoteServer : IAsyncDisposable
                     await Send(ws, LineupMessage(_lineup.Channels, OnAir, _lineup.IsFavorite, cmd.Id));
                     continue;
                 }
+                if (cmd?.Cmd == "catalog.get" && Catalog is { } catalog)
+                {
+                    _catalogWatchers[id] = ws;
+                    string msg;
+                    try { msg = await Task.Run(() => catalog(cmd.Id)); }
+                    catch (Exception ex) { msg = JsonSerializer.Serialize(new { type = "ack", id = cmd.Id, ok = false, error = ex.GetType().Name }, Json); }
+                    await Send(ws, msg);
+                    continue;
+                }
                 var res = cmd is null ? new CommandResult(false, "bad json") : _router.Handle(cmd);
                 await Send(ws, JsonSerializer.Serialize(new { type = "ack", id = cmd?.Id, ok = res.Ok, error = res.Error }, Json));
             }
@@ -348,6 +366,7 @@ public sealed class RemoteServer : IAsyncDisposable
         done:
         _clients.TryRemove(id, out _);
         _lineupWatchers.TryRemove(id, out _);
+        _catalogWatchers.TryRemove(id, out _);
         if (ws.State == WebSocketState.CloseReceived)
         {
             try { await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); } catch { }
@@ -374,7 +393,7 @@ public sealed class RemoteServer : IAsyncDisposable
         {
             string? now = null;
             try { now = onAir?.Invoke(ch); } catch { }
-            return new { number = i + 1, name = Cut(ch.Name, 80), group = Cut(ch.Group, 40), favorite = isFavorite?.Invoke(ch.Id) ?? false, now = Cut(now, 120) };
+            return new { number = i + 1, id = ch.Id, name = Cut(ch.Name, 80), group = Cut(ch.Group, 40), favorite = isFavorite?.Invoke(ch.Id) ?? false, now = Cut(now, 120) };
         }).ToList();
         return JsonSerializer.Serialize(new { type = "lineup", id, total = channels.Count, channels = list }, Json);
     }
@@ -390,6 +409,31 @@ public sealed class RemoteServer : IAsyncDisposable
             try { msg = LineupMessage(_lineup.Channels, OnAir, _lineup.IsFavorite); } catch { return; }
             foreach (var ws in _lineupWatchers.Values) _ = Send(ws, msg);
         });
+    }
+
+    private int _catalogQueued;
+
+    /// <summary>Sends the finder's list again to phones that have it open (a scan found more, or a choice changed). At most every 2 s.</summary>
+    public void NotifyCatalogChanged()
+    {
+        if (_catalogWatchers.IsEmpty || Catalog is not { } catalog) return;
+        if (Interlocked.Exchange(ref _catalogQueued, 1) == 1) return;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            Interlocked.Exchange(ref _catalogQueued, 0);
+            string msg;
+            try { msg = catalog(null); } catch { return; }
+            foreach (var ws in _catalogWatchers.Values) _ = Send(ws, msg);
+        });
+    }
+
+    /// <summary>Scan progress for phones with the finder open (small, so it can be sent often).</summary>
+    public void NotifyScan(ScanProgress progress)
+    {
+        if (_catalogWatchers.IsEmpty) return;
+        var msg = ChannelFinder.ScanMessage(progress);
+        foreach (var ws in _catalogWatchers.Values) _ = Send(ws, msg);
     }
 
     private static readonly ConditionalWeakTable<WebSocket, SemaphoreSlim> SendGates = new();

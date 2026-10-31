@@ -2,7 +2,10 @@ package com.kwartotv.remote.net
 
 import android.os.Handler
 import android.os.Looper
+import com.kwartotv.remote.Catalog
 import com.kwartotv.remote.Cmd
+import com.kwartotv.remote.Scan
+import com.kwartotv.remote.toggleArg
 import com.kwartotv.remote.Lineup
 import com.kwartotv.remote.SavedTv
 import com.kwartotv.remote.TvMessage
@@ -59,6 +62,14 @@ class RemoteClient {
     /** The TV app is too old to send its channel list. */
     val lineupUnsupported: StateFlow<Boolean> = _lineupUnsupported
 
+    private val _catalog = MutableStateFlow<Catalog?>(null)
+    /** The channel finder's list (working channels only), once asked for with [requestCatalog]. */
+    val catalog: StateFlow<Catalog?> = _catalog
+    private val _catalogUnsupported = MutableStateFlow(false)
+    /** The TV app is too old for the channel finder. */
+    val catalogUnsupported: StateFlow<Boolean> = _catalogUnsupported
+    private var catalogRequest: String? = null
+
     /**
      * True while the app is on screen. In the background nothing reconnects (no retries, no watchdog, no move),
      * so the phone does not keep waking the radio.
@@ -84,7 +95,10 @@ class RemoteClient {
     private var lineupRequest: String? = null
 
     fun connect(target: SavedTv) {
-        if (tv?.deviceId != target.deviceId) { _lineup.value = null; _lineupUnsupported.value = false }
+        if (tv?.deviceId != target.deviceId) {
+            _lineup.value = null; _lineupUnsupported.value = false
+            _catalog.value = null; _catalogUnsupported.value = false
+        }
         disconnect()
         tv = target
         val gen = ++generation
@@ -119,10 +133,14 @@ class RemoteClient {
                     when (m) {
                         is TvMessage.State -> _now.value = Now(m.number, m.channelName)
                         is TvMessage.Channels -> { _lineup.value = m.lineup; _lineupUnsupported.value = false }
+                        is TvMessage.Found -> { _catalog.value = m.catalog; _catalogUnsupported.value = false }
+                        is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
+                            ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)
                         is TvMessage.Ack -> when {
                             m.ok -> Unit
                             // An older TV app does not know the lineup request: say so on the list, not as an error toast.
                             m.id != null && m.id == lineupRequest -> _lineupUnsupported.value = true
+                            m.id != null && m.id == catalogRequest -> _catalogUnsupported.value = true
                             else -> _lastError.value = m.error ?: "Not done"
                         }
                         TvMessage.Unknown -> Unit
@@ -216,6 +234,38 @@ class RemoteClient {
     fun requestLineup(): Boolean {
         val id = sendWithId(Cmd.LINEUP, null) ?: return false
         lineupRequest = id
+        return true
+    }
+
+    /** Asks the TV for the channel finder's list (the answer arrives in [catalog]). False when not connected. */
+    fun requestCatalog(): Boolean {
+        val id = sendWithId(Cmd.CATALOG, null) ?: return false
+        catalogRequest = id
+        return true
+    }
+
+    /**
+     * Adds or removes a working channel on the TV. The row changes right away; the TV sends the real list a moment later.
+     * False when not connected.
+     */
+    fun choose(id: String, on: Boolean): Boolean {
+        if (!send(Cmd.CHOOSE, toggleArg(on, id))) return false
+        _catalog.value = _catalog.value?.let { c -> c.copy(channels = c.channels.map { if (it.id == id) it.copy(chosen = on) else it }) }
+        return true
+    }
+
+    /** Stars or unstars a channel (a starred channel is also added to the TV's channels). */
+    fun star(id: String, on: Boolean): Boolean {
+        if (!send(Cmd.STAR, toggleArg(on, id))) return false
+        _catalog.value = _catalog.value?.let { c -> c.copy(channels = c.channels.map { if (it.id == id) it.copy(favorite = on, chosen = it.chosen || on) else it }) }
+        _lineup.value = _lineup.value?.let { l -> l.copy(channels = l.channels.map { if (it.id == id) it.copy(favorite = on) else it }) }
+        return true
+    }
+
+    /** Adds or removes every working channel of a category. */
+    fun chooseGroup(group: String, on: Boolean): Boolean {
+        if (!send(Cmd.CHOOSE_GROUP, toggleArg(on, group))) return false
+        _catalog.value = _catalog.value?.let { c -> c.copy(channels = c.channels.map { if (it.group == group) it.copy(chosen = on) else it }) }
         return true
     }
 

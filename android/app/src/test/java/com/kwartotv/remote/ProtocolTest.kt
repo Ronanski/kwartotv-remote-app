@@ -130,4 +130,35 @@ class LineupTest {
         assertEquals(listOf(1), filterLineup(c, "", FAVORITES_FILTER).map { it.number })
         assertFalse(filterLineup(c, "", "Kids").any { it.group != "Kids" })
     }
+
+    @Test fun finderCatalogParses() {
+        val json = """{"type":"catalog","id":"5","scan":{"running":true,"done":40,"total":100,"ok":30,"dead":10},"checked":40,"all":100,"total":2,
+            "channels":[{"i":"a1","n":"News One","g":"News","s":true,"f":false},{"i":"b2","n":"Movie Two","g":"Movies","s":false,"f":true},{"n":"no id"}]}"""
+        val m = parseTvMessage(json) as TvMessage.Found
+        val c = m.catalog
+        assertEquals(2, c.channels.size)
+        assertEquals(FinderChannel("a1", "News One", "News", true, false), c.channels[0])
+        assertTrue(c.scan.running)
+        assertEquals(0.4f, c.scan.percent, 0.001f)
+        assertEquals(40, c.checked); assertEquals(100, c.all)
+        assertEquals(listOf("News", "Movies"), catalogGroups(c.channels))
+    }
+
+    @Test fun finderScanMessageAndFilters() {
+        val s = (parseTvMessage("""{"type":"scan","running":false,"done":100,"total":100,"ok":70,"dead":30}""") as TvMessage.Scanning).scan
+        assertFalse(s.running); assertEquals(70, s.ok); assertEquals(1f, s.percent, 0.001f)
+        assertEquals(0f, Scan(true, 0, 0, 0, 0).percent, 0.001f)
+        val rows = listOf(FinderChannel("a", "GMA News", "News", true, false), FinderChannel("b", "Cartoon", "Kids", false, true), FinderChannel("c", "News Two", "News", false, false))
+        assertEquals(listOf("a", "c"), filterCatalog(rows, "", "News").map { it.id })
+        assertEquals(listOf("b"), filterCatalog(rows, "", FAVORITES_FILTER).map { it.id })
+        assertEquals(listOf("a"), filterCatalog(rows, "", CHOSEN_FILTER).map { it.id })
+        assertEquals(listOf("a", "c"), filterCatalog(rows, "news", null).map { it.id })
+        assertEquals("1:a", toggleArg(true, "a")); assertEquals("0:News", toggleArg(false, "News"))
+    }
+
+    @Test fun lineupRowsCarryIds() {
+        val l = parseLineup(org.json.JSONObject("""{"type":"lineup","total":1,"channels":[{"number":1,"id":"x1","name":"X","group":"G","favorite":true}]}"""))
+        assertEquals("x1", l.channels[0].id)
+        assertTrue(l.channels[0].favorite)
+    }
 }

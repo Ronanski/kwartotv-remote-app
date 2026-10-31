@@ -35,6 +35,14 @@ object Cmd {
     const val LINEUP = "lineup.get"
     const val PLAYLIST_ADD = "playlist.add"
 
+    /** Channel finder: the TV checks every channel; the phone lists the ones that work and picks or stars them. */
+    const val SCAN_START = "scan.start"
+    const val SCAN_STOP = "scan.stop"
+    const val CATALOG = "catalog.get"
+    const val CHOOSE = "catalog.choose"
+    const val CHOOSE_GROUP = "catalog.choosegroup"
+    const val STAR = "catalog.favorite"
+
     const val MOUSE_MOVE = "mouse.move"
     const val MOUSE_CLICK = "mouse.click"
     const val MOUSE_RIGHT = "mouse.rightclick"
@@ -97,6 +105,8 @@ sealed interface TvMessage {
     data class State(val number: Int, val channelName: String?) : TvMessage
     data class Ack(val id: String?, val ok: Boolean, val error: String?) : TvMessage
     data class Channels(val lineup: Lineup) : TvMessage
+    data class Found(val catalog: Catalog) : TvMessage
+    data class Scanning(val scan: Scan) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -106,6 +116,8 @@ fun parseTvMessage(text: String): TvMessage = try {
         "state" -> TvMessage.State(o.optInt("number", 0), o.optJSONObject("channel")?.optString("name"))
         "ack" -> TvMessage.Ack(o.optString("id").ifEmpty { null }, o.optBoolean("ok"), if (o.isNull("error")) null else o.optString("error"))
         "lineup" -> TvMessage.Channels(parseLineup(o))
+        "catalog" -> TvMessage.Found(parseCatalog(o))
+        "scan" -> TvMessage.Scanning(parseScan(o))
         else -> TvMessage.Unknown
     }
 } catch (_: Exception) {
@@ -113,12 +125,12 @@ fun parseTvMessage(text: String): TvMessage = try {
 }
 
 /** One row of the TV's channel list, as the phone shows it. [now] is "Programme  ·  8:00–9:00 PM" or null. */
-data class LineupChannel(val number: Int, val name: String, val group: String, val favorite: Boolean, val now: String?)
+data class LineupChannel(val number: Int, val name: String, val group: String, val favorite: Boolean, val now: String?, val id: String? = null)
 
 /** The TV's lineup. [total] can be more than [channels] when the TV has more channels than it sends (it caps the list). */
 data class Lineup(val channels: List<LineupChannel>, val total: Int)
 
-private const val MAX_LINEUP_ROWS = 1000
+private const val MAX_LINEUP_ROWS = 3000
 
 private fun JSONObject.text(key: String): String? = if (isNull(key)) null else optString(key).ifBlank { null }
 
@@ -130,7 +142,7 @@ fun parseLineup(o: JSONObject): Lineup {
             val c = a.optJSONObject(i) ?: continue
             val number = c.optInt("number", 0)
             if (number <= 0) continue
-            rows += LineupChannel(number, c.text("name") ?: "Channel $number", c.text("group") ?: "Other", c.optBoolean("favorite"), c.text("now"))
+            rows += LineupChannel(number, c.text("name") ?: "Channel $number", c.text("group") ?: "Other", c.optBoolean("favorite"), c.text("now"), c.text("id"))
         }
     }
     return Lineup(rows, maxOf(o.optInt("total", rows.size), rows.size))
@@ -153,6 +165,57 @@ fun filterLineup(channels: List<LineupChannel>, query: String, group: String?): 
         val inGroup = group == null || (if (group == FAVORITES_FILTER) ch.favorite else ch.group == group)
         inGroup && (q.isEmpty() || ch.name.contains(q, ignoreCase = true) || (digits && ch.number.toString().startsWith(q)))
     }.sortedByDescending { digits && it.number.toString() == q }
+}
+
+/** Where the TV's check of every channel is. */
+data class Scan(val running: Boolean, val done: Int, val total: Int, val ok: Int, val dead: Int) {
+    val percent: Float get() = if (total <= 0) 0f else (done.toFloat() / total).coerceIn(0f, 1f)
+}
+
+/** A channel that works on the TV. [chosen]: it is in the TV's channels. [favorite]: starred. */
+data class FinderChannel(val id: String, val name: String, val group: String, val chosen: Boolean, val favorite: Boolean)
+
+/** The finder's list: [total] working channels (rows may be fewer), [checked] of [all] channels checked so far. */
+data class Catalog(val channels: List<FinderChannel>, val total: Int, val checked: Int, val all: Int, val scan: Scan)
+
+private const val MAX_FINDER_ROWS = 6000
+
+fun parseScan(o: JSONObject?): Scan = Scan(
+    o?.optBoolean("running") ?: false, o?.optInt("done") ?: 0, o?.optInt("total") ?: 0, o?.optInt("ok") ?: 0, o?.optInt("dead") ?: 0,
+)
+
+fun parseCatalog(o: JSONObject): Catalog {
+    val a = o.optJSONArray("channels")
+    val rows = ArrayList<FinderChannel>()
+    if (a != null) for (i in 0 until minOf(a.length(), MAX_FINDER_ROWS)) {
+        val c = a.optJSONObject(i) ?: continue
+        val id = c.text("i") ?: continue
+        rows += FinderChannel(id, c.text("n") ?: "Channel", c.text("g") ?: "Other", c.optBoolean("s"), c.optBoolean("f"))
+    }
+    return Catalog(rows, maxOf(o.optInt("total", rows.size), rows.size), o.optInt("checked"), o.optInt("all"), parseScan(o.optJSONObject("scan")))
+}
+
+/** Chip value that shows only the channels already on the TV. */
+const val CHOSEN_FILTER = "\u0001chosen"
+
+/** "1:value" turns something on, "0:value" off (the TV's catalog.* commands). */
+fun toggleArg(on: Boolean, value: String) = (if (on) "1:" else "0:") + value
+
+/** Categories in the order the TV sent them (TV order), each once. */
+fun catalogGroups(channels: List<FinderChannel>): List<String> = channels.map { it.group }.distinct()
+
+/** Finder rows for the search box and chip ([group] null = all working channels). */
+fun filterCatalog(channels: List<FinderChannel>, query: String, group: String?): List<FinderChannel> {
+    val q = query.trim()
+    return channels.filter { ch ->
+        val inGroup = when (group) {
+            null -> true
+            FAVORITES_FILTER -> ch.favorite
+            CHOSEN_FILTER -> ch.chosen
+            else -> ch.group == group
+        }
+        inGroup && (q.isEmpty() || ch.name.contains(q, ignoreCase = true))
+    }
 }
 
 fun commandJson(id: String, cmd: String, arg: String?): String {

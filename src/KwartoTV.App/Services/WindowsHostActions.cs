@@ -25,6 +25,8 @@ public interface IShell
     bool PlayerSeek(int seconds);
     bool PlayerSpeed(double speed);
     bool PlayerStop();
+    /// <summary>The phone's channel finder: scan.start/stop, catalog.choose/choosegroup/favorite.</summary>
+    void Finder(string cmd, string? arg);
 }
 
 /// <summary>Windows implementation of IHostActions: navigation keys, media keys, volume, text, apps and power.</summary>
@@ -77,6 +79,9 @@ public sealed class WindowsHostActions : IHostActions
                 Native.MouseScroll(-int.Parse(arg!, CultureInfo.InvariantCulture)); return;
             case "key.text":
                 Native.TypeText(arg!); return;
+
+            case "scan.start" or "scan.stop" or "catalog.choose" or "catalog.choosegroup" or "catalog.favorite":
+                ui.Invoke(() => shell.Finder(cmd, arg)); return;
 
             case "power.sleep": PowerActions.Sleep(); return;
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.

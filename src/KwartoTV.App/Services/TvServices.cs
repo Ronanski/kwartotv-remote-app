@@ -106,6 +106,8 @@ public sealed class TvServices : IDisposable
         Router = new CommandRouter(Lineup, host);
         // A new guide changes the "on now" lines phones show in their channel list.
         GuideChanged += () => Server?.NotifyLineupChanged();
+        // Stars set on the TV (or another phone) show on every phone's lists.
+        Lineup.FavoritesChanged += () => { Server?.NotifyLineupChanged(); Server?.NotifyCatalogChanged(); };
     }
 
     private int _saveQueued;
@@ -358,6 +360,113 @@ public sealed class TvServices : IDisposable
         catch (Exception ex) { AppPaths.LogLine("system download: " + ex.Message); return null; }
     }
 
+    // ---------- channel finder (the phone): check every channel, list the ones that work, pick and star them
+
+    /// <summary>The running (or last) scan of every channel.</summary>
+    public ScanProgress Scan { get; private set; } = ScanProgress.Idle;
+    private CancellationTokenSource? _scanCts;
+
+    private sealed class InlineProgress<T> : IProgress<T>
+    {
+        private readonly Action<T> _report;
+        public InlineProgress(Action<T> report) => _report = report;
+        public void Report(T value) => _report(value);
+    }
+
+    private static T OnUi<T>(Func<T> f)
+    {
+        var d = System.Windows.Application.Current?.Dispatcher;
+        return d is null || d.CheckAccess() ? f() : d.Invoke(f);
+    }
+
+    /// <summary>
+    /// Checks every channel of every playlist from this PC (thousands are fine: up to 32 at a time, results of the last
+    /// day are reused unless [full]). Phones with the finder open see the progress and the working channels as they pass.
+    /// </summary>
+    public void StartScan(bool full)
+    {
+        if (Scan.Running) return;
+        var all = ChannelFinder.All(Settings.Playlists, Library).Select(x => x.Channel).ToList();
+        var cts = _scanCts = new CancellationTokenSource();
+        Scan = new ScanProgress(true, 0, all.Count, 0, 0);
+        Server?.NotifyScan(Scan);
+        AppPaths.LogLine($"scan: {all.Count} channels{(full ? " (full)" : "")}");
+        _ = Task.Run(async () =>
+        {
+            var lastSent = DateTime.MinValue;
+            var gate = new object();
+            ScanProgress Count(bool running, int done)
+            {
+                int ok = 0, dead = 0;
+                foreach (var c in all)
+                    if (Health.TryGetValue(c.Id, out var h)) { if (h.Status == HealthStatus.Ok) ok++; else if (h.Status == HealthStatus.Dead) dead++; }
+                return new ScanProgress(running, Math.Min(done, all.Count), all.Count, ok, dead);
+            }
+            var progress = new InlineProgress<(int Done, int Total)>(p =>
+            {
+                lock (gate)
+                {
+                    if (DateTime.UtcNow - lastSent < TimeSpan.FromMilliseconds(700) && p.Done < p.Total) return;
+                    lastSent = DateTime.UtcNow;
+                }
+                // Channels checked lately were skipped, so they count as done from the start.
+                Scan = Count(true, all.Count - p.Total + p.Done);
+                Server?.NotifyScan(Scan);
+                Server?.NotifyCatalogChanged();
+            });
+            try { await CheckChannelsAsync(all, force: full, progress, cts.Token); }
+            catch (Exception ex) { AppPaths.LogLine("scan: " + ex.Message); }
+            Scan = Count(false, cts.IsCancellationRequested ? Scan.Done : all.Count);
+            AppPaths.LogLine($"scan: done, {Scan.Ok} work, {Scan.Dead} do not");
+            Server?.NotifyScan(Scan);
+            OnUi(() => { RebuildLineup(); return 0; });
+            Server?.NotifyCatalogChanged();
+        });
+    }
+
+    public void StopScan() => _scanCts?.Cancel();
+
+    /// <summary>The finder's list for a phone: only channels that work here, with chosen and favorite flags. Any thread.</summary>
+    public string CatalogJson(string? requestId)
+    {
+        var playlists = OnUi(() => Settings.Playlists.ToList());
+        var all = ChannelFinder.All(playlists, Library);
+        var chosen = new HashSet<string>(Lineup.Channels.Select(c => c.Id));
+        foreach (var p in playlists) if (p.Selected is not null) chosen.UnionWith(p.Selected);
+        return ChannelFinder.CatalogMessage(all, Health, chosen.Contains, Lineup.IsFavorite, Scan, requestId);
+    }
+
+    /// <summary>Adds or removes channels (by id) to the lineup, from the playlist each comes from. UI thread.</summary>
+    private bool ChooseMany(IEnumerable<(Channel Channel, PlaylistEntry Playlist)> picks, bool on)
+    {
+        var inLineup = Lineup.Channels.Select(c => c.Id).ToHashSet();
+        var current = new Dictionary<string, List<string>>();
+        bool changed = false;
+        foreach (var (c, p) in picks)
+        {
+            if (!current.TryGetValue(p.Id, out var cur))
+                current[p.Id] = cur = (Library.GetValueOrDefault(p.Id) ?? Array.Empty<Channel>()).Where(x => inLineup.Contains(x.Id)).Select(x => x.Id).ToList();
+            changed |= Settings.SetChosen(p.Id, c.Id, on, cur);
+        }
+        if (changed) { SaveSettings(); RebuildLineup(); }
+        Server?.NotifyCatalogChanged();
+        return changed;
+    }
+
+    public void Choose(string channelId, bool on) =>
+        ChooseMany(ChannelFinder.All(Settings.Playlists, Library).Where(x => x.Channel.Id == channelId).Take(1), on);
+
+    /// <summary>Every working channel of a category at once.</summary>
+    public void ChooseGroup(string group, bool on) =>
+        ChooseMany(ChannelFinder.All(Settings.Playlists, Library).Where(x => x.Channel.Group == group && StatusOf(x.Channel) == HealthStatus.Ok), on);
+
+    /// <summary>A star from the phone: a favorite is also put in the lineup, so it shows under Favorites on the TV.</summary>
+    public void Favorite(string channelId, bool on)
+    {
+        if (on) Choose(channelId, true);
+        if (!Lineup.SetFavorite(channelId, on)) Server?.NotifyCatalogChanged();
+    }
+
     /// <summary>The port the remote server is actually listening on (may differ from the preferred one).</summary>
     public int ActivePort { get; private set; }
 
@@ -371,7 +480,7 @@ public sealed class TvServices : IDisposable
         var failures = new List<string>();
         foreach (var port in RemoteServer.PortsToTry(Settings.Port))
         {
-            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now };
+            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now, Catalog = CatalogJson };
             try
             {
                 server.Start();

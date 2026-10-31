@@ -312,14 +312,20 @@ private fun MediaTab(send: (String, String?) -> Unit) {
 @Composable
 private fun ChannelsTab(vm: AppViewModel, send: (String, String?) -> Unit) {
     val ctx = LocalContext.current
-    var guide by rememberSaveable { mutableStateOf(true) }
+    // 0 = the TV's channel list, 1 = find working channels, 2 = number keypad
+    var view by rememberSaveable { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = guide, onClick = { Haptics.click(ctx); guide = true }, label = { Text("Channel list") })
-            FilterChip(selected = !guide, onClick = { Haptics.click(ctx); guide = false }, label = { Text("Keypad") })
+            FilterChip(selected = view == 0, onClick = { Haptics.click(ctx); view = 0 }, label = { Text("My channels") })
+            FilterChip(selected = view == 1, onClick = { Haptics.click(ctx); view = 1 }, label = { Text("Find channels") })
+            FilterChip(selected = view == 2, onClick = { Haptics.click(ctx); view = 2 }, label = { Text("Keypad") })
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (guide) ChannelGuide(vm, send) else ChannelKeypad(send)
+            when (view) {
+                0 -> ChannelGuide(vm, send)
+                1 -> ChannelFinder(vm)
+                else -> ChannelKeypad(send)
+            }
         }
     }
 }
@@ -376,7 +382,7 @@ private fun ChannelGuide(vm: AppViewModel, send: (String, String?) -> Unit) {
             unsupported -> "This TV app is too old to send its channel list. Update KwartoTV on the PC, or use the keypad."
             lineup == null && conn != Conn.Connected -> "Connect to the TV to see its channels."
             lineup == null -> "Loading channels…"
-            channels.isEmpty() -> "The TV has no channels yet. Add a playlist on the TV."
+            channels.isEmpty() -> "The TV has no channels yet. Open \"Find channels\" to scan your playlists and pick working ones."
             rows.isEmpty() -> "No channel matches \"${query.trim()}\"."
             else -> null
         }
@@ -385,7 +391,12 @@ private fun ChannelGuide(vm: AppViewModel, send: (String, String?) -> Unit) {
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(rows, key = { it.number }) { ch ->
-                    ChannelRow(ch, watching = ch.number == now.number) {
+                    ChannelRow(ch, watching = ch.number == now.number, onStar = ch.id?.let { id ->
+                        {
+                            Haptics.click(context)
+                            if (!client.star(id, !ch.favorite)) { Toast.makeText(context, "Not connected to the TV. Reconnecting…", Toast.LENGTH_SHORT).show(); vm.reconnect() }
+                        }
+                    }) {
                         Haptics.click(context)
                         send(Cmd.CH_NUMBER, ch.number.toString())
                     }
@@ -403,7 +414,7 @@ private fun ChannelGuide(vm: AppViewModel, send: (String, String?) -> Unit) {
 }
 
 @Composable
-private fun ChannelRow(ch: LineupChannel, watching: Boolean, onTune: () -> Unit) {
+private fun ChannelRow(ch: LineupChannel, watching: Boolean, onStar: (() -> Unit)?, onTune: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
@@ -414,10 +425,16 @@ private fun ChannelRow(ch: LineupChannel, watching: Boolean, onTune: () -> Unit)
     ) {
         Text(ch.number.toString(), Modifier.width(52.dp), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = if (watching) Accent else AccentSoft)
         Column(Modifier.weight(1f)) {
-            Text((if (ch.favorite) "★ " else "") + ch.name, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(ch.name, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(ch.now ?: ch.group, fontSize = 13.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (watching) Text("ON", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ok)
+        if (onStar != null) Text(
+            if (ch.favorite) "★" else "☆",
+            Modifier.size(44.dp).clip(CircleShape).clickable(onClickLabel = if (ch.favorite) "Remove from favorites" else "Add to favorites", onClick = onStar).padding(top = 6.dp),
+            fontSize = 22.sp, color = if (ch.favorite) Accent else colors.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
     }
 }
 

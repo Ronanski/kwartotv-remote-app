@@ -129,6 +129,15 @@ public sealed class ChannelLineup
 
     public bool IsFavorite(string id) { lock (_gate) return _favorites.Contains(id); }
 
+    /// <summary>Marks or unmarks a favorite by id, also for a channel that is not in the lineup (yet). True when it changed.</summary>
+    public bool SetFavorite(string id, bool on)
+    {
+        bool changed;
+        lock (_gate) changed = on ? _favorites.Add(id) : _favorites.Remove(id);
+        if (changed) FavoritesChanged?.Invoke();
+        return changed;
+    }
+
     public IReadOnlyList<Channel> Favorites { get { lock (_gate) return _channels.Where(c => _favorites.Contains(c.Id)).ToList(); } }
     public IReadOnlyList<string> Groups { get { lock (_gate) return _channels.Select(c => c.Group).Distinct().OrderBy(ChannelCurator.CategoryRank).ThenBy(g => g).ToList(); } }
     public IReadOnlyList<Channel> InGroup(string group) { lock (_gate) return _channels.Where(c => c.Group == group).ToList(); }

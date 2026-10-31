@@ -756,10 +756,10 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
 
 // ---- Lineup for the phone's channel list (lineup.get)
 {
-    var lgChannels = Enumerable.Range(1, 520).Select(i => new Channel($"id{i}", i == 2 ? new string('n', 300) : $"Ch {i}", $"https://example.invalid/{i}.m3u8", null, i % 2 == 0 ? "News" : "Movies", StreamKind.Hls)).ToList();
+    var lgChannels = Enumerable.Range(1, RemoteServer.MaxLineupChannels + 20).Select(i => new Channel($"id{i}", i == 2 ? new string('n', 300) : $"Ch {i}", $"https://example.invalid/{i}.m3u8", null, i % 2 == 0 ? "News" : "Movies", StreamKind.Hls)).ToList();
     var lgMsg = JsonDocument.Parse(RemoteServer.LineupMessage(lgChannels, ch => ch.Id == "id1" ? "Morning Show  ·  8:00–9:00 AM" : ch.Id == "id3" ? throw new InvalidOperationException() : null, id => id == "id4", "q1")).RootElement;
     var lgList = lgMsg.GetProperty("channels");
-    Check(lgMsg.GetProperty("type").GetString() == "lineup" && lgMsg.GetProperty("id").GetString() == "q1" && lgMsg.GetProperty("total").GetInt32() == 520, "lineup message type, id and total");
+    Check(lgMsg.GetProperty("type").GetString() == "lineup" && lgMsg.GetProperty("id").GetString() == "q1" && lgMsg.GetProperty("total").GetInt32() == RemoteServer.MaxLineupChannels + 20, "lineup message type, id and total");
     Check(lgList.GetArrayLength() == RemoteServer.MaxLineupChannels, "lineup capped at MaxLineupChannels");
     Check(lgList[0].GetProperty("number").GetInt32() == 1 && lgList[0].GetProperty("name").GetString() == "Ch 1" && lgList[0].GetProperty("group").GetString() == "Movies" && lgList[0].GetProperty("now").GetString()!.StartsWith("Morning Show"), "lineup row fields");
     Check(lgList[1].GetProperty("name").GetString()!.Length == 80 && lgList[1].GetProperty("now").ValueKind == JsonValueKind.Null, "lineup cuts long names, null when nothing on");
@@ -819,6 +819,82 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     lineupById.Load(new[] { chB, chC });   // A was hidden: C is now channel 2
     Check(lineupById.TuneId("c")?.Id == "c" && lineupById.CurrentNumber == 2 && lineupById.NumberOf("a") == 0, "lineup: a card drawn before the change still opens its own channel");
     Check(lineupById.TuneId("a") is null && lineupById.Current?.Id == "c", "lineup: a hidden channel is not replaced by another one");
+}
+
+// ---- channel finder: only working channels, by category, chosen and favorite flags, toggles from the phone
+{
+    Channel Fc(string id, string name, string group) => new(id, name, $"https://example.invalid/{id}.m3u8", null, group, StreamKind.Hls);
+    var pA = new PlaylistEntry("pa", "A", "https://example.invalid/a.m3u", null);
+    var pB = new PlaylistEntry("pb", "B", "https://example.invalid/b.m3u", new List<string> { "b1" });
+    var loadedF = new Dictionary<string, IReadOnlyList<Channel>>
+    {
+        ["pa"] = new[] { Fc("a1", "Zeta News", "News"), Fc("a2", "Alpha Movies", "Movies"), Fc("a3", "Dead One", "News"), Fc("a4", "Never Checked", "Kids") },
+        ["pb"] = new[] { Fc("b1", "Beta News", "News"), new Channel("dup", "Same address", "https://example.invalid/a1.m3u8", null, "News", StreamKind.Hls) },
+    };
+    var allF = ChannelFinder.All(new[] { pA, pB }, loadedF);
+    Check(allF.Count == 5 && allF.All(x => x.Channel.Id != "dup"), "finder: every channel once by address, first playlist wins");
+    var nowF = DateTimeOffset.UtcNow;
+    var healthF = new Dictionary<string, ChannelHealth>
+    {
+        ["a1"] = new(HealthStatus.Ok, null, nowF), ["a2"] = new(HealthStatus.Ok, null, nowF), ["a3"] = new(HealthStatus.Dead, "gone", nowF), ["b1"] = new(HealthStatus.Ok, null, nowF),
+    };
+    var cat = JsonDocument.Parse(ChannelFinder.CatalogMessage(allF, healthF, id => id == "b1", id => id == "a2", new ScanProgress(true, 4, 5, 3, 1), "c1")).RootElement;
+    var rowsF = cat.GetProperty("channels");
+    Check(cat.GetProperty("type").GetString() == "catalog" && cat.GetProperty("id").GetString() == "c1" && cat.GetProperty("total").GetInt32() == 3
+          && cat.GetProperty("checked").GetInt32() == 4 && cat.GetProperty("all").GetInt32() == 5, "finder: counts of working, checked and all channels");
+    Check(rowsF.EnumerateArray().Select(r => r.GetProperty("i").GetString()).SequenceEqual(new[] { "b1", "a1", "a2" }), "finder: only working channels, News before Movies, by name");
+    Check(rowsF[0].GetProperty("s").GetBoolean() && !rowsF[1].GetProperty("s").GetBoolean() && rowsF[2].GetProperty("f").GetBoolean(), "finder: chosen and favorite flags");
+    Check(cat.GetProperty("scan").GetProperty("running").GetBoolean() && cat.GetProperty("scan").GetProperty("done").GetInt32() == 4, "finder: scan progress inside the list");
+    var scanMsg = JsonDocument.Parse(ChannelFinder.ScanMessage(new ScanProgress(false, 5, 5, 3, 2))).RootElement;
+    Check(scanMsg.GetProperty("type").GetString() == "scan" && !scanMsg.GetProperty("running").GetBoolean() && scanMsg.GetProperty("ok").GetInt32() == 3, "finder: scan message");
+
+    Check(ChannelFinder.TryParseToggle("1:a1", out var onT, out var vT) && onT && vT == "a1" && ChannelFinder.TryParseToggle("0:News", out var offT, out _) && !offT, "finder: toggle argument");
+    Check(!ChannelFinder.TryParseToggle("2:a1", out _, out _) && !ChannelFinder.TryParseToggle("1:", out _, out _) && !ChannelFinder.TryParseToggle(null, out _, out _) && !ChannelFinder.IsChannelId("../x"), "finder: bad toggles refused");
+
+    var rF = new CommandRouter(new ChannelLineup(), new FakeHost());
+    Check(rF.Handle(new("1", "catalog.choose", "1:a1")).Ok && rF.Handle(new("2", "catalog.favorite", "0:a1")).Ok && rF.Handle(new("3", "catalog.choosegroup", "1:News")).Ok && rF.Handle(new("4", "scan.start", null)).Ok, "finder: router passes finder commands to the TV");
+    Check(!rF.Handle(new("5", "catalog.choose", "1:bad id")).Ok && !rF.Handle(new("6", "catalog.choosegroup", "x")).Ok, "finder: router refuses bad finder arguments");
+
+    var sF = new AppSettings();
+    sF.Playlists.Add(pA); sF.Playlists.Add(pB);
+    Check(sF.SetChosen("pa", "a2", false, new[] { "a1", "a2" }) && sF.FindPlaylist("pa")!.Selected!.SequenceEqual(new[] { "a1" }), "finder: removing one channel from a take-all playlist keeps the others");
+    Check(sF.SetChosen("pb", "b2", true, Array.Empty<string>()) && sF.FindPlaylist("pb")!.Selected!.SequenceEqual(new[] { "b1", "b2" }) && !sF.SetChosen("pb", "b1", true, Array.Empty<string>()), "finder: adding a channel, adding it twice changes nothing");
+
+    var many = Enumerable.Range(0, 700).Select(i => Fc($"m{i}", $"M {i}", "Movies")).ToList();
+    var loadedM = new Dictionary<string, IReadOnlyList<Channel>> { ["auto"] = many.Take(100).ToList(), ["hand"] = many.Skip(100).ToList() };
+    var lineupM = ChannelCatalog.BuildLineup(new[] { new PlaylistEntry("auto", "Auto", "x"), new PlaylistEntry("hand", "Hand", "y", many.Skip(100).Select(c => c.Id).ToList()) }, loadedM, maxChannels: 50);
+    Check(lineupM.Count == 50 + 600, "finder: the channel limit never drops channels picked by hand");
+
+    var luF = new ChannelLineup(); luF.Load(new[] { Fc("x1", "X", "G") });
+    int favEvents = 0; luF.FavoritesChanged += () => favEvents++;
+    Check(luF.SetFavorite("not-in-lineup", true) && luF.IsFavorite("not-in-lineup") && !luF.SetFavorite("not-in-lineup", true) && favEvents == 1, "finder: a favorite can be marked before the channel is in the lineup");
+    Check(JsonDocument.Parse(RemoteServer.LineupMessage(luF.Channels, null)).RootElement.GetProperty("channels")[0].GetProperty("id").GetString() == "x1", "lineup rows carry the channel id (favorites from the phone list)");
+}
+
+// ---- channel finder over the WebSocket: catalog.get answers, scan progress is pushed to phones that opened it
+{
+    int fPort = 19700 + Random.Shared.Next(200);
+    var fPair = new PairingService(); var fLineup = new ChannelLineup(); fLineup.Load(parsed);
+    var fHost = new FakeHost();
+    await using var fServer = new RemoteServer($"http://127.0.0.1:{fPort}/", fPair, new CommandRouter(fLineup, fHost), fLineup)
+    {
+        Catalog = rid => ChannelFinder.CatalogMessage(new List<(Channel, PlaylistEntry)>(), new Dictionary<string, ChannelHealth>(), _ => false, _ => false, ScanProgress.Idle, rid),
+    };
+    fServer.Start();
+    using var fHttp = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{fPort}/") };
+    var fCred = await (await fHttp.PostAsJsonAsync("/pair", new { pin = fPair.StartPairing(DateTimeOffset.UtcNow), name = "Phone" })).Content.ReadFromJsonAsync<JsonElement>();
+    using var fWs = new ClientWebSocket();
+    await fWs.ConnectAsync(new Uri($"ws://127.0.0.1:{fPort}/ws?device={fCred.GetProperty("deviceId").GetString()}&token={fCred.GetProperty("token").GetString()}"), CancellationToken.None);
+    await RecvWhole(fWs); // initial state
+    await SendJson(fWs, new { id = "c9", cmd = "catalog.get" });
+    var fCat = JsonDocument.Parse(await RecvWhole(fWs)).RootElement;
+    Check(fCat.GetProperty("type").GetString() == "catalog" && fCat.GetProperty("id").GetString() == "c9", "ws catalog.get answers with the finder list");
+    fServer.NotifyScan(new ScanProgress(true, 10, 50, 7, 3));
+    var fScan = JsonDocument.Parse(await RecvWhole(fWs)).RootElement;
+    Check(fScan.GetProperty("type").GetString() == "scan" && fScan.GetProperty("done").GetInt32() == 10 && fScan.GetProperty("total").GetInt32() == 50, "ws scan progress reaches the phone");
+    await SendJson(fWs, new { id = "c10", cmd = "catalog.choose", arg = "1:abc123" });
+    var fAck = JsonDocument.Parse(await RecvWhole(fWs)).RootElement;
+    Check(fAck.GetProperty("ok").GetBoolean() && fHost.Last == "catalog.choose:1:abc123", "ws catalog.choose reaches the TV");
 }
 
 Console.WriteLine($"{pass} passed, {fail} failed");

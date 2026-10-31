@@ -3,6 +3,12 @@ namespace KwartoTV.Core;
 public sealed record RemoteCommand(string? Id, string Cmd, string? Arg);
 public sealed record CommandResult(bool Ok, string? Error = null);
 
+/// <summary>Thrown by the shell when a command cannot be done, with a sentence the phone shows as is.</summary>
+public sealed class UserMessageException : Exception
+{
+    public UserMessageException(string message) : base(message) { }
+}
+
 /// <summary>Implemented by the Windows shell: navigation keys, media keys, volume, power.</summary>
 public interface IHostActions
 {
@@ -23,6 +29,8 @@ public sealed class CommandRouter
         "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
         "app.youtube", "app.netflix", "app.livetv", "app.library", "app.settings",
         "power.sleep", "power.screenoff", "power.screenon", "power.shutdown", "power.restart",
+        // the phone's channel finder: check every channel, then pick working ones and favorites
+        "scan.start", "scan.stop", "catalog.choose", "catalog.favorite", "catalog.choosegroup",
     };
 
     private readonly ChannelLineup _lineup;
@@ -79,6 +87,12 @@ public sealed class CommandRouter
             case "key.text":
                 if (string.IsNullOrEmpty(c.Arg) || c.Arg.Any(char.IsControl)) return new(false, "bad text");
                 break;
+            case "catalog.choose" or "catalog.favorite":
+                if (!ChannelFinder.TryParseToggle(c.Arg, out _, out var cid) || !ChannelFinder.IsChannelId(cid)) return new(false, "bad channel");
+                break;
+            case "catalog.choosegroup":
+                if (!ChannelFinder.TryParseToggle(c.Arg, out _, out var grp) || grp.Length > 60) return new(false, "bad category");
+                break;
             case "media.speed":
                 if (!double.TryParse(c.Arg, System.Globalization.NumberStyles.Float,
                         System.Globalization.CultureInfo.InvariantCulture, out var sp) || sp < 0.25 || sp > 4) return new(false, "bad speed");
@@ -86,6 +100,8 @@ public sealed class CommandRouter
         }
 
         try { _host.Execute(c.Cmd, c.Arg); return new(true); }
+        // A UserMessageException carries a sentence for the phone; anything else only its type (no internals).
+        catch (UserMessageException ex) { return new(false, ex.Message); }
         catch (Exception ex) { return new(false, ex.GetType().Name); }
     }
 

@@ -429,6 +429,23 @@ public partial class MainWindow : Window, IShell
     public bool PlayerSpeed(double speed) => _player is { IsVisible: true } p && p.SetSpeed(speed);
     public bool PlayerStop() { if (_player is not { IsVisible: true } p) return false; GoHome(); return true; }
 
+    public void Finder(string cmd, string? arg)
+    {
+        ChannelFinder.TryParseToggle(arg, out var on, out var value);
+        switch (cmd)
+        {
+            case "scan.start":
+                if (_tv.Settings.Playlists.Count == 0) throw new UserMessageException("Add a playlist on the TV first (Settings → Add channels).");
+                _tv.StartScan(full: arg == "full");
+                ShowToast("Checking every channel from this PC. Follow it on the phone.");
+                break;
+            case "scan.stop": _tv.StopScan(); break;
+            case "catalog.choose": _tv.Choose(value, on); break;
+            case "catalog.choosegroup": _tv.ChooseGroup(value, on); break;
+            case "catalog.favorite": _tv.Favorite(value, on); break;
+        }
+    }
+
     // ---------- toast and dialogs
 
     public void ShowToast(string text)

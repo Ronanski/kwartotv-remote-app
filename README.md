@@ -35,6 +35,8 @@ Every push to `main` that passes the tests becomes a release `vMAJOR.MINOR.PATCH
 - Keyboard: arrows, Enter, Esc/Back, digits. The phone remote sends the same keys.
 
 ### Android remote
+**Channels → Find channels**: the TV checks every channel of every playlist from its own internet connection (thousands are fine, up to 32 at a time, with progress on the phone). Only the channels that work are listed, by category. Tap one to put it on the TV (or take it off), tap ☆ to make it a favorite, or add a whole category at once. Favorites show under ★ Favorites on the phone and on the TV.
+
 Pairing by PIN or QR · D-pad and touchpad · media and volume · channel pad · live keyboard · power (screen on/off, sleep, restart, shutdown) · several TVs.
 
 ## Repository layout
