@@ -43,7 +43,7 @@ public static class SpatialNav
                 case Key.Left: inDirection = r.Right <= c.Left + 4 || (CenterX(r) < CenterX(c) - 4 && r.Right < c.Right - 4); primary = Math.Max(0, c.Left - r.Right); secondary = AxisGap(r.Top, r.Bottom, c.Top, c.Bottom, CenterY(r), CenterY(c)); break;
                 case Key.Down: inDirection = r.Top >= c.Bottom - 4 || (CenterY(r) > CenterY(c) + 4 && r.Top > c.Top + 4); primary = Math.Max(0, r.Top - c.Bottom); secondary = AxisGap(r.Left, r.Right, c.Left, c.Right, CenterX(r), CenterX(c)); break;
                 case Key.Up: inDirection = r.Bottom <= c.Top + 4 || (CenterY(r) < CenterY(c) - 4 && r.Bottom < c.Bottom - 4); primary = Math.Max(0, c.Top - r.Bottom); secondary = AxisGap(r.Left, r.Right, c.Left, c.Right, CenterX(r), CenterX(c)); break;
-                default: return false;
+                default: return null;
             }
             if (inDirection) scored.Add((el, primary, secondary));
         }
