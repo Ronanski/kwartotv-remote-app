@@ -346,6 +346,7 @@ public partial class MainWindow : Window, IShell
         ShowToast($"Opening {name}…");
         // Netflix and Bilibili can be signed in from the phone (PhoneSignIn).
         var signIn = profile == "netflix" ? "netflix" : profile == "web-bilibili" ? "bilibili" : null;
+        WebAppWindow.YouTubeRenderMode = _tv.Settings.YouTubeRenderMode;
         var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this, SignInService = signIn };
         w.SignedOut += id =>
         {

@@ -26,6 +26,9 @@ public sealed class WebAppWindow : Window
     /// <summary>The saved-login profile this window uses ("netflix", "web-bilibili", ...).</summary>
     public string ProfileName => _profile;
 
+    /// <summary>Settings → YouTube picture (see AppSettings.YouTubeRenderMode), set by the shell.</summary>
+    public static int YouTubeRenderMode { get; set; } = 1;
+
     /// <summary>The service whose sign-in can be done on the phone (PhoneSignIn), or null.</summary>
     public string? SignInService { get; init; }
 
@@ -107,7 +110,9 @@ public sealed class WebAppWindow : Window
     {
         try
         {
-            var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
+            // YouTube may get extra switches (Settings → YouTube picture); its profile has its own browser, so they apply only there.
+            var extra = Kind == ForegroundKind.YouTube ? " " + KwartoTV.Core.AppSettings.YouTubeBrowserArgs(YouTubeRenderMode) : "";
+            var options = new CoreWebView2EnvironmentOptions(("--autoplay-policy=no-user-gesture-required" + extra).Trim());
             var env = await CoreWebView2Environment.CreateAsync(null, AppPaths.Profile("webview-" + _profile), options);
             await _web.EnsureCoreWebView2Async(env);
             var core = _web.CoreWebView2;

@@ -93,7 +93,14 @@ public sealed class SettingsView : PageBase
         // ---- system
         Body.Children.Add(UiKit.Heading("System"));
         var startup = StartupEnabled();
-        Body.Children.Add(Buttons(UiKit.ActionButton(Tv.Settings.NetflixInApp ? "Netflix opens: inside KwartoTV" : "Netflix opens: Microsoft Store app", () => { Tv.Settings.NetflixInApp = !Tv.Settings.NetflixInApp; Tv.SaveSettings(); Refresh(); })));
+        Body.Children.Add(Buttons(
+            UiKit.ActionButton(Tv.Settings.NetflixInApp ? "Netflix opens: inside KwartoTV" : "Netflix opens: Microsoft Store app", () => { Tv.Settings.NetflixInApp = !Tv.Settings.NetflixInApp; Tv.SaveSettings(); Refresh(); }),
+            UiKit.ActionButton($"YouTube picture: {AppSettings.YouTubeRenderModes[Math.Clamp(Tv.Settings.YouTubeRenderMode, 0, 2)]}", () =>
+            {
+                Tv.Settings.YouTubeRenderMode = (Tv.Settings.YouTubeRenderMode + 1) % AppSettings.YouTubeRenderModes.Length;
+                Tv.SaveSettings(); Refresh();
+                Shell.ShowToast("Applies the next time YouTube opens. Black boxes behind text or icons? Use Text fix, or Safe.");
+            })));
         Body.Children.Add(Buttons(
             UiKit.ActionButton(startup ? "Start with Windows: On" : "Start with Windows: Off", () => { SetStartup(!startup); Refresh(); }),
             UiKit.ActionButton("Power…", () => Dialogs.PowerMenu(Shell), danger: true)));

@@ -31,6 +31,21 @@ public sealed class AppSettings
     /// <summary>Free TV guides (XMLTV) for the "on now" line of Live TV; the first one that has a channel wins.</summary>
     public List<string> GuideUrls { get; set; } = new(ProgramGuideSources.Default);
 
+    /// <summary>
+    /// How the YouTube window draws: 0 = normal, 1 = text fix (text and icons drawn without the graphics card, video still
+    /// with it: no black boxes behind them on some graphics cards), 2 = safe (no graphics card at all). Default: text fix.
+    /// </summary>
+    public int YouTubeRenderMode { get; set; } = 1;
+    public static readonly string[] YouTubeRenderModes = { "Normal", "Text fix", "Safe" };
+
+    /// <summary>Extra browser switches for the YouTube window in each mode.</summary>
+    public static string YouTubeBrowserArgs(int mode) => mode switch
+    {
+        1 => "--disable-gpu-rasterization --disable-direct-composition",
+        2 => "--disable-gpu --disable-gpu-compositing",
+        _ => "",
+    };
+
     // ---- the lock screen (Lock · clock)
     /// <summary>A Bible verse under the clock, changing every this many minutes (0 = no verse). See Verses.Choices.</summary>
     public int VerseEveryMinutes { get; set; } = 60;
