@@ -101,10 +101,12 @@ public sealed class TvServices : IDisposable
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, ChannelHealth>>(AppPaths.Health)) Health[kv.Key] = kv.Value;
         // Channel numbers are kept for good (like cable): restore them before the first load.
         Lineup.SetNumbers(Settings.Lineup.Numbers);
+        Lineup.Reserve(ChosenChannels());
         Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable, maxChannels: Settings.MaxChannels));
         Lineup.Restore(Settings.Lineup);
         // New channels get numbers when the lineup changes: save them.
         Lineup.Changed += SaveSettingsSoon;
+        Lineup.Renumbered += () => Lineup.Reserve(ChosenChannels());
         Lineup.Tuned += (_, _) => SaveSettingsSoon();
         Lineup.FavoritesChanged += SaveSettingsSoon;
         Router = new CommandRouter(Lineup, host);
@@ -277,6 +279,8 @@ public sealed class TvServices : IDisposable
     {
         var next = ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable, maxChannels: Settings.MaxChannels);
         // Nothing changed: do nothing (a rebuild redraws the home screen, which is slow with many channels).
+        // Numbers follow the playlists: every chosen channel gets its number now, also the ones hidden for the moment.
+        Lineup.Reserve(ChosenChannels());
         if (next.Select(c => c.Id).SequenceEqual(Lineup.Channels.Select(c => c.Id))) return;
         Lineup.Load(next);
         if (Lineup.Current is null && Lineup.Channels.Count > 0) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites, Recent = Lineup.Export().Recent });

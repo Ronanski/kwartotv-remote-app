@@ -1007,6 +1007,16 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(pl2.NumberOf("e") == 5 && pl2.NumberOf("a") == 1 && pl2.Numbered[0].Channel.Id == "a", "numbers: kept after a restart, list in number order");
     pl2.Renumber();
     Check(pl2.NumberOf("a") == 1 && pl2.NumberOf("e") == 2, "numbers: Renumber closes the gaps");
+    // numbers follow the playlist order, not which channel passed its check first
+    var resv = new ChannelLineup();
+    resv.Reserve(new[] { Pc("p1"), Pc("p2"), Pc("p3") });
+    resv.Load(new[] { Pc("p3") });               // only p3 has passed so far
+    Check(resv.NumberOf("p3") == 3 && resv.TuneNumber(1) is null, "numbers: a channel that passes first still gets its place in the playlist order");
+    resv.Load(new[] { Pc("p1"), Pc("p3") });
+    Check(resv.NumberOf("p1") == 1, "numbers: a channel that passes later gets its reserved number");
+    var ytStream = new PlaylistEntry("yt", "YT", "https://www.youtube.com/@x/live", null, IsStream: true);
+    var ytCh = new Channel("ytc", "YT", "https://www.youtube.com/@x/live", null, "G", StreamKind.YouTube);
+    Check(ChannelCatalog.BuildLineup(new[] { ytStream }, new Dictionary<string, IReadOnlyList<Channel>> { ["yt"] = new[] { ytCh } }, new Dictionary<string, ChannelHealth>(), onlyVerified: true).Count == 0, "a YouTube live link added by hand still shows only once it is live");
     var big = new ChannelLineup(); big.Load(Enumerable.Range(0, 1200).Select(n => Pc("x" + n)));
     var t = DateTimeOffset.UtcNow;
     Check(big.PressDigit(1, t) is null && big.PressDigit(1, t) is null && big.PressDigit(5, t) is null && big.PressDigit(0, t)?.Id == "x1149", "numbers: four-digit channels can be typed");

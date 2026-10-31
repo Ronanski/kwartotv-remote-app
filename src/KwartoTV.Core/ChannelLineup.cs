@@ -26,6 +26,8 @@ public sealed class ChannelLineup
     public event Action? FavoritesChanged;
     /// <summary>Raised after Load replaced the channels, so phones showing the lineup can refresh it.</summary>
     public event Action? Changed;
+    /// <summary>Raised after Renumber, so the shell can number the hidden chosen channels after the visible ones.</summary>
+    public event Action? Renumbered;
 
     public IReadOnlyList<Channel> Channels { get { lock (_gate) return _channels.ToList(); } }
     public Channel? Current { get { lock (_gate) return At(_current); } }
@@ -50,6 +52,21 @@ public sealed class ChannelLineup
         }
     }
 
+    /// <summary>
+    /// Gives numbers to channels that have none yet, in this order (all the channels the user chose, in playlist order),
+    /// without adding them to the lineup. So numbers follow the playlists, not which channel happened to pass its check
+    /// first; a chosen channel that is hidden for now already has its number waiting.
+    /// </summary>
+    public void Reserve(IEnumerable<Channel> chosen)
+    {
+        lock (_gate)
+        {
+            int next = _assigned.Count == 0 ? 1 : _assigned.Values.Max() + 1;
+            foreach (var c in chosen) if (!_assigned.ContainsKey(c.Id)) _assigned[c.Id] = next++;
+            Number();
+        }
+    }
+
     /// <summary>Numbers 1, 2, 3... again in the present order, closing the gaps (Settings → Renumber channels).</summary>
     public void Renumber()
     {
@@ -59,6 +76,7 @@ public sealed class ChannelLineup
             for (int i = 0; i < _channels.Count; i++) _assigned[_channels[i].Id] = i + 1;
             Number();
         }
+        Renumbered?.Invoke();
         Changed?.Invoke();
     }
 

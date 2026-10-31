@@ -46,7 +46,8 @@ public static class ChannelCatalog
             if (!loaded.TryGetValue(p.Id, out var all)) continue;
             var chosen = p.Selected is null ? null : new HashSet<string>(p.Selected);
             // A stream the user added by hand is always shown: it is theirs, and only playing it tells for sure.
-            var usable = p.IsStream ? all.Where(c => chosen is null || chosen.Contains(c.Id))
+            // (Not a YouTube live link: those show only while the channel is live.)
+            var usable = p.IsStream && all.All(c => c.Kind != StreamKind.YouTube) ? all.Where(c => chosen is null || chosen.Contains(c.Id))
                 : all.Where(c => (chosen is null || chosen.Contains(c.Id)) && !IsDead(c, health) && (!onlyVerified || health is null || health.ContainsKey(c.Id)));
             if (chosen is null && ChannelCurator.IsLarge(all.Count)) usable = ChannelCurator.Best(usable, health);
             foreach (var c in usable)
