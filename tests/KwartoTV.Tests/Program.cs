@@ -582,6 +582,8 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
                 else if (path == "/fmp4/seg.m4s") { await c.Response.OutputStream.WriteAsync(new byte[] { 0, 0, 0, 24, (byte)'m', (byte)'o', (byte)'o', (byte)'f', 0, 0 }); }
                 else if (path == "/flaky.ts") { if (Interlocked.Increment(ref flakyHits) == 1) c.Response.StatusCode = 503; else await c.Response.OutputStream.WriteAsync(new byte[] { 0x47, 9 }); }
                 else if (path == "/blocked.m3u8") c.Response.StatusCode = 403;
+                // like many IPTV servers: a web browser is refused, a player (VLC) is served
+                else if (path == "/playersonly.ts") { if ((c.Request.UserAgent ?? "").StartsWith("VLC/")) await c.Response.OutputStream.WriteAsync(new byte[] { 0x47, 7, 7 }); else c.Response.StatusCode = 403; }
                 else if (path == "/geo.m3u8") c.Response.StatusCode = 451;
                 else if (path == "/needsref.m3u8") { if (c.Request.Headers["Referer"] == "https://ok.example/") { var b = Encoding.UTF8.GetBytes("#EXTM3U\n#EXTINF:6,\n/direct.ts\n"); await c.Response.OutputStream.WriteAsync(b); } else c.Response.StatusCode = 403; }
                 else if (body is not null) { if (path == "/signup") c.Response.ContentType = "text/html"; var b = Encoding.UTF8.GetBytes(body); await c.Response.OutputStream.WriteAsync(b); }
@@ -597,6 +599,13 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
 
     Check((await Probe("/good/master.m3u8")).Status == HealthStatus.Ok, "check: HLS master -> variant -> segment works");
     Check((await Probe("/direct.ts")).Status == HealthStatus.Ok, "check: a direct video stream works");
+    Check((await Probe("/playersonly.ts")).Status == HealthStatus.Ok, "check: a server that refuses browsers but serves players (VLC) counts as working");
+    var playedOk = new ChannelHealth(HealthStatus.Ok, null, nowH.AddDays(-2), FromPlayer: true);
+    Check(!HealthPolicy.NeedsCheck(Ch("/x"), playedOk, nowH) && HealthPolicy.NeedsCheck(Ch("/x"), playedOk with { CheckedAt = nowH.AddDays(-4) }, nowH), "check: a channel that really played is not re-checked for 3 days");
+    var own = new PlaylistEntry("own", "My stream", "http://x/y.m3u8", null, IsStream: true);
+    var ownCh = Ch("/own.m3u8");
+    var deadHealth = new Dictionary<string, ChannelHealth> { [ownCh.Id] = new(HealthStatus.Dead, "blocked", nowH) };
+    Check(ChannelCatalog.BuildLineup(new[] { own }, new Dictionary<string, IReadOnlyList<Channel>> { ["own"] = new[] { ownCh } }, deadHealth, onlyVerified: true).Count == 1, "check: a stream added by hand is never hidden by a check");
     var blocked = await Probe("/blocked.m3u8");
     Check(blocked.Status == HealthStatus.Dead && blocked.Reason!.Contains("403"), "check: 403 is blocked / needs an account");
     Check((await Probe("/geo.m3u8")).Reason!.Contains("not available in your country"), "check: 451 is a country block");

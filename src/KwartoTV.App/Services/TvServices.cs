@@ -157,7 +157,7 @@ public sealed class TvServices : IDisposable
             AppPaths.LogLine($"health: {c.Name} failed while offline; not marked");
             return;
         }
-        Health[c.Id] = new ChannelHealth(status, reason, DateTimeOffset.UtcNow);
+        Health[c.Id] = new ChannelHealth(status, reason, DateTimeOffset.UtcNow, FromPlayer: true);
         SaveHealthSoon();
     }
 

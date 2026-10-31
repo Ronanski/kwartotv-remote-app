@@ -12,12 +12,17 @@ public static class HealthPolicy
     /// </summary>
     public static readonly TimeSpan RecheckDead = TimeSpan.FromHours(2);
 
+    /// <summary>How long a channel that really played stays trusted before it is checked again.</summary>
+    public static readonly TimeSpan PlayedTrust = TimeSpan.FromDays(3);
+
     /// <summary>YouTube live links come and go during the day, so they are checked much more often.</summary>
     public static readonly TimeSpan RecheckLive = TimeSpan.FromMinutes(20);
 
     public static bool NeedsCheck(Channel c, ChannelHealth? h, DateTimeOffset now)
     {
         if (h is null || h.Status == HealthStatus.Unknown) return true;
+        // It really played lately: a check (which only downloads a little, with other identities) must not overrule that.
+        if (h.FromPlayer && h.Status == HealthStatus.Ok) return now - h.CheckedAt > PlayedTrust;
         var after = c.Kind == StreamKind.YouTube ? RecheckLive : h.Status == HealthStatus.Dead ? RecheckDead : RecheckOk;
         return now - h.CheckedAt > after;
     }

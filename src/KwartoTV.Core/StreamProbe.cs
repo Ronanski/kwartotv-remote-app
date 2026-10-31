@@ -5,7 +5,8 @@ namespace KwartoTV.Core;
 
 public enum HealthStatus { Unknown, Ok, Dead }
 
-public sealed record ChannelHealth(HealthStatus Status, string? Reason, DateTimeOffset CheckedAt);
+/// <param name="FromPlayer">Seen while really playing it (more trustworthy than a check, which only downloads a little).</param>
+public sealed record ChannelHealth(HealthStatus Status, string? Reason, DateTimeOffset CheckedAt, bool FromPlayer = false);
 
 /// <summary>
 /// Checks, from this PC and its internet connection, whether a channel can really be watched: the address answers,
@@ -22,16 +23,21 @@ public static class StreamProbe
         if (!Uri.TryCreate(ch.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             return new(HealthStatus.Unknown, "cannot be checked before playing (" + (uri?.Scheme ?? "bad address") + ")", now);
         if (ch.Kind == StreamKind.YouTube) return IsYouTubeLiveLink(uri) ? await CheckYouTubeLiveAsync(uri, http, now, ct) : new(HealthStatus.Unknown, "YouTube: opens in the YouTube player", now);
-        // A busy server or a slow moment should not hide a good channel: transient failures get one more try.
+        // A busy server or a slow moment should not hide a good channel: transient failures get one more try. Many IPTV
+        // servers refuse a web browser but serve players (VLC and the like): a refusal is tried again as a player, the
+        // same identities the KwartoTV player itself tries.
         string? reason = null;
-        for (int attempt = 0; attempt < 2; attempt++)
+        var identities = ch.UserAgent is null ? PlayerIdentities : new[] { ch.UserAgent };
+        int who = 0;
+        for (int attempt = 0; attempt < 2 + identities.Length; attempt++)
         {
             try
             {
                 using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 limit.CancelAfter(Timeout);
-                reason = await Follow(uri, ch, http, 0, false, limit.Token);
+                reason = await Follow(uri, ch with { UserAgent = identities[who] }, http, 0, false, limit.Token);
                 if (reason is null) return new(HealthStatus.Ok, null, now);
+                if (IsRefusal(reason) && who + 1 < identities.Length) { who++; continue; }
                 if (!IsTransient(reason)) break;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -41,6 +47,19 @@ public static class StreamProbe
         }
         return new(HealthStatus.Dead, reason, now);
     }
+
+    /// <summary>The identities a stream is tried with: a web browser, VLC, a plain player (as the KwartoTV player does).</summary>
+    public static readonly string[] PlayerIdentities =
+    {
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "VLC/3.0.20 LibVLC/3.0.20",
+        "libmpv",
+    };
+
+    /// <summary>The server said no to who we are (or sent a page instead): another identity may work.</summary>
+    private static bool IsRefusal(string reason) =>
+        reason.Contains("403") || reason.Contains("401") || reason.Contains("forbidden", StringComparison.OrdinalIgnoreCase) || reason.Contains("blocked", StringComparison.OrdinalIgnoreCase)
+        || reason.StartsWith("not a stream") || reason.StartsWith("the server answered with an error") || reason.StartsWith("the server answers, but");
 
     /// <summary>A channel's live link ("https://www.youtube.com/@name/live"): it plays only while the channel is live.</summary>
     public static bool IsYouTubeLiveLink(Uri uri) =>
