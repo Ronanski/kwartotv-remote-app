@@ -9,8 +9,11 @@ public sealed class Updater
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
 
-    /// <summary>The build number of the running app (1.0.N: N is the CI build number; 0 for a local build).</summary>
-    public static int CurrentBuild => Assembly.GetEntryAssembly()?.GetName().Version?.Build ?? 0;
+    /// <summary>The build number of the running app (the last part of MAJOR.MINOR.PATCH.BUILD; 0 for a local build).</summary>
+    public static int CurrentBuild => Updates.BuildOf(Assembly.GetEntryAssembly()?.GetName().Version);
+
+    /// <summary>The release version of the running app, e.g. 1.1.4.</summary>
+    public static string CurrentVersion => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.0.0";
 
     public UpdateInfo? Available { get; private set; }
     public string? LastError { get; private set; }

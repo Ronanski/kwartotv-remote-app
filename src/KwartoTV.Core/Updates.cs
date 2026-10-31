@@ -10,8 +10,8 @@ public sealed record UpdateInfo(int Build, string Version, UpdateFile Exe, Updat
 
 public static class Updates
 {
-    /// <summary>Update manifest published with every build (see .github/workflows/build.yml).</summary>
-    public const string ManifestUrl = "https://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV-update.json";
+    /// <summary>Update manifest attached to every release; GitHub sends this address to the newest release (see .github/workflows/build.yml).</summary>
+    public const string ManifestUrl = "https://github.com/Ronanski/kwartotv-remote-app/releases/latest/download/KwartoTV-update.json";
 
     /// <summary>Files are only ever downloaded from this project's own releases.</summary>
     public const string AllowedPrefix = "https://github.com/Ronanski/kwartotv-remote-app/releases/download/";
@@ -43,8 +43,14 @@ public static class Updates
 
     private static bool IsSha256(string s) => s.Length == 64 && s.All(Uri.IsHexDigit);
 
-    /// <summary>The build number of this app: the third part of 1.0.N (CI sets N to the build number).</summary>
+    /// <summary>True when the release's build number is higher than the running app's.</summary>
     public static bool IsNewer(UpdateInfo info, int currentBuild) => info.Build > currentBuild;
+
+    /// <summary>
+    /// The build number inside a file version. Releases are MAJOR.MINOR.PATCH.BUILD (BUILD only ever goes up);
+    /// builds before that were 1.0.BUILD.
+    /// </summary>
+    public static int BuildOf(Version? v) => v is null ? 0 : v.Revision > 0 ? v.Revision : Math.Max(v.Build, 0);
 
     public static string Sha256Of(string path)
     {

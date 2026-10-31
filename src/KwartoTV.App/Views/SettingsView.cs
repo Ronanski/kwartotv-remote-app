@@ -100,7 +100,7 @@ public sealed class SettingsView : PageBase
         Body.Children.Add(UiKit.Heading("Updates"));
         var upd = Tv.Updater.Available;
         Body.Children.Add(Buttons(
-            UiKit.ActionButton(upd is null ? $"Check for updates (you have 1.0.{Updater.CurrentBuild})" : $"Install update {upd.Version}", () => { if (upd is null) _ = Shell.CheckForUpdateAsync(true); else Dialogs.UpdateDialog(Shell, upd, Tv.Updater); })));
+            UiKit.ActionButton(upd is null ? $"Check for updates (you have {Updater.CurrentVersion})" : $"Install update {upd.Version}", () => { if (upd is null) _ = Shell.CheckForUpdateAsync(true); else Dialogs.UpdateDialog(Shell, upd, Tv.Updater); })));
         Body.Children.Add(UiKit.Dimmed($"KwartoTV {typeof(SettingsView).Assembly.GetName().Version?.ToString(3)}  ·  data in {AppPaths.Root}", 15));
     }
 

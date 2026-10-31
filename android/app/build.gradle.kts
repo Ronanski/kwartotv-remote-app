@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = (System.getenv("KWARTO_VERSION_CODE") ?: "1").toInt()
-        versionName = "1.0.0"
+        versionName = System.getenv("KWARTO_VERSION_NAME") ?: "0.0.0-dev"
     }
 
     signingConfigs {

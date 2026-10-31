@@ -434,6 +434,8 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     var ui = Updates.Parse(Manifest());
     Check(ui is { Build: 42, Version: "1.0.42" } && ui.Apk.VersionCode == 42 && ui.Exe.Sha256 == h, "update manifest parses");
     Check(Updates.IsNewer(ui!, 41) && !Updates.IsNewer(ui!, 42) && !Updates.IsNewer(ui!, 100), "update is newer only when the build number is higher");
+    Check(Updates.BuildOf(new Version(1, 1, 4, 57)) == 57 && Updates.BuildOf(new Version(1, 0, 42)) == 42 && Updates.BuildOf(new Version(1, 0, 42, 0)) == 42 && Updates.BuildOf(null) == 0, "build number from MAJOR.MINOR.PATCH.BUILD and from older 1.0.BUILD");
+    Check(Updates.ManifestUrl.EndsWith("/releases/latest/download/KwartoTV-update.json") && Updates.IsAllowedUrl("https://github.com/Ronanski/kwartotv-remote-app/releases/download/v1.1.4/KwartoTV.exe"), "updater reads the newest release and accepts its versioned files");
     Check(Updates.Parse(Manifest(exeUrl: "https://evil.example/KwartoTV.exe")) is null, "update manifest refuses other hosts");
     Check(Updates.Parse(Manifest(exeUrl: "http://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV.exe")) is null, "update manifest refuses http");
     Check(Updates.Parse(Manifest(exeUrl: "https://github.com/Ronanski/kwartotv-remote-app/releases/download/../../../evil/x/releases/download/v/a.exe")) is null, "update manifest refuses ../ out of this project");

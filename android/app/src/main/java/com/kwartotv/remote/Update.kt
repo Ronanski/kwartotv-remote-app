@@ -6,7 +6,7 @@ import org.json.JSONObject
 data class UpdateInfo(val build: Int, val version: String, val apkUrl: String, val apkSha256: String, val apkVersionCode: Long, val notes: String?)
 
 object Updates {
-    const val MANIFEST_URL = "https://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV-update.json"
+    const val MANIFEST_URL = "https://github.com/Ronanski/kwartotv-remote-app/releases/latest/download/KwartoTV-update.json"
     private const val ALLOWED_PREFIX = "https://github.com/Ronanski/kwartotv-remote-app/releases/download/"
 
     fun isAllowedUrl(url: String) = url.startsWith(ALLOWED_PREFIX)

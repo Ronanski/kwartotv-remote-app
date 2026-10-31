@@ -8,7 +8,15 @@ A living-room TV for a Windows PC, controlled from your phone. **No channels or 
 | `KwartoTV-Remote.apk` | Android remote (Kotlin, built for a Samsung A56) |
 | Browser remote | `http://<tv-address>:8765` in any phone or PC browser, no install |
 
-Download the latest build from the **Releases** page (`latest`), or from the artifacts of the newest workflow run.
+Download the newest version from the **Releases** page (marked **Latest**), or from the artifacts of the newest workflow run.
+
+### Version numbers
+
+Every push to `main` that passes the tests becomes a release `vMAJOR.MINOR.PATCH` (for example `v1.1.0`, `v1.1.1`, ...):
+
+- `MAJOR.MINOR` comes from the `VERSION` file. Change it (for example to `1.2` or `2.0`) for a bigger update; PATCH starts again at 0.
+- `PATCH` goes up by one with each release.
+- The build number (Android `versionCode`, the last part of the Windows file version) only ever goes up, and is what the in-app updaters compare.
 
 ## Using it
 

@@ -3,18 +3,43 @@ name: Test and Build
 on:
   push:
     branches: [main, "ccr-*", "claude/**"]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# Builds of main run one after another, so two releases never get the same version number.
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && 'release-main' || format('build-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 jobs:
+  version:
+    name: Version number
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, fetch-tags: true }
+      - id: v
+        name: Next version (MAJOR.MINOR from the VERSION file, PATCH counts the releases)
+        run: |
+          base=$(tr -d ' \r\n' < VERSION)
+          [[ "$base" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "::error::VERSION must be MAJOR.MINOR (for example 1.1), not '$base'"; exit 1; }
+          last=$(git tag -l "v$base.*" | grep -E "^v${base//./\\.}\.[0-9]+$" | sed 's/.*\.//' | sort -n | tail -1 || true)
+          version="$base.$(( ${last:--1} + 1 ))"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "### KwartoTV v$version (build ${{ github.run_number }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version $version, build ${{ github.run_number }}"
+
   core:
     name: Core tests (Linux)
     runs-on: ubuntu-latest
@@ -26,8 +51,11 @@ jobs:
 
   windows:
     name: Windows app and installer
-    needs: core
+    needs: [core, version]
     runs-on: windows-latest
+    env:
+      KWARTO_VERSION: ${{ needs.version.outputs.version }}
+      KWARTO_BUILD: ${{ needs.version.outputs.build }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -39,7 +67,7 @@ jobs:
         run: ./tools/get-libmpv.ps1
 
       - name: Publish app (self-contained, so the PC needs no .NET)
-        run: dotnet publish src/KwartoTV.App -c Release -r win-x64 --self-contained true -p:Version=1.0.${{ github.run_number }} -p:DebugType=None -o publish
+        run: dotnet publish src/KwartoTV.App -c Release -r win-x64 --self-contained true -p:Version=${{ env.KWARTO_VERSION }} -p:FileVersion=${{ env.KWARTO_VERSION }}.${{ env.KWARTO_BUILD }} -p:AssemblyVersion=${{ env.KWARTO_VERSION }}.${{ env.KWARTO_BUILD }} -p:DebugType=None -o publish
 
       - name: Check libmpv is in the package
         shell: pwsh
@@ -52,7 +80,7 @@ jobs:
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
-          & $iscc "/DAppVersion=1.0.${{ github.run_number }}" installer/KwartoTV.iss
+          & $iscc "/DAppVersion=$env:KWARTO_VERSION" installer/KwartoTV.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
           Get-Item dist/KwartoTV.exe | Select-Object Name, Length
 
@@ -98,6 +126,7 @@ jobs:
 
   android:
     name: Android remote (APK)
+    needs: version
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: android } }
     steps:
@@ -109,13 +138,13 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
-        env: { KWARTO_VERSION_CODE: "${{ github.run_number }}" }
+        env: { KWARTO_VERSION_CODE: "${{ needs.version.outputs.build }}", KWARTO_VERSION_NAME: "${{ needs.version.outputs.version }}" }
       - name: Lint
         run: ./gradlew --no-daemon lintRelease
-        env: { KWARTO_VERSION_CODE: "${{ github.run_number }}" }
+        env: { KWARTO_VERSION_CODE: "${{ needs.version.outputs.build }}", KWARTO_VERSION_NAME: "${{ needs.version.outputs.version }}" }
       - name: Build signed APK
         run: ./gradlew --no-daemon assembleRelease
-        env: { KWARTO_VERSION_CODE: "${{ github.run_number }}" }
+        env: { KWARTO_VERSION_CODE: "${{ needs.version.outputs.build }}", KWARTO_VERSION_NAME: "${{ needs.version.outputs.version }}" }
       - name: Name the APK
         run: |
           mkdir -p ../dist
@@ -132,38 +161,51 @@ jobs:
         with: { name: android-lint, path: android/app/build/reports/lint-results-release.html, if-no-files-found: ignore }
 
   release:
-    name: Publish the latest build
-    needs: [windows, android]
-    # Only main and version tags reach the apps' in-app updater; work branches are built and tested, not shipped.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-    # Two runs replacing 'latest' at once could leave an older build published.
-    concurrency: { group: release-latest, cancel-in-progress: false }
+    name: Publish the release
+    needs: [version, windows, android]
+    # Only main is released (and reaches the apps' in-app updater); work branches are built and tested, not shipped.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      BUILD: ${{ needs.version.outputs.build }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/download-artifact@v4
         with: { path: dist, merge-multiple: true }
       - name: Write the update manifest (used by the in-app updater of the TV app and the Android remote)
         run: |
-          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/v$VERSION"
           exe_sha=$(sha256sum dist/KwartoTV.exe | cut -d' ' -f1)
           apk_sha=$(sha256sum dist/KwartoTV-Remote.apk | cut -d' ' -f1)
           cat > dist/KwartoTV-update.json <<EOF
           {
-            "build": ${{ github.run_number }},
-            "version": "1.0.${{ github.run_number }}",
+            "build": $BUILD,
+            "version": "$VERSION",
             "exe": { "url": "$base/KwartoTV.exe", "sha256": "$exe_sha" },
-            "apk": { "url": "$base/KwartoTV-Remote.apk", "sha256": "$apk_sha", "versionCode": ${{ github.run_number }} },
-            "notes": "Built from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+            "apk": { "url": "$base/KwartoTV-Remote.apk", "sha256": "$apk_sha", "versionCode": $BUILD },
+            "notes": "KwartoTV v$VERSION (build $BUILD, ${GITHUB_SHA::7})"
           }
           EOF
           cat dist/KwartoTV-update.json
 
-      - name: Publish release "latest"
-        env: { GH_TOKEN: "${{ github.token }}" }
+      - name: Publish release v${{ needs.version.outputs.version }}
         run: |
           ls -la dist
-          gh release delete latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
-          gh release create latest dist/KwartoTV.exe dist/KwartoTV-Remote.apk dist/KwartoTV-update.json --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --latest \
-            --title "KwartoTV (latest build)" \
-            --notes "Built from ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). KwartoTV.exe is the Windows installer. KwartoTV-Remote.apk is the Android remote. Both update themselves from inside the apps."
+          # The old single "latest" release is replaced by one release per version.
+          gh release delete latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          files=(dist/KwartoTV.exe dist/KwartoTV-Remote.apk dist/KwartoTV-update.json)
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # A re-run of the same build: replace its files.
+            gh release upload "v$VERSION" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "v$VERSION" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --latest --generate-notes \
+              --title "KwartoTV v$VERSION" \
+              --notes "**KwartoTV v$VERSION** (build $BUILD)
+
+          - **KwartoTV.exe**: Windows installer for the TV app
+          - **KwartoTV-Remote.apk**: Android remote
+
+          Installed apps update themselves to the newest release."
+          fi

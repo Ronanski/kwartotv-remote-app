@@ -38,7 +38,7 @@ try {
     Get-Process -Name KwartoTV -ErrorAction SilentlyContinue | Stop-Process -Force
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $manifestUrl = 'https://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV-update.json'
+    $manifestUrl = 'https://github.com/Ronanski/kwartotv-remote-app/releases/latest/download/KwartoTV-update.json'
     $prefix = 'https://github.com/Ronanski/kwartotv-remote-app/releases/download/'
     $m = Invoke-RestMethod -Uri $manifestUrl -UseBasicParsing -TimeoutSec 60
     # Checked on the parsed address, the one actually downloaded ("../" cannot lead out of this project's releases).
@@ -47,7 +47,8 @@ try {
     if ("$($m.exe.sha256)" -notmatch '^[0-9a-fA-F]{64}$') { throw 'the update manifest has no valid checksum' }
 
     $have = 0
-    try { $have = [Version]::Parse((Get-Item $exe).VersionInfo.FileVersion).Build } catch { }
+    # File version is MAJOR.MINOR.PATCH.BUILD; builds before that were 1.0.BUILD.
+    try { $v = [Version]::Parse((Get-Item $exe).VersionInfo.FileVersion); $have = if ($v.Revision -gt 0) { $v.Revision } else { $v.Build } } catch { }
     if ([int]$m.build -le $have) { Say "already up to date (build $have)"; return }
 
     $installer = Join-Path $dir "KwartoTV-$([int]$m.build).exe"
