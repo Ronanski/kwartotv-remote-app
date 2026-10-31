@@ -28,8 +28,10 @@ public static class StreamProbe
         // same identities the KwartoTV player itself tries.
         string? reason = null;
         var identities = ch.UserAgent is null ? PlayerIdentities : new[] { ch.UserAgent };
-        int who = 0;
-        for (int attempt = 0; attempt < 2 + identities.Length; attempt++)
+        // Tries: each identity once on a refusal, and one more try on a transient failure (never more: a slow server must
+        // not hold up the whole check, which shows the working channels only when it is done).
+        int who = 0, retries = 1;
+        for (int attempt = 0; attempt < 1 + identities.Length + 1; attempt++)
         {
             try
             {
@@ -38,11 +40,11 @@ public static class StreamProbe
                 reason = await Follow(uri, ch with { UserAgent = identities[who] }, http, 0, false, limit.Token);
                 if (reason is null) return new(HealthStatus.Ok, null, now);
                 if (IsRefusal(reason) && who + 1 < identities.Length) { who++; continue; }
-                if (!IsTransient(reason)) break;
+                if (!IsTransient(reason) || retries-- <= 0) break;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (OperationCanceledException) { reason = $"no answer in {(int)Timeout.TotalSeconds} seconds"; }
-            catch (HttpRequestException ex) { reason = ex.StatusCode is { } s ? Explain(s) : "cannot connect"; if (ex.StatusCode is not null && !IsTransient(reason)) break; }
+            catch (OperationCanceledException) { reason = $"no answer in {(int)Timeout.TotalSeconds} seconds"; if (retries-- <= 0) break; }
+            catch (HttpRequestException ex) { reason = ex.StatusCode is { } s ? Explain(s) : "cannot connect"; if ((ex.StatusCode is not null && !IsTransient(reason)) || retries-- <= 0) break; }
             catch (Exception ex) { reason = ex.Message; break; }
         }
         return new(HealthStatus.Dead, reason, now);

@@ -208,7 +208,14 @@ public sealed class TvServices : IDisposable
                     if (h.Reason is "cannot connect" || h.Reason?.StartsWith("no answer") == true) Interlocked.Increment(ref network);
                     if (todo.Count <= 300) AppPaths.LogLine($"health: {c.Name}: dead ({h.Reason})");
                 }
-                else if (h.Status == HealthStatus.Ok) Interlocked.Increment(ref ok);
+                else if (h.Status == HealthStatus.Ok)
+                {
+                    Interlocked.Increment(ref ok);
+                    // Working channels appear as they pass (at most every 2 seconds), not only when the slowest check ends.
+                    var last = Interlocked.Read(ref _lastLiveRebuild);
+                    var tick = Environment.TickCount64;
+                    if (tick - last > 2000 && Interlocked.CompareExchange(ref _lastLiveRebuild, tick, last) == last) RebuildLineup();
+                }
             }
             finally
             {
@@ -252,6 +259,7 @@ public sealed class TvServices : IDisposable
     private int _checkingCount;
     /// <summary>How many channels are being checked right now (shown on Home while the first check runs).</summary>
     public int CheckingCount => Volatile.Read(ref _checkingCount);
+    private long _lastLiveRebuild;
 
     /// <summary>The channels the user chose (what the lineup is made from), before hiding the ones that do not work.</summary>
     public IReadOnlyList<Channel> ChosenChannels() => ChannelCatalog.BuildLineup(Settings.Playlists, Library);

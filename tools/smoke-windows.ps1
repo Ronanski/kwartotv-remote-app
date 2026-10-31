@@ -185,8 +185,9 @@ Shot "20-ph-space-channel-list"
 Keys "{ESC}"
 Keys "{ESC}"
 Keys "{F1}"
-# a YouTube live link in the lineup opens as a fullscreen video inside the app, and channel up still works
-Keys "3"
+# a YouTube live link in the lineup opens as a fullscreen video inside the app, and channel up still works.
+# Numbers follow the playlists: Test Stream 1, 2, Dead Stream (hidden, keeps 3), so the YouTube link is channel 4.
+Keys "4"
 Start-Sleep -Seconds 25
 Shot "21-youtube-channel-video-only"
 Keys "{UP}"
