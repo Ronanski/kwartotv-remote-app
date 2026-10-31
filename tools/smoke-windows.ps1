@@ -154,6 +154,13 @@ Keys "{F1}"
 Keys "{F5}"
 Start-Sleep -Seconds 25
 Shot "09-youtube-in-app"
+# Into YouTube's TV home (signed out), to see the real screen with thumbnails, icons and text over pictures.
+Keys "{ENTER}"; Start-Sleep -Seconds 8
+Shot "09b-youtube-after-get-started"
+Keys "{DOWN}"; Keys "{ENTER}"; Start-Sleep -Seconds 8
+Shot "09c-youtube-next"
+Keys "{RIGHT}"; Keys "{RIGHT}"; Start-Sleep -Seconds 4
+Shot "09d-youtube-browsing"
 Keys "{F1}"
 Start-Sleep -Seconds 2
 Keys "{F6}"
