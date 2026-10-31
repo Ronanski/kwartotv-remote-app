@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Windows;
 using System.Reflection;
 using KwartoTV.Core;
 
@@ -46,7 +47,7 @@ public sealed class Updater
         {
             var path = Path.Combine(Path.GetTempPath(), "KwartoTV-update", $"KwartoTV-{info.Build}.exe");
             await Updates.DownloadAsync(info.Exe, path, Http, progress);
-            StartInstaller(path);
+            StartInstaller(path, info.Version);
             return null;
         }
         catch (Exception ex) { AppPaths.LogLine("update: " + ex); return "Update failed: " + ex.Message; }
@@ -91,19 +92,23 @@ public sealed class Updater
     }
 
     /// <summary>
-    /// Starts a small hidden helper that waits for this app to close, runs the installer silently
-    /// (Windows asks permission once), and then opens KwartoTV again as the normal user, whether the
-    /// install worked or not. Running the installer while the app is still open made it quit silently.
+    /// Starts a small helper that waits for this app to close, shows an "Updating KwartoTV…" screen on the TV (so nobody
+    /// thinks it stopped working), runs the installer silently, opens KwartoTV again as the normal user, and closes its
+    /// screen once KwartoTV is back. Running the installer while the app is still open made it quit silently.
     /// </summary>
-    public static void StartInstaller(string installer)
+    public static void StartInstaller(string installer, string? version = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "KwartoTV-update");
         Directory.CreateDirectory(dir);
         var script = Path.Combine(dir, "apply-update.ps1");
-        File.WriteAllText(script, HelperScript);
+        File.WriteAllText(script, HelperScript, new System.Text.UTF8Encoding(true));   // with a BOM: Windows PowerShell reads it as UTF-8
         var app = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "KwartoTV.exe");
-        var args = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{script}\" -AppPid {Environment.ProcessId} " +
-                   $"-Installer \"{installer}\" -App \"{app}\" -Log \"{Path.Combine(dir, "install.log")}\"";
+        // The waiting screen goes on the screen KwartoTV is on (the TV), in screen pixels.
+        var screen = Application.Current?.Dispatcher.Invoke(() =>
+            Application.Current.MainWindow is { } mw ? Native.ScreenOf(new System.Windows.Interop.WindowInteropHelper(mw).Handle) : null);
+        var where = screen is { } r ? $" -X {r.X} -Y {r.Y} -W {r.W} -H {r.H}" : "";
+        var args = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -STA -File \"{script}\" -AppPid {Environment.ProcessId} " +
+                   $"-Installer \"{installer}\" -App \"{app}\" -Log \"{Path.Combine(dir, "install.log")}\" -Version \"{version ?? ""}\"{where}";
         var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"), args)
         { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = dir };
         Process.Start(psi);
@@ -111,20 +116,89 @@ public sealed class Updater
     }
 
     private const string HelperScript = """
-        param([int]$AppPid, [string]$Installer, [string]$App, [string]$Log)
+        param([int]$AppPid, [string]$Installer, [string]$App, [string]$Log, [string]$Version = "", [int]$X = 0, [int]$Y = 0, [int]$W = 0, [int]$H = 0)
         $status = Join-Path (Split-Path $Log) "status.txt"
         function Say($t) { "$(Get-Date -Format s) $t" | Out-File -FilePath $status -Append -Encoding utf8 }
-        Say "waiting for KwartoTV ($AppPid) to close"
-        try { Wait-Process -Id $AppPid -Timeout 30 -ErrorAction Stop } catch { }
-        Get-Process -Id $AppPid -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 1
-        $code = -1
+
+        # The waiting screen: KwartoTV is closed while it updates, so say so on the TV.
+        $form = $null
         try {
-            $p = Start-Process -FilePath $Installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG=`"$Log`"" -PassThru -Wait
-            $code = $p.ExitCode
-        } catch { Say "installer did not start: $($_.Exception.Message)" }
-        Say "installer finished with code $code"
-        Start-Sleep -Seconds 1
-        if (-not (Get-Process -Name KwartoTV -ErrorAction SilentlyContinue)) { Start-Process -FilePath $App; Say "KwartoTV opened again" }
+            Add-Type -Name Dpi -Namespace KwartoTV -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
+            [KwartoTV.Dpi]::SetProcessDPIAware() | Out-Null
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $form = New-Object System.Windows.Forms.Form
+            $form.FormBorderStyle = 'None'; $form.ShowInTaskbar = $false; $form.TopMost = $true; $form.StartPosition = 'Manual'
+            $form.BackColor = [System.Drawing.Color]::FromArgb(14, 16, 22); $form.Text = "Updating KwartoTV"; $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+            if ($W -gt 0 -and $H -gt 0) { $form.Bounds = New-Object System.Drawing.Rectangle $X, $Y, $W, $H } else { $form.WindowState = 'Maximized' }
+            function Lbl($text, $size, $style, $color) {
+                $l = New-Object System.Windows.Forms.Label
+                $l.Text = $text; $l.AutoSize = $true; $l.ForeColor = $color; $l.BackColor = $form.BackColor
+                $l.Font = New-Object System.Drawing.Font("Segoe UI", $size, $style)
+                $form.Controls.Add($l); return $l
+            }
+            $accent = [System.Drawing.Color]::FromArgb(255, 122, 69)
+            $brand = Lbl "KwartoTV" 40 ([System.Drawing.FontStyle]::Bold) $accent
+            $what = Lbl ($(if ($Version) { "Updating to version $Version" } else { "Updating" })) 26 ([System.Drawing.FontStyle]::Regular) ([System.Drawing.Color]::White)
+            $dots = Lbl "●  ○  ○" 22 ([System.Drawing.FontStyle]::Regular) $accent
+            $note = Lbl "KwartoTV opens again by itself in about a minute. Please do not turn off the PC." 15 ([System.Drawing.FontStyle]::Regular) ([System.Drawing.Color]::FromArgb(160, 166, 180))
+            $place = {
+                $cw = $form.ClientSize.Width; $y0 = [int]($form.ClientSize.Height / 2 - 150)
+                foreach ($pair in @(@($brand, 0), @($what, 90), @($dots, 160), @($note, 230))) {
+                    $pair[0].Left = [int](($cw - $pair[0].Width) / 2); $pair[0].Top = $y0 + $pair[1]
+                }
+            }
+            $form.Add_Shown($place); $form.Add_Resize($place)
+        } catch { Say "waiting screen not shown: $($_.Exception.Message)"; $form = $null }
+
+        $state = @{ Phase = 0; Since = Get-Date; Started = Get-Date; Proc = $null; Tick = 0 }
+        $step = {
+            switch ($state.Phase) {
+                0 {
+                    # Wait for KwartoTV to close (up to 30 s), then run the installer without a window.
+                    if ((Get-Process -Id $AppPid -ErrorAction SilentlyContinue) -and ((Get-Date) - $state.Since).TotalSeconds -lt 30) { return }
+                    Get-Process -Id $AppPid -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Say "KwartoTV closed; installing"
+                    try { $state.Proc = Start-Process -FilePath $Installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG=`"$Log`"" -PassThru; $null = $state.Proc.Handle }
+                    catch { Say "installer did not start: $($_.Exception.Message)"; Say "installer finished with code -1"; $state.Phase = 2; $state.Since = Get-Date; return }
+                    $state.Phase = 1
+                }
+                1 {
+                    if (-not $state.Proc.HasExited) { return }
+                    Say "installer finished with code $($state.Proc.ExitCode)"
+                    Start-Sleep -Milliseconds 800
+                    $state.Phase = 2; $state.Since = Get-Date
+                }
+                2 {
+                    # Open KwartoTV again (unless the installer already did), then wait until its window is up.
+                    if (-not (Get-Process -Name KwartoTV -ErrorAction SilentlyContinue)) {
+                        $exe = $App
+                        $moved = Join-Path $env:LOCALAPPDATA "Programs\KwartoTV\KwartoTV.exe"
+                        if (-not (Test-Path $exe) -and (Test-Path $moved)) { $exe = $moved }
+                        Start-Process -FilePath $exe; Say "KwartoTV opened again"
+                    } else { Say "KwartoTV opened again" }
+                    $state.Phase = 3; $state.Since = Get-Date
+                }
+                3 {
+                    $up = Get-Process -Name KwartoTV -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+                    if ($up -or ((Get-Date) - $state.Since).TotalSeconds -gt 25) { $state.Phase = 4 }
+                }
+            }
+        }
+
+        if ($form) {
+            $timer = New-Object System.Windows.Forms.Timer
+            $timer.Interval = 400
+            $timer.Add_Tick({
+                $state.Tick++
+                $dots.Text = @("●  ○  ○", "○  ●  ○", "○  ○  ●")[$state.Tick % 3]
+                $dots.Left = [int](($form.ClientSize.Width - $dots.Width) / 2)
+                & $step
+                if ($state.Phase -ge 4 -or ((Get-Date) - $state.Started).TotalMinutes -gt 6) { $timer.Stop(); $form.Close() }
+            })
+            $timer.Start()
+            [void]$form.ShowDialog()
+        } else {
+            while ($state.Phase -lt 4 -and ((Get-Date) - $state.Started).TotalMinutes -lt 6) { & $step; Start-Sleep -Milliseconds 400 }
+        }
         """;
 }

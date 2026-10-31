@@ -77,6 +77,16 @@ internal static class Native
 
     [DllImport("user32.dll")] private static extern bool IsZoomed(IntPtr hwnd);
 
+    /// <summary>The bounds (screen pixels) of the monitor [window] is on, or null.</summary>
+    public static (int X, int Y, int W, int H)? ScreenOf(IntPtr window)
+    {
+        if (window == IntPtr.Zero) return null;
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(MonitorFromWindow(window, 2 /* nearest */), ref info)) return null;
+        var r = info.Monitor;
+        return (r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+    }
+
     public static IntPtr Foreground => GetForegroundWindow();
     public static uint ForegroundProcessId() { GetWindowThreadProcessId(GetForegroundWindow(), out var pid); return pid; }
 

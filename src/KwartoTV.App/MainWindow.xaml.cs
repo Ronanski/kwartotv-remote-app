@@ -113,13 +113,13 @@ public partial class MainWindow : Window, IShell
             // Per-user install: download, close, install silently and open again, with no Windows permission prompt.
             if (Updater.IsPerUserInstall)
             {
-                if (await _tv.Updater.InstallAsync(info) is not { } err) { await Task.Delay(1500); Application.Current.Shutdown(); return; }
+                if (await _tv.Updater.InstallAsync(info) is not { } err) { await ShowUpdatingNoticeAsync(info.Version); Application.Current.Shutdown(); return; }
                 AppPaths.LogLine("update: " + err);
                 _updating = false;
                 _lastUpdateCheck = DateTime.UtcNow - UpdateCheckEvery + TimeSpan.FromHours(1);   // try again in an hour
                 return;
             }
-            if (await Updater.StartUpdateTaskAsync()) { await Task.Delay(1500); Application.Current.Shutdown(); return; }
+            if (await Updater.StartUpdateTaskAsync()) { await ShowUpdatingNoticeAsync(info.Version); Application.Current.Shutdown(); return; }
             // An old Program Files install without the update task: install from the banner or Settings (Windows asks once,
             // and that update moves KwartoTV to a per-user install that never asks again).
             _noUpdateTask = true; _updating = false;
@@ -477,6 +477,24 @@ public partial class MainWindow : Window, IShell
     }
 
     // ---------- the remote's keys go to KwartoTV
+
+    /// <summary>
+    /// Says on the TV that KwartoTV is about to close for an update and opens again by itself, for a few seconds, so
+    /// nobody thinks it stopped working. (The helper then shows an "Updating" screen until KwartoTV is back.)
+    /// </summary>
+    public async Task ShowUpdatingNoticeAsync(string version)
+    {
+        _player?.Hide(); CloseWeb();
+        var panel = new StackPanel { Width = 760 };
+        panel.Children.Add(new TextBlock { Text = $"Updating to version {version}", FontSize = 34, FontWeight = FontWeights.Bold });
+        panel.Children.Add(UiKit.Dimmed("KwartoTV will close in a moment and open again by itself in about a minute. Please do not turn off the PC.", 20));
+        var count = UiKit.Dimmed("", 20);
+        count.Margin = new Thickness(0, 14, 0, 0);
+        panel.Children.Add(count);
+        ShowDialog(panel);
+        Native.BringToFront(Handle); Activate();
+        for (int s = 5; s > 0; s--) { count.Text = $"Closing in {s}…"; await Task.Delay(1000); }
+    }
 
     public bool EnsureInFront()
     {

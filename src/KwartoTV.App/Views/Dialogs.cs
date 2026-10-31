@@ -200,8 +200,7 @@ public static class Dialogs
             var err = await updater.InstallAsync(info, progress);
             if (err is null)
             {
-                status.Text = "Installing. KwartoTV will close and open again.";
-                await Task.Delay(2500);
+                await w.ShowUpdatingNoticeAsync(info.Version);
                 Application.Current.Shutdown();
             }
             else { status.Text = "⚠ " + err; status.Foreground = UiKit.B("Danger"); installBtn.IsEnabled = true; }
