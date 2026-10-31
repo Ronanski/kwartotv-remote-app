@@ -1,6 +1,17 @@
 package com.kwartotv.remote.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -36,8 +47,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * A big touch button. Fires on press (not on release) so it feels instant, and repeats while held
- * when [repeat] is set (arrows, volume). Works with TalkBack through the click semantics.
+ * A big touch button: an icon (or a short label) with an optional caption under it. Fires on press (not on release) so
+ * it feels instant, repeats while held when [repeat] is set (arrows, volume), and shrinks a little while pressed.
+ * Works with TalkBack through the click semantics.
  */
 @Composable
 fun RemoteKey(
@@ -49,29 +61,33 @@ fun RemoteKey(
     repeat: Boolean = false,
     fontSize: Int = 22,
     height: Dp = 60.dp,
+    icon: ImageVector? = null,
+    caption: String? = null,
+    content: (@Composable () -> Unit)? = null,
     onFire: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val fire by rememberUpdatedState(onFire)
     var pressed by remember { mutableStateOf(false) }
-    val colors = MaterialTheme.colorScheme
-    val bg = when {
-        pressed -> colors.primary
-        primary -> colors.primary.copy(alpha = 0.9f)
-        danger -> androidx.compose.ui.graphics.Color(0xFF3A1D24)
-        else -> colors.surfaceVariant
-    }
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, animationSpec = tween(90), label = "press")
+    val shape = RoundedCornerShape(20.dp)
     val fg = when {
-        pressed || primary -> colors.onPrimary
-        danger -> androidx.compose.ui.graphics.Color(0xFFFFB3BB)
-        else -> colors.onSurface
+        primary -> Color.White
+        danger -> Color(0xFFFF8A96)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    val base = Modifier
+        .heightIn(min = height)
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .clip(shape)
+    val filled = when {
+        primary -> base.background(AccentBrush)
+        danger -> base.background(Color(0xFF2A161B)).border(1.dp, Color(0x33FF5C6C), shape)
+        else -> base.background(if (pressed) CardHigh else Card).border(1.dp, Hairline, shape)
     }
     Box(
-        modifier = modifier
-            .heightIn(min = height)
-            .clip(RoundedCornerShape(20.dp))
-            .background(bg)
+        modifier = modifier.then(filled)
             .semantics(mergeDescendants = true) {
                 role = Role.Button
                 contentDescription = description
@@ -94,6 +110,18 @@ fun RemoteKey(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = fg, fontSize = fontSize.sp, fontWeight = FontWeight.Medium)
+        if (content != null) content() else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(if (caption == null && label.isEmpty()) 30.dp else 24.dp))
+            if (icon == null && label.isNotEmpty()) Text(label, color = fg, fontSize = fontSize.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            val small = caption ?: if (icon != null) label.ifEmpty { null } else null
+            if (small != null) Text(small, color = if (primary) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
     }
+}
+
+/** A small rounded section title ("APPS", "VOLUME"...). */
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(text.uppercase(), modifier = modifier.padding(top = 8.dp, bottom = 2.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
 }

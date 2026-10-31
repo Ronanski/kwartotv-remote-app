@@ -61,6 +61,7 @@ object Cmd {
     const val APP_LIVE = "app.livetv"
     const val APP_YOUTUBE = "app.youtube"
     const val APP_NETFLIX = "app.netflix"
+    const val APP_BILIBILI = "app.bilibili"
 
     const val SCREEN_ON = "power.screenon"
     const val SCREEN_OFF = "power.screenoff"

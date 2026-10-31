@@ -27,7 +27,7 @@ public sealed class CommandRouter
         "channel.list", "playlist.add",
         "key.text", "key.backspace", "key.enter",
         "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
-        "app.youtube", "app.netflix", "app.livetv", "app.library", "app.settings",
+        "app.youtube", "app.netflix", "app.bilibili", "app.livetv", "app.library", "app.settings",
         "power.sleep", "power.screenoff", "power.screenon", "power.shutdown", "power.restart",
         // the phone's channel finder: check every channel, then pick working ones and favorites
         "scan.start", "scan.stop", "catalog.choose", "catalog.favorite", "catalog.choosegroup",

@@ -2,6 +2,46 @@ package com.kwartotv.remote.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
+import androidx.compose.material.icons.automirrored.rounded.List
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Forward10
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Replay10
+import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.SettingsRemote
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -67,8 +107,9 @@ import com.kwartotv.remote.net.Conn
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private enum class Tab(val label: String, val glyph: String) {
-    Remote("Remote", "◉"), Media("Media", "▶"), Channels("Channels", "#"), Keys("Keyboard", "⌨"), Power("Power", "⏻")
+private enum class Tab(val label: String, val icon: ImageVector) {
+    Remote("Remote", Icons.Rounded.SettingsRemote), Media("Media", Icons.Rounded.PlayCircle), Channels("Channels", Icons.Rounded.LiveTv),
+    Keys("Keyboard", Icons.Rounded.Keyboard), Power("Power", Icons.Rounded.PowerSettingsNew)
 }
 
 @Composable
@@ -110,8 +151,13 @@ fun RemoteScreen(vm: AppViewModel) {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(
                         selected = tab == t, onClick = { Haptics.click(context); tab = t },
-                        icon = { Text(t.glyph, fontSize = 20.sp) },
-                        label = { Text(t.label, fontSize = 12.sp) },
+                        icon = { Icon(t.icon, contentDescription = null) },
+                        label = { Text(t.label, fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Accent, selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = Accent.copy(alpha = 0.16f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
@@ -121,9 +167,30 @@ fun RemoteScreen(vm: AppViewModel) {
             // ---- header: TV picker + connection state
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
-                    TextButton(onClick = { menu = true }) {
-                        Text(tv.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                        Text("  ▾", fontSize = 16.sp)
+                    // The TV (tap for other TVs, sign-ins and settings) and how the connection is.
+                    val (label, color) = when (conn) {
+                        Conn.Connected -> "Connected" to Ok
+                        Conn.Connecting, Conn.Retrying -> "Connecting…" to AccentSoft
+                        is Conn.Rejected -> "Not allowed" to Bad
+                        Conn.Idle -> "Offline" to Bad
+                    }
+                    Row(
+                        Modifier.clip(RoundedCornerShape(16.dp)).clickable { menu = true }.padding(vertical = 6.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(AccentBrush), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Rounded.Tv, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                        }
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(tv.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                Icon(Icons.Rounded.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(7.dp).clip(CircleShape).background(color))
+                                Text("  $label", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                            }
+                        }
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         tvs.forEach { t ->
@@ -140,14 +207,8 @@ fun RemoteScreen(vm: AppViewModel) {
                         DropdownMenuItem(text = { Text("Forget ${tv.name}") }, onClick = { menu = false; vm.forget(tv) })
                     }
                 }
-                val (label, color) = when (conn) {
-                    Conn.Connected -> "Connected" to Ok
-                    Conn.Connecting, Conn.Retrying -> "Connecting…" to AccentSoft
-                    is Conn.Rejected -> "Not allowed" to Bad
-                    Conn.Idle -> "Offline" to Bad
-                }
-                Box(Modifier.size(10.dp).clip(CircleShape).background(color))
-                Text("  $label", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                Icon(Icons.Rounded.MoreVert, "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(40.dp).clip(CircleShape).clickable { menu = true }.padding(8.dp))
             }
 
             UpdateBanner(vm)
@@ -160,12 +221,16 @@ fun RemoteScreen(vm: AppViewModel) {
                     TextButton(onClick = { vm.forget(tv); vm.adding.value = true }) { Text("Pair again") }
                 }
             } else {
+                // What the TV is on now.
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 14.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(18.dp)).background(Card)
+                        .border(1.dp, Hairline, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(if (now.number > 0) now.number.toString() else "–", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = AccentSoft)
-                    Text("   ${now.name ?: "No channel yet"}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text("LIVE", Modifier.clip(RoundedCornerShape(6.dp)).background(Accent.copy(alpha = 0.16f)).padding(horizontal = 7.dp, vertical = 3.dp),
+                        color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(if (now.number > 0) "  ${now.number}" else "  –", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("  ${now.name ?: "No channel yet"}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp)
                 }
             }
 
@@ -198,20 +263,20 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit) {
             else -> DPad(send)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("⟵", "Back", Modifier.weight(1f)) { send(Cmd.BACK, null) }
-            RemoteKey("⌂", "Home", Modifier.weight(1f)) { send(Cmd.HOME, null) }
-            RemoteKey("🔇", "Mute", Modifier.weight(1f)) { send(Cmd.MUTE, null) }
+            RemoteKey("Back", "Back", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.ArrowBack) { send(Cmd.BACK, null) }
+            RemoteKey("Home", "Home", Modifier.weight(1f), icon = Icons.Rounded.Home) { send(Cmd.HOME, null) }
+            RemoteKey("Mute", "Mute", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("−", "Volume down", Modifier.weight(1f), repeat = true, fontSize = 30) { send(Cmd.VOL_DOWN, null) }
-            Text("Volume", Modifier.weight(1f).align(Alignment.CenterVertically), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            RemoteKey("+", "Volume up", Modifier.weight(1f), repeat = true, fontSize = 30) { send(Cmd.VOL_UP, null) }
+            RemoteKey("Vol −", "Volume down", Modifier.weight(1f), repeat = true, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
+            RemoteKey("Vol +", "Volume up", Modifier.weight(1f), repeat = true, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
-        Text("Apps", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        SectionLabel("Apps")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Live TV", "Open Live TV", Modifier.weight(1f), fontSize = 16) { send(Cmd.APP_LIVE, null) }
-            RemoteKey("YouTube", "Open YouTube", Modifier.weight(1f), fontSize = 16) { send(Cmd.APP_YOUTUBE, null) }
-            RemoteKey("Netflix", "Open Netflix", Modifier.weight(1f), fontSize = 16) { send(Cmd.APP_NETFLIX, null) }
+            AppTile(QuickApp.LiveTv, Modifier.weight(1f)) { send(Cmd.APP_LIVE, null) }
+            AppTile(QuickApp.YouTube, Modifier.weight(1f)) { send(Cmd.APP_YOUTUBE, null) }
+            AppTile(QuickApp.Netflix, Modifier.weight(1f)) { send(Cmd.APP_NETFLIX, null) }
+            AppTile(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
         }
     }
 }
@@ -220,15 +285,15 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit) {
 private fun DPad(send: (String, String?) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.weight(1f)); RemoteKey("▲", "Up", Modifier.weight(1f), repeat = true, height = 72.dp) { send(Cmd.UP, null) }; Box(Modifier.weight(1f))
+            Box(Modifier.weight(1f)); RemoteKey("", "Up", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowUp) { send(Cmd.UP, null) }; Box(Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("◀", "Left", Modifier.weight(1f), repeat = true, height = 72.dp) { send(Cmd.LEFT, null) }
+            RemoteKey("", "Left", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowLeft) { send(Cmd.LEFT, null) }
             RemoteKey("OK", "OK", Modifier.weight(1f), primary = true, height = 72.dp) { send(Cmd.OK, null) }
-            RemoteKey("▶", "Right", Modifier.weight(1f), repeat = true, height = 72.dp) { send(Cmd.RIGHT, null) }
+            RemoteKey("", "Right", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowRight) { send(Cmd.RIGHT, null) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.weight(1f)); RemoteKey("▼", "Down", Modifier.weight(1f), repeat = true, height = 72.dp) { send(Cmd.DOWN, null) }; Box(Modifier.weight(1f))
+            Box(Modifier.weight(1f)); RemoteKey("", "Down", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowDown) { send(Cmd.DOWN, null) }; Box(Modifier.weight(1f))
         }
     }
 }
@@ -299,20 +364,20 @@ private fun MousePad(send: (String, String?) -> Unit) {
 private fun MediaTab(send: (String, String?) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("⏮", "Previous", Modifier.weight(1f), height = 72.dp) { send(Cmd.PREV, null) }
-            RemoteKey("⏯", "Play or pause", Modifier.weight(1f), primary = true, height = 72.dp) { send(Cmd.PLAY_PAUSE, null) }
-            RemoteKey("⏭", "Next", Modifier.weight(1f), height = 72.dp) { send(Cmd.NEXT, null) }
+            RemoteKey("", "Previous", Modifier.weight(1f), height = 72.dp, icon = Icons.Rounded.SkipPrevious) { send(Cmd.PREV, null) }
+            RemoteKey("Play / Pause", "Play or pause", Modifier.weight(1f), primary = true, height = 72.dp, icon = Icons.Rounded.PlayArrow) { send(Cmd.PLAY_PAUSE, null) }
+            RemoteKey("", "Next", Modifier.weight(1f), height = 72.dp, icon = Icons.Rounded.SkipNext) { send(Cmd.NEXT, null) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("↺ 10", "Back 10 seconds", Modifier.weight(1f), repeat = true, fontSize = 18) { send(Cmd.SEEK, "-10") }
-            RemoteKey("⏹", "Stop", Modifier.weight(1f)) { send(Cmd.STOP, null) }
-            RemoteKey("10 ↻", "Forward 10 seconds", Modifier.weight(1f), repeat = true, fontSize = 18) { send(Cmd.SEEK, "10") }
+            RemoteKey("−10 s", "Back 10 seconds", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.Replay10) { send(Cmd.SEEK, "-10") }
+            RemoteKey("Stop", "Stop", Modifier.weight(1f), icon = Icons.Rounded.Stop) { send(Cmd.STOP, null) }
+            RemoteKey("+10 s", "Forward 10 seconds", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.Forward10) { send(Cmd.SEEK, "10") }
         }
         Text("Volume", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("−", "Volume down", Modifier.weight(1f), repeat = true, fontSize = 30, height = 80.dp) { send(Cmd.VOL_DOWN, null) }
-            RemoteKey("🔇", "Mute", Modifier.weight(1f), height = 80.dp) { send(Cmd.MUTE, null) }
-            RemoteKey("+", "Volume up", Modifier.weight(1f), repeat = true, fontSize = 30, height = 80.dp) { send(Cmd.VOL_UP, null) }
+            RemoteKey("Vol −", "Volume down", Modifier.weight(1f), repeat = true, height = 80.dp, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
+            RemoteKey("Mute", "Mute", Modifier.weight(1f), height = 80.dp, icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
+            RemoteKey("Vol +", "Volume up", Modifier.weight(1f), repeat = true, height = 80.dp, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
     }
 }
@@ -450,11 +515,11 @@ private fun ChannelRow(ch: LineupChannel, watching: Boolean, onStar: (() -> Unit
 private fun ChannelKeypad(send: (String, String?) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // Opens the channel list on the TV, grouped by category: ◀ ▶ change category, ▲ ▼ choose, OK watches.
-        RemoteKey("☰  Channel list", "Open the channel list on the TV", Modifier.fillMaxWidth(), primary = true, fontSize = 20, height = 64.dp) { send(Cmd.CH_LIST, null) }
+        RemoteKey("Channel list on TV", "Open the channel list on the TV", Modifier.fillMaxWidth(), primary = true, height = 64.dp, icon = Icons.AutoMirrored.Rounded.List) { send(Cmd.CH_LIST, null) }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("▲ CH", "Channel up", Modifier.weight(1f), repeat = true, fontSize = 18) { send(Cmd.CH_NEXT, null) }
-            RemoteKey("↩ Last", "Last channel", Modifier.weight(1f), fontSize = 18) { send(Cmd.CH_LAST, null) }
-            RemoteKey("▼ CH", "Channel down", Modifier.weight(1f), repeat = true, fontSize = 18) { send(Cmd.CH_PREV, null) }
+            RemoteKey("CH +", "Channel up", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.KeyboardArrowUp) { send(Cmd.CH_NEXT, null) }
+            RemoteKey("Last", "Last channel", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.Undo) { send(Cmd.CH_LAST, null) }
+            RemoteKey("CH −", "Channel down", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.KeyboardArrowDown) { send(Cmd.CH_PREV, null) }
         }
         Text("Number pad", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         listOf("123", "456", "789").forEach { row ->
@@ -463,7 +528,7 @@ private fun ChannelKeypad(send: (String, String?) -> Unit) {
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("★", "Add or remove favorite", Modifier.weight(1f), fontSize = 26, height = 64.dp) { send(Cmd.CH_FAVORITE, null) }
+            RemoteKey("Favorite", "Add or remove favorite", Modifier.weight(1f), height = 64.dp, icon = Icons.Rounded.StarOutline) { send(Cmd.CH_FAVORITE, null) }
             RemoteKey("0", "Digit 0", Modifier.weight(1f), fontSize = 26, height = 64.dp) { send(Cmd.CH_DIGIT, "0") }
             RemoteKey("Go", "Go to typed channel", Modifier.weight(1f), primary = true, fontSize = 22, height = 64.dp) { send(Cmd.CH_COMMIT, null) }
         }
@@ -492,9 +557,9 @@ private fun KeysTab(send: (String, String?) -> Unit) {
             keyboardActions = KeyboardActions(onSend = { send(Cmd.ENTER, null); text = "" }),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("⌫", "Backspace", Modifier.weight(1f), repeat = true) { send(Cmd.BACKSPACE, null); if (text.isNotEmpty()) text = text.dropLast(1) }
-            RemoteKey("⟵ Back", "Back", Modifier.weight(1f), fontSize = 18) { send(Cmd.BACK, null) }
-            RemoteKey("⏎ Enter", "Enter", Modifier.weight(1f), primary = true, fontSize = 18) { send(Cmd.ENTER, null); text = "" }
+            RemoteKey("Delete", "Backspace", Modifier.weight(1f), repeat = true, icon = Icons.AutoMirrored.Rounded.Backspace) { send(Cmd.BACKSPACE, null); if (text.isNotEmpty()) text = text.dropLast(1) }
+            RemoteKey("Back", "Back", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.ArrowBack) { send(Cmd.BACK, null) }
+            RemoteKey("Enter", "Enter", Modifier.weight(1f), primary = true, icon = Icons.AutoMirrored.Rounded.KeyboardReturn) { send(Cmd.ENTER, null); text = "" }
         }
         SendLinkBox(send)
     }
@@ -515,12 +580,12 @@ private fun SendLinkBox(send: (String, String?) -> Unit) {
         keyboardActions = KeyboardActions(onSend = { if (link.isNotEmpty()) { send(Cmd.PLAYLIST_ADD, link); link = "" } }),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        RemoteKey("Paste", "Paste a link from the clipboard", Modifier.weight(1f), fontSize = 18) {
+        RemoteKey("Paste", "Paste a link from the clipboard", Modifier.weight(1f), icon = Icons.Rounded.ContentPaste) {
             val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             link = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.trim() ?: ""
             if (link.isEmpty()) Toast.makeText(context, "The clipboard is empty", Toast.LENGTH_SHORT).show()
         }
-        RemoteKey("Send to TV", "Send the link to the TV", Modifier.weight(1f), primary = true, fontSize = 18) {
+        RemoteKey("Send to TV", "Send the link to the TV", Modifier.weight(1f), primary = true, icon = Icons.AutoMirrored.Rounded.Send) {
             if (link.startsWith("http://") || link.startsWith("https://")) { send(Cmd.PLAYLIST_ADD, link); Toast.makeText(context, "Sent. Look at the TV.", Toast.LENGTH_SHORT).show(); link = "" }
             else Toast.makeText(context, "Paste a link that starts with https://", Toast.LENGTH_SHORT).show()
         }
@@ -532,14 +597,14 @@ private fun PowerTab(send: (String, String?) -> Unit) {
     var confirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("🔓  Unlock", "Unlock the TV", Modifier.weight(1f), primary = true, fontSize = 18, height = 72.dp) { send(Cmd.SCREEN_ON, null) }
-            RemoteKey("🔒  Lock · clock", "Lock the TV and show the clock", Modifier.weight(1f), fontSize = 18, height = 72.dp) { send(Cmd.SCREEN_OFF, null) }
+            RemoteKey("Unlock", "Unlock the TV", Modifier.weight(1f), primary = true, height = 80.dp, icon = Icons.Rounded.LockOpen) { send(Cmd.SCREEN_ON, null) }
+            RemoteKey("Lock · clock", "Lock the TV and show the clock", Modifier.weight(1f), height = 80.dp, icon = Icons.Rounded.Lock) { send(Cmd.SCREEN_OFF, null) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Sleep PC", "Put the whole PC to sleep", Modifier.weight(1f), fontSize = 18, height = 72.dp) { confirm = Cmd.SLEEP to "Put the whole TV PC to sleep?" }
-            RemoteKey("Restart PC", "Restart the whole PC", Modifier.weight(1f), danger = true, fontSize = 18, height = 72.dp) { confirm = Cmd.RESTART to "Restart the whole TV PC (laptop/computer), not just the app?" }
+            RemoteKey("Sleep PC", "Put the whole PC to sleep", Modifier.weight(1f), height = 80.dp, icon = Icons.Rounded.Bedtime) { confirm = Cmd.SLEEP to "Put the whole TV PC to sleep?" }
+            RemoteKey("Restart PC", "Restart the whole PC", Modifier.weight(1f), danger = true, height = 80.dp, icon = Icons.Rounded.RestartAlt) { confirm = Cmd.RESTART to "Restart the whole TV PC (laptop/computer), not just the app?" }
         }
-        RemoteKey("Shut down PC", "Shut down the whole PC", Modifier.fillMaxWidth(), danger = true, fontSize = 18, height = 72.dp) {
+        RemoteKey("Shut down PC", "Shut down the whole PC", Modifier.fillMaxWidth(), danger = true, height = 80.dp, icon = Icons.Rounded.PowerSettingsNew) {
             confirm = Cmd.SHUTDOWN to "Shut down the whole TV PC (laptop/computer)? You will need to switch it on by hand."
         }
         Text("These control the whole PC, not only the KwartoTV app.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
