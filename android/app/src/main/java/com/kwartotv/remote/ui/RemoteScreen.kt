@@ -83,6 +83,9 @@ fun RemoteScreen(vm: AppViewModel) {
     val tv = tvs.firstOrNull { it.deviceId == selectedId } ?: tvs.first()
     var tab by rememberSaveable { mutableStateOf(Tab.Remote) }
     var menu by remember { mutableStateOf(false) }
+    // Sign in to Netflix / Bilibili for the TV on the phone (from the menu, or when the TV asks).
+    var signInFor by remember { mutableStateOf<String?>(null) }
+    SignInForTv(vm, signInFor) { signInFor = null }
 
     LaunchedEffect(error) {
         error?.let {
@@ -130,6 +133,8 @@ fun RemoteScreen(vm: AppViewModel) {
                             )
                         }
                         DropdownMenuItem(text = { Text("+  Add another TV") }, onClick = { menu = false; vm.adding.value = true })
+                        DropdownMenuItem(text = { Text("Sign in to Netflix for the TV") }, onClick = { menu = false; signInFor = "netflix" })
+                        DropdownMenuItem(text = { Text("Sign in to Bilibili for the TV") }, onClick = { menu = false; signInFor = "bilibili" })
                         DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; vm.reconnect() })
                         DropdownMenuItem(text = { Text("Check for updates") }, onClick = { menu = false; vm.checkForUpdate(manual = true) })
                         DropdownMenuItem(text = { Text("Forget ${tv.name}") }, onClick = { menu = false; vm.forget(tv) })

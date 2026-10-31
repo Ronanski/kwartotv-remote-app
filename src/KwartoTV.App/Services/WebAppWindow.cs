@@ -22,6 +22,37 @@ public sealed class WebAppWindow : Window
     private readonly string? _userAgent;
 
     public ForegroundKind Kind { get; }
+
+    /// <summary>The saved-login profile this window uses ("netflix", "web-bilibili", ...).</summary>
+    public string ProfileName => _profile;
+
+    /// <summary>The service whose sign-in can be done on the phone (PhoneSignIn), or null.</summary>
+    public string? SignInService { get; init; }
+
+    /// <summary>Raised when the service opens without a sign-in: the shell asks the phones to sign in.</summary>
+    public event Action<string>? SignedOut;
+
+    /// <summary>Sign-ins made on the phone, waiting for the window of that profile to open.</summary>
+    public static readonly Dictionary<string, (string Domain, IReadOnlyList<(string Name, string Value)> Cookies, string Home)> PendingSignIns = new();
+
+    private static void PutCookies(CoreWebView2 core, string domain, IReadOnlyList<(string Name, string Value)> cookies)
+    {
+        foreach (var (name, value) in cookies)
+        {
+            var c = core.CookieManager.CreateCookie(name, value, "." + domain, "/");
+            c.IsSecure = true;
+            c.Expires = DateTime.Now.AddYears(1);
+            core.CookieManager.AddOrUpdateCookie(c);
+        }
+    }
+
+    /// <summary>Puts a sign-in made on the phone into this window's browser and opens the service's home page.</summary>
+    public void ApplySignIn(string domain, IReadOnlyList<(string Name, string Value)> cookies, string home)
+    {
+        if (_web.CoreWebView2 is not { } core) { PendingSignIns[_profile] = (domain, cookies, home); return; }
+        PutCookies(core, domain, cookies);
+        core.Navigate(home);
+    }
     private OskWindow? _osk;
     private WebTextTarget? _text;   // the field the keyboard types into; the page reports its text here
     private int _focusLogs;
@@ -127,7 +158,20 @@ public sealed class WebAppWindow : Window
                     Dispatcher.BeginInvoke(() => _text?.Update(state));
                 }
             };
-            core.Navigate(_url);
+            var start = _url;
+            if (PendingSignIns.Remove(_profile, out var signIn))
+            {
+                // Signed in on the phone just before this window opened: use it and go straight to the home page.
+                PutCookies(core, signIn.Domain, signIn.Cookies);
+                start = signIn.Home;
+            }
+            else if (SignInService is { } service && KwartoTV.Core.PhoneSignIn.Find(service) is { } svc)
+            {
+                // Not signed in to this service yet: offer the sign-in on the phone (much easier than on the TV).
+                var have = await core.CookieManager.GetCookiesAsync("https://www." + svc.Domain);
+                if (!have.Any(c => c.Name == svc.SessionCookie)) SignedOut?.Invoke(service);
+            }
+            core.Navigate(start);
             _web.Focus();
         }
         catch (Exception ex)

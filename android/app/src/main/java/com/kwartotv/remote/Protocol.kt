@@ -46,6 +46,9 @@ object Cmd {
     /** The whole text for the box waiting on the TV: "0:" + text, or "1:" + text to also press Go. */
     const val TEXT_SET = "text.set"
 
+    /** A sign-in made on the phone, handed to the TV: "netflix|cookie=value; ...". */
+    const val SIGN_IN = "web.signin"
+
     const val MOUSE_MOVE = "mouse.move"
     const val MOUSE_CLICK = "mouse.click"
     const val MOUSE_RIGHT = "mouse.rightclick"
@@ -111,6 +114,7 @@ sealed interface TvMessage {
     data class Found(val catalog: Catalog) : TvMessage
     data class Scanning(val scan: Scan) : TvMessage
     data class TextWanted(val request: TextRequest?) : TvMessage
+    data class SignInWanted(val request: SignInRequest) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -123,6 +127,7 @@ fun parseTvMessage(text: String): TvMessage = try {
         "catalog" -> TvMessage.Found(parseCatalog(o))
         "scan" -> TvMessage.Scanning(parseScan(o))
         "text" -> TvMessage.TextWanted(parseTextRequest(o))
+        "signin" -> parseSignIn(o)?.let { TvMessage.SignInWanted(it) } ?: TvMessage.Unknown
         else -> TvMessage.Unknown
     }
 } catch (_: Exception) {
@@ -177,6 +182,40 @@ fun filterLineup(channels: List<LineupChannel>, query: String, group: String?): 
  * its password manager); [value] is what the box holds now (never sent for a password).
  */
 data class TextRequest(val kind: String, val title: String?, val value: String)
+
+/**
+ * Sign in to a service (Netflix, Bilibili) on the phone for the TV. [page] is the service's own sign-in page; signed in
+ * means the [sessionCookie] is set for [domain]. [done]: the TV says it is signed in now.
+ */
+data class SignInRequest(val service: String, val name: String, val page: String, val domain: String, val done: Boolean) {
+    val sessionCookie: String get() = SIGN_IN_SERVICES[service]?.sessionCookie ?: ""
+}
+
+/** The services the phone can sign in to for the TV (same list as PhoneSignIn on the TV). */
+data class SignInService(val id: String, val name: String, val page: String, val domain: String, val sessionCookie: String, val signedInPaths: List<String>)
+
+val SIGN_IN_SERVICES = mapOf(
+    "netflix" to SignInService("netflix", "Netflix", "https://www.netflix.com/login", "netflix.com", "NetflixId", listOf("/browse", "/profiles", "/youraccount", "/title", "/watch")),
+    "bilibili" to SignInService("bilibili", "Bilibili", "https://www.bilibili.tv/en/login", "bilibili.tv", "SESSDATA", emptyList()),
+)
+
+fun parseSignIn(o: JSONObject): SignInRequest? {
+    val id = o.text("service") ?: return null
+    val known = SIGN_IN_SERVICES[id] ?: return null
+    return SignInRequest(id, o.text("name") ?: known.name, known.page, known.domain, o.optBoolean("done"))
+}
+
+/**
+ * Signed in, from the phone's cookies for the service and the page it is on: the session cookie is set and (for a
+ * service that keeps a cookie for visitors too) the page is past the sign-in.
+ */
+fun isSignedIn(service: SignInService, cookies: String?, url: String?): Boolean {
+    val has = cookies.orEmpty().split(';').any { it.trim().startsWith(service.sessionCookie + "=") && it.trim().length > service.sessionCookie.length + 1 }
+    if (!has) return false
+    if (service.signedInPaths.isEmpty()) return true
+    val path = runCatching { java.net.URI(url ?: "").path.orEmpty().lowercase() }.getOrDefault("")
+    return service.signedInPaths.any { path.contains(it) }
+}
 
 /** Null when the TV says no box is waiting any more. */
 fun parseTextRequest(o: JSONObject): TextRequest? =

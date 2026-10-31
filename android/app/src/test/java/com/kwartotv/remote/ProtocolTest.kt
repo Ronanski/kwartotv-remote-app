@@ -170,4 +170,18 @@ class LineupTest {
         assertNull((parseTvMessage("""{"type":"text","active":false}""") as TvMessage.TextWanted).request)
         assertEquals("text.set", Cmd.TEXT_SET)
     }
+
+    @Test fun signInForTheTv() {
+        val r = (parseTvMessage("""{"type":"signin","service":"netflix","name":"Netflix","page":"https://evil.example/","done":false}""") as TvMessage.SignInWanted).request
+        assertEquals("https://www.netflix.com/login", r.page)   // the phone opens its own known page, never one sent by the TV
+        assertFalse(r.done)
+        assertEquals(TvMessage.Unknown, parseTvMessage("""{"type":"signin","service":"evil"}"""))
+        val nf = SIGN_IN_SERVICES.getValue("netflix")
+        assertFalse(isSignedIn(nf, "nfvdid=1; NetflixId=abc", "https://www.netflix.com/login"))
+        assertTrue(isSignedIn(nf, "nfvdid=1; NetflixId=abc", "https://www.netflix.com/browse"))
+        assertFalse(isSignedIn(nf, "nfvdid=1", "https://www.netflix.com/browse"))
+        val bb = SIGN_IN_SERVICES.getValue("bilibili")
+        assertTrue(isSignedIn(bb, "SESSDATA=x; bili_jct=y", "https://www.bilibili.tv/en/"))
+        assertFalse(isSignedIn(bb, "buvid3=z", "https://www.bilibili.tv/en/"))
+    }
 }

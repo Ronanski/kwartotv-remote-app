@@ -5,6 +5,7 @@ import android.os.Looper
 import com.kwartotv.remote.Catalog
 import com.kwartotv.remote.Cmd
 import com.kwartotv.remote.Scan
+import com.kwartotv.remote.SignInRequest
 import com.kwartotv.remote.TextRequest
 import com.kwartotv.remote.toggleArg
 import com.kwartotv.remote.Lineup
@@ -77,6 +78,14 @@ class RemoteClient {
 
     /** Sends the whole text for the waiting box ([go]: also press Go/Enter). False when not connected. */
     fun sendText(text: String, go: Boolean): Boolean = send(Cmd.TEXT_SET, (if (go) "1:" else "0:") + text.take(512))
+
+    private val _signIn = MutableStateFlow<SignInRequest?>(null)
+    /** The TV asks the phone to sign in to a service (or says it worked), or null. */
+    val signIn: StateFlow<SignInRequest?> = _signIn
+    fun clearSignIn() { _signIn.value = null }
+
+    /** Hands a sign-in made on the phone to the TV. False when not connected. */
+    fun sendSignIn(service: String, cookies: String): Boolean = send(Cmd.SIGN_IN, "$service|${cookies.take(12000)}")
 
     /** The user closed the phone's text box without sending: do not open it again for the same request. */
     fun dismissText() { _textRequest.value = null }
@@ -157,6 +166,7 @@ class RemoteClient {
                         is TvMessage.Channels -> { _lineup.value = m.lineup; _lineupUnsupported.value = false }
                         is TvMessage.Found -> { _catalog.value = m.catalog; _catalogUnsupported.value = false }
                         is TvMessage.TextWanted -> _textRequest.value = m.request
+                        is TvMessage.SignInWanted -> _signIn.value = m.request
                         is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
                             ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)
                         is TvMessage.Ack -> when {

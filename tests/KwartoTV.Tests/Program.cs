@@ -930,6 +930,21 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(!tRouter.Handle(new("3", "text.set", "x")).Ok && !tRouter.Handle(new("4", "text.set", "1:a\nb")).Ok && !tRouter.Handle(new("5", "text.set", "1:" + new string('a', TextRequest.MaxLength + 1))).Ok, "text.set: bad or too long text refused");
 }
 
+// ---- sign in on the phone, use it on the TV (Netflix, Bilibili)
+{
+    var ck = PhoneSignIn.ParseCookies(" NetflixId=v%3D2; SecureNetflixId=abc ; bad; =x; a b=c; nfvdid=z ");
+    Check(ck.Select(c => c.Name).SequenceEqual(new[] { "NetflixId", "SecureNetflixId", "nfvdid" }) && ck[0].Value == "v%3D2", "phone sign-in: cookies parsed, bad parts skipped");
+    var (nfSvc, nfCookies) = PhoneSignIn.ParseArg("netflix|NetflixId=1; SecureNetflixId=2");
+    Check(nfSvc?.Id == "netflix" && nfCookies.Count == 2, "phone sign-in: netflix argument");
+    Check(PhoneSignIn.ParseArg("netflix|other=1").Service is null && PhoneSignIn.ParseArg("evil|NetflixId=1").Service is null && PhoneSignIn.ParseArg("nopipe").Service is null, "phone sign-in: needs a known service and its session cookie");
+    Check(PhoneSignIn.ParseArg("bilibili|SESSDATA=x; bili_jct=y").Service?.Domain == "bilibili.tv", "phone sign-in: bilibili");
+    var sm = JsonDocument.Parse(PhoneSignIn.Message(PhoneSignIn.Find("netflix")!, false)).RootElement;
+    Check(sm.GetProperty("type").GetString() == "signin" && sm.GetProperty("page").GetString()!.StartsWith("https://www.netflix.com/") && !sm.GetProperty("done").GetBoolean(), "phone sign-in: request message");
+    var sr = new CommandRouter(new ChannelLineup(), new FakeHost());
+    var bigCookies = "netflix|NetflixId=" + new string('a', 3000) + "; SecureNetflixId=" + new string('b', 3000);
+    Check(sr.Handle(new("1", "web.signin", bigCookies)).Ok && !sr.Handle(new("2", "web.signin", "netflix|x=1")).Ok, "phone sign-in: router takes a long sign-in, refuses one without a session");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

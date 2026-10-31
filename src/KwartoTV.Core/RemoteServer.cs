@@ -49,6 +49,12 @@ public sealed class RemoteServer : IAsyncDisposable
     /// <summary>The text request waiting on the TV right now (TextRequest.Message), sent to a phone when it connects. Null: none.</summary>
     public Func<string?>? PendingText { get; set; }
 
+    /// <summary>Sends a message to every connected phone (sign-in requests, text requests).</summary>
+    public void Broadcast(string message)
+    {
+        foreach (var c in _clients.Values) _ = Send(c.Socket, message);
+    }
+
     /// <summary>Tells every phone that a text box on the TV is waiting for text, or no longer is.</summary>
     public void NotifyText(string message)
     {
@@ -345,7 +351,7 @@ public sealed class RemoteServer : IAsyncDisposable
                     r = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token);
                     if (r.MessageType == WebSocketMessageType.Close) goto done;
                     ms.Write(buf, 0, r.Count);
-                    if (ms.Length > 8192) { await ws.CloseAsync(WebSocketCloseStatus.MessageTooBig, "too big", CancellationToken.None); goto done; }
+                    if (ms.Length > 16384) { await ws.CloseAsync(WebSocketCloseStatus.MessageTooBig, "too big", CancellationToken.None); goto done; }
                 } while (!r.EndOfMessage);
 
                 if (!_pairing.Validate(device, token)) { await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "revoked", CancellationToken.None); break; }

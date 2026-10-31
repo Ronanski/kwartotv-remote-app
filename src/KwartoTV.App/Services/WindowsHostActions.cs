@@ -27,6 +27,8 @@ public interface IShell
     bool PlayerStop();
     /// <summary>The phone's channel finder: scan.start/stop, catalog.choose/choosegroup/favorite.</summary>
     void Finder(string cmd, string? arg);
+    /// <summary>A sign-in made on the phone ("netflix|cookies"): opens that service on the TV, signed in.</summary>
+    void SignInFromPhone(string arg);
     /// <summary>
     /// Brings KwartoTV (its window on screen) to the front when another program has the keyboard, so the remote's keys
     /// reach KwartoTV. Returns true when it had to switch. Leaves an outside app KwartoTV opened (Netflix app) alone.
@@ -97,6 +99,7 @@ public sealed class WindowsHostActions : IHostActions
             case "key.text":
                 Native.TypeText(arg!); return;
 
+            case "web.signin": ui.Invoke(() => shell.SignInFromPhone(arg!)); return;
             case "text.set":
             {
                 var submit = arg![0] == '1';

@@ -33,6 +33,8 @@ public sealed class CommandRouter
         "scan.start", "scan.stop", "catalog.choose", "catalog.favorite", "catalog.choosegroup",
         // text typed on the phone for the text box waiting on the TV ("1:" also presses Go)
         "text.set",
+        // a sign-in made on the phone (Netflix, Bilibili) handed to the TV: "netflix|cookie=value; ..."
+        "web.signin",
     };
 
     // While the TV is locked (clock screen) only these work: unlock, power, and volume.
@@ -61,7 +63,7 @@ public sealed class CommandRouter
     {
         if (string.IsNullOrWhiteSpace(c.Cmd) || c.Cmd.Length > 40) return new(false, "bad command");
         // A playlist link from the phone can be long; everything else is short.
-        if (c.Arg is { Length: > 64 } && !(c.Cmd == "playlist.add" && c.Arg.Length <= 1024) && !(c.Cmd == "text.set" && c.Arg.Length <= TextRequest.MaxLength + 2)) return new(false, "bad argument");
+        if (c.Arg is { Length: > 64 } && !(c.Cmd == "playlist.add" && c.Arg.Length <= 1024) && !(c.Cmd == "text.set" && c.Arg.Length <= TextRequest.MaxLength + 2) && !(c.Cmd == "web.signin" && c.Arg.Length <= PhoneSignIn.MaxCookieText + 20)) return new(false, "bad argument");
         if (c.Cmd == "playlist.add" && !AppSettings.IsHttpsUrl(c.Arg ?? "") && !(Uri.TryCreate(c.Arg, UriKind.Absolute, out var pu) && M3uParser.IsStreamUri(pu) && pu.Scheme != "file"))
             return new(false, "bad link");
 
@@ -110,6 +112,9 @@ public sealed class CommandRouter
             case "text.set":
                 // "1:" or "0:" and the text (may be empty: clears the box); no control characters
                 if (c.Arg is not { Length: >= 2 } ta || ta[1] != ':' || ta[0] is not ('0' or '1') || ta.Skip(2).Any(char.IsControl)) return new(false, "bad text");
+                break;
+            case "web.signin":
+                if (PhoneSignIn.ParseArg(c.Arg).Service is null) return new(false, "The sign-in did not come through. Try again.");
                 break;
             case "catalog.choosegroup":
                 if (!ChannelFinder.TryParseToggle(c.Arg, out _, out var grp) || grp.Length > 60) return new(false, "bad category");

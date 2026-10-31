@@ -346,7 +346,15 @@ public partial class MainWindow : Window, IShell
         _tv.Apps.Close();
         CloseWeb();
         ShowToast($"Opening {name}…");
-        var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this };
+        // Netflix and Bilibili can be signed in from the phone (PhoneSignIn).
+        var signIn = profile == "netflix" ? "netflix" : profile == "web-bilibili" ? "bilibili" : null;
+        var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this, SignInService = signIn };
+        w.SignedOut += id =>
+        {
+            if (PhoneSignIn.Find(id) is not { } svc) return;
+            _tv.Server?.Broadcast(PhoneSignIn.Message(svc, done: false));
+            ShowToast($"Not signed in to {svc.Name}. Sign in on your phone: the KwartoTV Remote app shows the sign-in page.");
+        };
         w.HomeRequested += GoHome;
         w.ChannelUp += () => _tv.Lineup.Next();
         w.ChannelDown += () => _tv.Lineup.Previous();
@@ -546,6 +554,24 @@ public partial class MainWindow : Window, IShell
         if (_player is { IsVisible: true } p) { p.Activate(); p.Focus(); }
         else if (_web is { IsVisible: true } w) w.Activate();
         else { Native.BringToFront(Handle); Activate(); }
+    }
+
+    public void SignInFromPhone(string arg)
+    {
+        var (svc, cookies) = PhoneSignIn.ParseArg(arg);
+        if (svc is null) throw new UserMessageException("The sign-in did not come through. Try again.");
+        AppPaths.LogLine($"signin: {svc.Name} from the phone ({cookies.Count} cookies)");
+        var profile = svc.Id == "netflix" ? "netflix" : "web-bilibili";
+        if (_web is { } w && w.ProfileName == profile) { w.ApplySignIn(svc.Domain, cookies, svc.Home); Native.BringToFront(new WindowInteropHelper(w).Handle); }
+        else
+        {
+            WebAppWindow.PendingSignIns[profile] = (svc.Domain, cookies, svc.Home);
+            if (svc.Id == "netflix")
+                OpenWeb(svc.Home, "netflix", ForegroundKind.Netflix, null, "Netflix", () => _tv.Apps.LaunchWeb(new WebTile("netflix", "Netflix", svc.Home)));
+            else LaunchBilibili();
+        }
+        ShowToast($"Signed in to {svc.Name} from your phone. Use the arrows, OK and Back.");
+        _tv.Server?.Broadcast(PhoneSignIn.Message(svc, done: true));
     }
 
     public void Finder(string cmd, string? arg)
