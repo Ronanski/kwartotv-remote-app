@@ -28,7 +28,13 @@ public sealed class MusicService
     var art = md && md.artwork && md.artwork.length ? md.artwork[md.artwork.length - 1].src : '';
     var s = { type: 'now', title: md ? md.title || '' : '', artist: md ? md.artist || '' : '', art: art, playing: !!(v && !v.paused && !v.ended) };
     var k = JSON.stringify(s); if (k !== last) { last = k; post(s); }
+    // A song page that does not start by itself is started (once per song; a pause from the phone is respected).
+    if (v && v.paused && !v.ended && location.pathname === '/watch' && window.__kwStarted !== location.search && !window.__kwPaused) {
+      window.__kwStarted = location.search; v.play().catch(function (e) { post({ type: 'diag', text: 'play() refused: ' + e }); });
+    }
+    if (++ticks % 5 === 0 && ticks <= 40) post({ type: 'diag', text: location.pathname + location.search + ' video=' + (v ? (v.paused ? 'paused' : 'playing') + ' ready=' + v.readyState + (v.error ? ' error=' + v.error.code : '') : 'none') + ' meta=' + (md ? md.title : '-') + ' vis=' + document.visibilityState });
   }, 1000);
+  var ticks = 0;
   function texts(col) { try { return col.musicResponsiveListItemFlexColumnRenderer.text.runs.map(function (r) { return r.text; }).join(''); } catch (e) { return ''; } }
   function walk(o, out) {
     if (!o || typeof o !== 'object' || out.length >= 20) return;
@@ -45,8 +51,8 @@ public sealed class MusicService
     for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) walk(o[k], out);
   }
   window.__kw = {
-    toggle: function () { if (!click('ytmusic-player-bar #play-pause-button')) { var v = video(); if (v) { if (v.paused) v.play(); else v.pause(); } } },
-    pause: function () { var v = video(); if (v && !v.paused) { if (!click('ytmusic-player-bar #play-pause-button')) v.pause(); } },
+    toggle: function () { var v = video(); window.__kwPaused = !!(v && !v.paused); if (!click('ytmusic-player-bar #play-pause-button')) { if (v) { if (v.paused) v.play(); else v.pause(); } } },
+    pause: function () { var v = video(); if (v && !v.paused) { window.__kwPaused = true; if (!click('ytmusic-player-bar #play-pause-button')) v.pause(); } },
     next: function () { click('ytmusic-player-bar .next-button'); },
     prev: function () { click('ytmusic-player-bar .previous-button'); },
     search: function (q) {
@@ -93,7 +99,10 @@ public sealed class MusicService
         _window.Show();
         try
         {
-            var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
+            var options = new CoreWebView2EnvironmentOptions(
+                // The window is kept off screen: the browser must not treat it as hidden (it would hold the music back).
+                "--autoplay-policy=no-user-gesture-required --disable-background-media-suspend --disable-backgrounding-occluded-windows " +
+                "--disable-renderer-backgrounding --disable-background-timer-throttling --disable-features=CalculateNativeWinOcclusion");
             var env = await CoreWebView2Environment.CreateAsync(null, AppPaths.Profile("webview-music"), options);
             await _web.EnsureCoreWebView2Async(env);
             var core = _web.CoreWebView2;
@@ -131,6 +140,16 @@ public sealed class MusicService
             if (now.Title != _state.Title || now.Playing != _state.Playing)
                 AppPaths.LogLine($"music: {(now.Playing ? "playing" : "paused")} {now.Title} - {now.Artist}");
             SetState(now);
+            return;
+        }
+        if (text.StartsWith("{\"type\":\"diag\"", StringComparison.Ordinal))
+        {
+            try
+            {
+                var d = System.Text.Json.JsonDocument.Parse(text).RootElement.GetProperty("text").GetString() ?? "";
+                AppPaths.LogLine("music page: " + (d.Length > 300 ? d[..300] : d));
+            }
+            catch { }
             return;
         }
         if (Music.ParseResults(text) is { } r)
