@@ -161,4 +161,13 @@ class LineupTest {
         assertEquals("x1", l.channels[0].id)
         assertTrue(l.channels[0].favorite)
     }
+
+    @Test fun textRequestFromTheTv() {
+        val on = (parseTvMessage("""{"type":"text","active":true,"kind":"email","title":"E-mail or username","value":"me@example.invalid"}""") as TvMessage.TextWanted).request
+        assertEquals(TextRequest("email", "E-mail or username", "me@example.invalid"), on)
+        val pw = (parseTvMessage("""{"type":"text","active":true,"kind":"password","title":"Password","value":null}""") as TvMessage.TextWanted).request
+        assertEquals("", pw?.value)
+        assertNull((parseTvMessage("""{"type":"text","active":false}""") as TvMessage.TextWanted).request)
+        assertEquals("text.set", Cmd.TEXT_SET)
+    }
 }

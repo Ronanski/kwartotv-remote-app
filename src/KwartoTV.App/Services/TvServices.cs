@@ -480,7 +480,7 @@ public sealed class TvServices : IDisposable
         var failures = new List<string>();
         foreach (var port in RemoteServer.PortsToTry(Settings.Port))
         {
-            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now, Catalog = CatalogJson };
+            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now, Catalog = CatalogJson, PendingText = () => OnUi(() => KwartoTV.App.Ui.TextBridge.Pending) };
             try
             {
                 server.Start();
@@ -493,6 +493,7 @@ public sealed class TvServices : IDisposable
             }
             Server = server;
             ActivePort = port;
+            KwartoTV.App.Ui.TextBridge.Changed += msg => Server?.NotifyText(msg);
             RemoteStatus = $"Remote is on (port {port})";
             AppPaths.LogLine($"remote: listening on port {port}" + (failures.Count > 0 ? " (not free: " + string.Join(", ", failures) + ")" : ""));
             if (Settings.Port != port) { Settings.Port = port; SaveSettings(); }

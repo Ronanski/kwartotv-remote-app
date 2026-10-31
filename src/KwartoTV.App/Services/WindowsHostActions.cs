@@ -97,6 +97,14 @@ public sealed class WindowsHostActions : IHostActions
             case "key.text":
                 Native.TypeText(arg!); return;
 
+            case "text.set":
+            {
+                var submit = arg![0] == '1';
+                var text = arg[2..];
+                if (!ui.Invoke(() => KwartoTV.App.Ui.TextBridge.Set(text, submit)))
+                    throw new UserMessageException("Nothing on the TV is waiting for text. Select a text box on the TV first.");
+                return;
+            }
             case "scan.start" or "scan.stop" or "catalog.choose" or "catalog.choosegroup" or "catalog.favorite":
                 ui.Invoke(() => shell.Finder(cmd, arg)); return;
 

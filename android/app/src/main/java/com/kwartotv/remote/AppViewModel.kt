@@ -28,7 +28,8 @@ sealed interface UpdateState {
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
-    val client = RemoteClient()
+    /** Shared with RemoteService, which keeps it connected while the app is in the background. */
+    val client: RemoteClient = com.kwartotv.remote.net.RemoteHub.client
 
     val tvs = MutableStateFlow(store.load())
     val selectedId = MutableStateFlow(store.selectedId)
@@ -53,6 +54,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         selectedId.value = tv.deviceId
         store.selectedId = tv.deviceId
         client.connect(tv)
+        com.kwartotv.remote.net.RemoteService.start(getApplication())
     }
 
     private val updater = Updater(app)
@@ -115,16 +117,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         tvs.value = list
         store.save(list)
         client.disconnect()
-        list.firstOrNull()?.let { select(it) } ?: run { selectedId.value = null; store.selectedId = null }
+        list.firstOrNull()?.let { select(it) } ?: run {
+            selectedId.value = null; store.selectedId = null
+            com.kwartotv.remote.net.RemoteService.stop(getApplication())
+        }
     }
 
     fun connectSelected() { if (foreground) selected()?.let { client.connect(it) } }
 
-    /** The app came on screen: connect. */
-    fun onStart() { client.foreground = true; connectSelected() }
+    /**
+     * The app came on screen: keep the connection if it still works (the background service kept it), otherwise
+     * connect; and make sure the service runs, so the remote stays connected when the app is left.
+     */
+    fun onStart() {
+        client.foreground = true
+        val tv = selected() ?: return
+        client.ensureConnected(tv)
+        com.kwartotv.remote.net.RemoteService.start(getApplication())
+    }
 
-    /** The app left the screen: drop the connection and stop every reconnect path. */
-    fun onStop() { client.foreground = false; client.disconnect() }
+    /** The app left the screen: the background service keeps the connection (it has a Disconnect button). */
+    fun onStop() {
+        if (!com.kwartotv.remote.net.RemoteService.running) { client.foreground = false; client.disconnect() }
+    }
 
     /** Connect again now (the connection may be stale after the phone was idle). */
     fun reconnect() { if (selected() != null) connectSelected() }
@@ -152,9 +167,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun disconnect() = client.disconnect()
 
     override fun onCleared() {
-        client.foreground = false
         networkCallback?.let { try { connectivity.unregisterNetworkCallback(it) } catch (_: Exception) { } }
         networkCallback = null
-        client.disconnect()
+        // The background service owns the connection; without it, close it.
+        if (!com.kwartotv.remote.net.RemoteService.running) { client.foreground = false; client.disconnect() }
     }
 }

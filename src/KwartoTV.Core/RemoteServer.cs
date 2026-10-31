@@ -45,6 +45,15 @@ public sealed class RemoteServer : IAsyncDisposable
     /// which owns the playlists and the channel checks. Null: this TV has no finder.
     /// </summary>
     public Func<string?, string>? Catalog { get; set; }
+
+    /// <summary>The text request waiting on the TV right now (TextRequest.Message), sent to a phone when it connects. Null: none.</summary>
+    public Func<string?>? PendingText { get; set; }
+
+    /// <summary>Tells every phone that a text box on the TV is waiting for text, or no longer is.</summary>
+    public void NotifyText(string message)
+    {
+        foreach (var c in _clients.Values) _ = Send(c.Socket, message);
+    }
     private readonly Func<DateTimeOffset> _clock;
     private Task? _loop;
 
@@ -322,6 +331,7 @@ public sealed class RemoteServer : IAsyncDisposable
         var id = Guid.NewGuid();
         _clients[id] = (device!, ws);
         await Send(ws, StateMessage(_lineup.Current, _lineup.CurrentNumber));
+        try { if (PendingText?.Invoke() is { } pending) await Send(ws, pending); } catch { }
 
         var buf = new byte[4096];
         try

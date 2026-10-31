@@ -913,6 +913,23 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(lockRouter.Handle(new("6", "nav.up", null)).Ok, "unlocked: everything works again");
 }
 
+// ---- text from the phone: the TV says a box waits for text, the phone sends the whole text
+{
+    Check(TextRequest.KindFor(true, "web-email") == "password" && TextRequest.KindFor(false, "web-email") == "email" && TextRequest.KindFor(false, "live-channel-search") == "search"
+          && TextRequest.KindFor(false, "link") == "url" && TextRequest.KindFor(false, null) == "text", "text request: kind of field for the phone's keyboard and autofill");
+    var tOn = JsonDocument.Parse(TextRequest.Message(true, "email", "E-mail or username", "me@example.invalid")).RootElement;
+    Check(tOn.GetProperty("type").GetString() == "text" && tOn.GetProperty("active").GetBoolean() && tOn.GetProperty("value").GetString() == "me@example.invalid", "text request message");
+    Check(JsonDocument.Parse(TextRequest.Message(true, "password", "Password", "secret")).RootElement.GetProperty("value").ValueKind == JsonValueKind.Null, "text request never sends a password to phones");
+    Check(!JsonDocument.Parse(TextRequest.Message(false)).RootElement.GetProperty("active").GetBoolean(), "text request ends");
+
+    var tHost = new FakeHost();
+    var tRouter = new CommandRouter(new ChannelLineup(), tHost);
+    var longText = "1:" + new string('a', 300);
+    Check(tRouter.Handle(new("1", "text.set", longText)).Ok && tHost.Last == "text.set:" + longText, "text.set: a long text (an e-mail, a password) reaches the TV");
+    Check(tRouter.Handle(new("2", "text.set", "0:")).Ok, "text.set: empty text clears the box");
+    Check(!tRouter.Handle(new("3", "text.set", "x")).Ok && !tRouter.Handle(new("4", "text.set", "1:a\nb")).Ok && !tRouter.Handle(new("5", "text.set", "1:" + new string('a', TextRequest.MaxLength + 1))).Ok, "text.set: bad or too long text refused");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

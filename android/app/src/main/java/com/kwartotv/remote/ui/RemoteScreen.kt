@@ -90,6 +90,9 @@ fun RemoteScreen(vm: AppViewModel) {
             client.clearError()
         }
     }
+    // A text box on the TV waits for text: the phone's keyboard opens (with its password manager).
+    TypeOnPhone(vm)
+
     val send: (String, String?) -> Unit = { cmd, arg ->
         if (!client.send(cmd, arg)) {
             Toast.makeText(context, "Not connected to the TV. Reconnecting…", Toast.LENGTH_SHORT).show()

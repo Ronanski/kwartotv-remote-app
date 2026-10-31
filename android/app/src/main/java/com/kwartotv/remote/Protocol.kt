@@ -43,6 +43,9 @@ object Cmd {
     const val CHOOSE_GROUP = "catalog.choosegroup"
     const val STAR = "catalog.favorite"
 
+    /** The whole text for the box waiting on the TV: "0:" + text, or "1:" + text to also press Go. */
+    const val TEXT_SET = "text.set"
+
     const val MOUSE_MOVE = "mouse.move"
     const val MOUSE_CLICK = "mouse.click"
     const val MOUSE_RIGHT = "mouse.rightclick"
@@ -107,6 +110,7 @@ sealed interface TvMessage {
     data class Channels(val lineup: Lineup) : TvMessage
     data class Found(val catalog: Catalog) : TvMessage
     data class Scanning(val scan: Scan) : TvMessage
+    data class TextWanted(val request: TextRequest?) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -118,6 +122,7 @@ fun parseTvMessage(text: String): TvMessage = try {
         "lineup" -> TvMessage.Channels(parseLineup(o))
         "catalog" -> TvMessage.Found(parseCatalog(o))
         "scan" -> TvMessage.Scanning(parseScan(o))
+        "text" -> TvMessage.TextWanted(parseTextRequest(o))
         else -> TvMessage.Unknown
     }
 } catch (_: Exception) {
@@ -166,6 +171,17 @@ fun filterLineup(channels: List<LineupChannel>, query: String, group: String?): 
         inGroup && (q.isEmpty() || ch.name.contains(q, ignoreCase = true) || (digits && ch.number.toString().startsWith(q)))
     }.sortedByDescending { digits && it.number.toString() == q }
 }
+
+/**
+ * A text box on the TV is waiting for text. [kind] is password, email, search, url or text (for the phone's keyboard and
+ * its password manager); [value] is what the box holds now (never sent for a password).
+ */
+data class TextRequest(val kind: String, val title: String?, val value: String)
+
+/** Null when the TV says no box is waiting any more. */
+fun parseTextRequest(o: JSONObject): TextRequest? =
+    if (!o.optBoolean("active")) null
+    else TextRequest(o.text("kind") ?: "text", o.text("title"), o.text("value").orEmpty())
 
 /** Where the TV's check of every channel is. */
 data class Scan(val running: Boolean, val done: Int, val total: Int, val ok: Int, val dead: Int) {

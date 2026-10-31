@@ -144,12 +144,25 @@ public sealed class OskWindow : Window
         Content = _osk;
         Loaded += (_, _) =>
         {
-            Top = SystemParameters.PrimaryScreenHeight - ActualHeight;
+            Place();
             Activate();
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded, _osk.FocusFirstKey);
         };
         // The recent-entries row can appear once the page reports the field: stay on the bottom edge.
-        SizeChanged += (_, _) => Top = SystemParameters.PrimaryScreenHeight - ActualHeight;
+        SizeChanged += (_, _) => Place();
+    }
+
+    /// <summary>
+    /// Along the bottom of the screen KwartoTV is on (the TV), not the PC's main screen: on a laptop with the TV as a
+    /// second screen the keyboard used to open on the laptop.
+    /// </summary>
+    private void Place()
+    {
+        var screen = Owner is { } o ? Services.Native.ScreenOf(new System.Windows.Interop.WindowInteropHelper(o).Handle) : null;
+        if (screen is not { } r) { Width = SystemParameters.PrimaryScreenWidth; Left = 0; Top = SystemParameters.PrimaryScreenHeight - ActualHeight; return; }
+        var dpi = VisualTreeHelper.GetDpi(this);
+        Left = r.X / dpi.DpiScaleX; Width = r.W / dpi.DpiScaleX;
+        Top = (r.Y + r.H) / dpi.DpiScaleY - ActualHeight;
     }
 
     private void Finish() { Closing_?.Invoke(); Close(); }

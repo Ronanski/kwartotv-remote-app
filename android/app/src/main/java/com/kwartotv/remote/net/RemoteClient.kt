@@ -5,6 +5,7 @@ import android.os.Looper
 import com.kwartotv.remote.Catalog
 import com.kwartotv.remote.Cmd
 import com.kwartotv.remote.Scan
+import com.kwartotv.remote.TextRequest
 import com.kwartotv.remote.toggleArg
 import com.kwartotv.remote.Lineup
 import com.kwartotv.remote.SavedTv
@@ -70,6 +71,16 @@ class RemoteClient {
     val catalogUnsupported: StateFlow<Boolean> = _catalogUnsupported
     private var catalogRequest: String? = null
 
+    private val _textRequest = MutableStateFlow<TextRequest?>(null)
+    /** A text box on the TV waiting for text (the phone opens its keyboard), or null. */
+    val textRequest: StateFlow<TextRequest?> = _textRequest
+
+    /** Sends the whole text for the waiting box ([go]: also press Go/Enter). False when not connected. */
+    fun sendText(text: String, go: Boolean): Boolean = send(Cmd.TEXT_SET, (if (go) "1:" else "0:") + text.take(512))
+
+    /** The user closed the phone's text box without sending: do not open it again for the same request. */
+    fun dismissText() { _textRequest.value = null }
+
     /**
      * True while the app is on screen. In the background nothing reconnects (no retries, no watchdog, no move),
      * so the phone does not keep waking the radio.
@@ -93,6 +104,17 @@ class RemoteClient {
     private var retry = 0
     private var seq = 0
     private var lineupRequest: String? = null
+
+    /**
+     * Connects to [target] unless this phone is already connected (or connecting) to it, so opening the app again
+     * keeps a working connection instead of starting over.
+     */
+    fun ensureConnected(target: SavedTv) {
+        val cur = tv
+        val same = cur != null && cur.deviceId == target.deviceId && cur.host == target.host && cur.port == target.port
+        if (same && (_conn.value == Conn.Connected || _conn.value == Conn.Connecting || _conn.value == Conn.Retrying)) return
+        connect(target)
+    }
 
     fun connect(target: SavedTv) {
         if (tv?.deviceId != target.deviceId) {
@@ -134,6 +156,7 @@ class RemoteClient {
                         is TvMessage.State -> _now.value = Now(m.number, m.channelName)
                         is TvMessage.Channels -> { _lineup.value = m.lineup; _lineupUnsupported.value = false }
                         is TvMessage.Found -> { _catalog.value = m.catalog; _catalogUnsupported.value = false }
+                        is TvMessage.TextWanted -> _textRequest.value = m.request
                         is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
                             ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)
                         is TvMessage.Ack -> when {
@@ -299,6 +322,7 @@ class RemoteClient {
         socket?.let { old -> try { if (!old.close(1000, null)) old.cancel() } catch (_: Exception) { old.cancel() } }
         socket = null
         _conn.value = Conn.Idle
+        _textRequest.value = null
     }
 
     /** Pairs with the code shown on the TV. Throws PairException with a message the user can act on. */
