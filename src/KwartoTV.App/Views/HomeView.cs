@@ -56,6 +56,10 @@ public sealed class HomeView : PageBase
         foreach (var (space, chs) in tv.Spaces())
             if (chs.Count > 0) Body.Children.Add(UiKit.Row("📺  " + space.Name, chs.Take(MaxPerRow).Select(x => Card(x.Channel, x.Number, lineup.IsFavorite(x.Channel.Id)))));
 
+        // The channels watched lately, newest first: one press back to them.
+        var recent = lineup.Recent;
+        if (recent.Count > 1) Body.Children.Add(UiKit.Row("Recently watched", recent.Select(c => Card(c, numbers.GetValueOrDefault(c.Id), lineup.IsFavorite(c.Id)))));
+
         var favs = lineup.Favorites;
         if (favs.Count > 0) Body.Children.Add(UiKit.Row("My favorites", favs.Take(MaxPerRow).Select(c => Card(c, numbers[c.Id], true))));
 

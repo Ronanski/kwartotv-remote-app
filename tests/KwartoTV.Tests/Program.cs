@@ -966,6 +966,21 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Directory.Delete(slideDir, true);
 }
 
+// ---- recently watched channels
+{
+    var rl2 = new ChannelLineup();
+    var rc = Enumerable.Range(1, 20).Select(n => new Channel($"r{n}", $"R{n}", $"https://example.invalid/r{n}", null, "G", StreamKind.Hls)).ToList();
+    rl2.Load(rc);
+    foreach (var n in new[] { 3, 5, 3, 7 }) rl2.TuneNumber(n);
+    Check(rl2.Recent.Select(c => c.Id).SequenceEqual(new[] { "r7", "r3", "r5" }), "recent: newest first, each channel once");
+    for (int n = 1; n <= 20; n++) rl2.TuneNumber(n);
+    Check(rl2.Recent.Count == ChannelLineup.MaxRecent && rl2.Recent[0].Id == "r20", "recent: kept to the last few");
+    var saved = rl2.Export();
+    var rl3 = new ChannelLineup(); rl3.Load(rc.Where(c => c.Id != "r19").ToList()); rl3.Restore(saved);
+    Check(rl3.Recent[0].Id == "r20" && rl3.Recent.All(c => c.Id != "r19"), "recent: survives a restart; channels no longer in the lineup are left out");
+    Check(new ChannelLineup().Recent.Count == 0, "recent: none yet");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

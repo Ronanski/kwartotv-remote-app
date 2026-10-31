@@ -77,6 +77,14 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   check(true, 'CH up goes to channel 2');
   await page.click('[data-cmd="channel.digit"][data-arg="9"]'); await page.click('[data-cmd="channel.digit"][data-arg="9"]'); await page.click('[data-cmd="channel.digit"][data-arg="9"]'); await page.click('[data-cmd="channel.commit"]'); await wait(300);
   check((await page.textContent('#chNum')) === '2', 'a channel that does not exist leaves the TV on channel 2');
+  // the channel list: loads on the Channels tab, filters by name, a tap tunes that channel
+  await page.waitForSelector('#chList .chrow', { timeout: 5000 });
+  check((await page.locator('#chList .chrow').count()) === 30, 'channel list shows the TV\'s channels');
+  await page.fill('#chSearch', 'Channel 25'); await wait(200);
+  check((await page.locator('#chList .chrow').count()) === 1, 'channel list search');
+  await page.click('#chList .chrow'); await wait(400);
+  check((await page.textContent('#chNum')) === '25', 'tapping a channel in the list tunes it');
+  await page.fill('#chSearch', ''); await page.screenshot({ path: `${outDir}/web-5b-channel-list.png` });
 
   await page.click('[data-tab="kb"]');
   await page.click('#kbText'); const b4 = hostLog().length;

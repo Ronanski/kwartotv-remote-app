@@ -1,6 +1,6 @@
 namespace KwartoTV.Core;
 
-public sealed record LineupState(string? CurrentId, string? PreviousId, List<string> Favorites);
+public sealed record LineupState(string? CurrentId, string? PreviousId, List<string> Favorites, List<string>? Recent = null);
 
 /// <summary>Cable-style lineup: numbered channels, up/down surfing, last channel, number entry, favorites.</summary>
 public sealed class ChannelLineup
@@ -11,6 +11,9 @@ public sealed class ChannelLineup
     private List<Channel> _channels = new();
     private readonly HashSet<string> _favorites = new();
     private int _current = -1, _previous = -1;
+    // Channels watched lately, newest first (ids, so they survive changes to the lineup).
+    private readonly List<string> _recent = new();
+    public const int MaxRecent = 15;
     private string _digits = "";
     private DateTimeOffset _lastDigit;
 
@@ -49,6 +52,8 @@ public sealed class ChannelLineup
             if (index < 0 || index >= _channels.Count) return null;
             if (index != _current) { _previous = _current; _current = index; }
             ch = _channels[_current]; num = _current + 1;
+            _recent.Remove(ch.Id); _recent.Insert(0, ch.Id);
+            if (_recent.Count > MaxRecent) _recent.RemoveRange(MaxRecent, _recent.Count - MaxRecent);
         }
         Tuned?.Invoke(ch, num);
         return ch;
@@ -144,13 +149,28 @@ public sealed class ChannelLineup
 
     public LineupState Export()
     {
-        lock (_gate) return new LineupState(At(_current)?.Id, At(_previous)?.Id, _favorites.ToList());
+        lock (_gate) return new LineupState(At(_current)?.Id, At(_previous)?.Id, _favorites.ToList(), _recent.ToList());
+    }
+
+    /// <summary>Channels watched lately that are in the lineup now, newest first.</summary>
+    public IReadOnlyList<Channel> Recent
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var byId = _channels.ToDictionary(c => c.Id, c => c);
+                return _recent.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+            }
+        }
     }
 
     public void Restore(LineupState s)
     {
         lock (_gate)
         {
+            _recent.Clear();
+            if (s.Recent is not null) _recent.AddRange(s.Recent.Distinct().Take(MaxRecent));
             _favorites.Clear();
             foreach (var f in s.Favorites) _favorites.Add(f);
             _current = s.CurrentId is null ? -1 : _channels.FindIndex(c => c.Id == s.CurrentId);

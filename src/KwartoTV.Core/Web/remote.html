@@ -27,6 +27,11 @@ button{font:inherit;color:var(--text)}
 .glyph{font-size:30px;line-height:1}
 .g4{grid-template-columns:repeat(4,1fr)}
 .btn.app{flex-direction:column;min-height:84px;gap:6px}
+.chlist{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.chrow{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;text-align:left;color:var(--text);width:100%}
+.chrow b{color:var(--accent2);min-width:3ch;font-size:18px}.chrow span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chrow small{display:block;color:var(--dim);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chrow.on{border-color:var(--accent)}
+.dim{color:var(--dim);font-size:13px}
 .grid{display:grid;gap:10px}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
 .dpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 14px}
 .dpad .btn{min-height:68px;font-size:26px}.dpad .ok{background:var(--accent);color:#1a0d05;font-weight:700;font-size:20px}
@@ -134,6 +139,9 @@ dialog::backdrop{background:#000a}
         <button class="btn" data-cmd="channel.digit" data-arg="7">7</button><button class="btn" data-cmd="channel.digit" data-arg="8">8</button><button class="btn" data-cmd="channel.digit" data-arg="9">9</button>
         <button class="btn" data-cmd="channel.favorite">★ <small>Fav</small></button><button class="btn" data-cmd="channel.digit" data-arg="0">0</button><button class="btn primary" data-cmd="channel.commit">Go</button>
       </div>
+      <h2>Channels on the TV</h2>
+      <input type="text" id="chSearch" placeholder="Search name or number" autocomplete="off" aria-label="Search channels">
+      <div id="chList" class="chlist" aria-live="polite"><p class="dim">Open this tab while connected to load the channels.</p></div>
     </section>
     <section id="t-kb">
       <h2 style="margin-top:4px">Type on the TV</h2>
@@ -184,7 +192,8 @@ function connect(){
   let opened=false;ws=s;
   s.onopen=()=>{opened=true;retry=0;failedOpens=0;setStatus(true,'connected')};
   s.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}
-    if(m.type==='state'){$('#chNum').textContent=m.number>0?m.number:'–';$('#chName').textContent=m.channel?m.channel.name:'No channel yet'}
+    if(m.type==='state'){$('#chNum').textContent=m.number>0?m.number:'–';$('#chName').textContent=m.channel?m.channel.name:'No channel yet';current=m.number;drawList()}
+    else if(m.type==='lineup'){lineup=m.channels||[];drawList()}
     else if(m.type==='ack'){const p=pending.get(m.id);pending.delete(m.id);if(!m.ok)toast(m.error==='no such channel'?'No such channel':/^The TV is locked/.test(m.error||'')?m.error:'Not done: '+(m.error||'error'))}};
   s.onclose=ev=>{
     if(s!==ws)return;
@@ -219,8 +228,20 @@ $('#pin').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D
 $('#unpair').onclick=()=>forget();
 $('#sendLink').onclick=()=>{const v=$('#linkText').value.trim();if(!/^https?:\/\//.test(v)){toast('Paste a link that starts with https://');return}if(send('playlist.add',v)){toast('Sent. Look at the TV.');$('#linkText').value=''}};
 
-// tabs
-$$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));$$('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+b.dataset.tab))});
+// tabs (the channel list loads when its tab opens; the TV sends it again when it changes)
+$$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));$$('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+b.dataset.tab));if(b.dataset.tab==='chan'&&ws&&ws.readyState===1)send('lineup.get')});
+
+// the TV's channels: search by name or number, tap to watch
+let lineup=null,current=0;
+function esc(t){return String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function drawList(){
+  const box=$('#chList');if(!box||!lineup)return;
+  const q=($('#chSearch').value||'').trim().toLowerCase(),digits=/^\d+$/.test(q);
+  const rows=lineup.filter(c=>!q||c.name.toLowerCase().includes(q)||(digits&&String(c.number).startsWith(q))).slice(0,300);
+  box.innerHTML=rows.length?rows.map(c=>`<button class="chrow${c.number===current?' on':''}" data-n="${c.number}"><b>${c.number}</b><div style="min-width:0"><span>${c.favorite?'★ ':''}${esc(c.name)}</span><small>${esc(c.now||c.group)}</small></div></button>`).join(''):'<p class="dim">'+(lineup.length?'No channel matches.':'The TV has no channels yet.')+'</p>';
+}
+$('#chSearch').addEventListener('input',drawList);
+$('#chList').addEventListener('click',e=>{const r=e.target.closest('.chrow');if(r&&send('channel.number',r.dataset.n))toast('Channel '+r.dataset.n)});
 
 // command buttons (with press-and-hold repeat for volume / arrows)
 const dlg=$('#dlg');let dlgCb=null;
