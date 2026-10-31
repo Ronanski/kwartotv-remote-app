@@ -86,15 +86,48 @@ public static class TvWebScript
     }
     return document;
   }
+  // Worth a stop for the remote: something a person would click (a label, a picture, a field), not an empty wrapper,
+  // a hidden helper, a whole-page container or a decoration under another element.
+  function meaningful(el) {
+    var tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'VIDEO') return true;
+    if (el.closest('[aria-hidden=""true""],[inert]')) return false;
+    var r = rectOf(el);
+    if (r.width < 24 || r.height < 18) return false;
+    if (r.width * r.height > window.innerWidth * window.innerHeight * 0.6) return false;
+    var hasText = (el.innerText || el.textContent || '').trim().length > 0;
+    var hasPic = !!el.querySelector('img,svg,picture,video,[style*=""background-image""]') || /background-image/.test(el.getAttribute('style') || '');
+    var hasName = !!(el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('alt'));
+    if (!hasText && !hasPic && !hasName) return false;
+    // a bare focusable box (tabindex only, no role, no link): only when it is small and looks like an item
+    if (tag !== 'A' && tag !== 'BUTTON' && !el.getAttribute('role') && el.hasAttribute('tabindex') && r.width * r.height > window.innerWidth * window.innerHeight * 0.25) return false;
+    return true;
+  }
+  // On screen and covered by something else (a sticky bar, a pop-up's dim layer): not reachable by a click either.
+  function covered(el) {
+    var r = rectOf(el);
+    if (r.top < 0 || r.left < 0 || r.bottom > window.innerHeight || r.right > window.innerWidth) return false;
+    var hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && hit !== el && !el.contains(hit) && !hit.contains(el);
+  }
+  function overlap(a, b) {
+    var w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    return w > 0 && h > 0 ? (w * h) / Math.min(a.width * a.height, b.width * b.height) : 0;
+  }
   function candidates() {
     var all = scope().querySelectorAll(SEL), out = [];
     for (var i = 0; i < all.length; i++) {
       var el = all[i];
       // a row's own scroll arrows are pressed for you at the end of the row
-      if (visible(el) && !el.closest('.handle,.handleNext,.handlePrev')) out.push(el);
+      if (visible(el) && meaningful(el) && !covered(el) && !el.closest('.handle,.handleNext,.handlePrev')) out.push(el);
     }
     // keep the outermost of nested candidates (a card link and the picture link inside it)
-    return out.filter(function (el) { return !out.some(function (o) { return o !== el && o.contains(el); }); });
+    out = out.filter(function (el) { return !out.some(function (o) { return o !== el && o.contains(el); }); });
+    // and one of two that sit on the same spot (a card and its own overlay button): the bigger one
+    out.sort(function (a, b) { var ra = rectOf(a), rb = rectOf(b); return rb.width * rb.height - ra.width * ra.height; });
+    var kept = [];
+    out.forEach(function (el) { var r = rectOf(el); if (!kept.some(function (k) { return overlap(rectOf(k), r) > 0.6; })) kept.push(el); });
+    return kept;
   }
   function onScreen(el) { var r = rectOf(el); return r.top >= 0 && r.top < window.innerHeight && r.left < window.innerWidth; }
   function preferred() {
@@ -118,6 +151,12 @@ public static class TvWebScript
     var a = cur && document.contains(cur) && visible(cur) ? rectOf(cur) : lastRect;
     if (!a) return preferred();
     var ca = center(a), best = null, bs = 1e12;
+    // Up/Down goes to the row above/below in the same column when there is anything there, like on a TV, instead of
+    // jumping to a far corner that happens to be a little nearer.
+    if (dir === 'up' || dir === 'down') {
+      var inColumn = list.filter(function (el) { var r = rectOf(el); return r.left < a.right - 2 && r.right > a.left + 2 && (dir === 'down' ? r.top >= a.bottom - 4 : r.bottom <= a.top + 4); });
+      if (inColumn.length) list = inColumn;
+    }
     list.forEach(function (el) {
       if (el === cur || (cur && (el.contains(cur) || cur.contains(el)))) return;
       var r = rectOf(el), c = center(r), dx = c.x - ca.x, dy = c.y - ca.y, main, side;
