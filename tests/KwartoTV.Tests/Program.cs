@@ -945,6 +945,27 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(sr.Handle(new("1", "web.signin", bigCookies)).Ok && !sr.Handle(new("2", "web.signin", "netflix|x=1")).Ok, "phone sign-in: router takes a long sign-in, refuses one without a session");
 }
 
+// ---- lock screen: Bible verse on a schedule, photo slideshow
+{
+    var vT0 = new DateTime(2026, 11, 1, 9, 5, 0);
+    Check(Verses.For(vT0, 0) is null, "verse: off");
+    Check(Verses.For(vT0, 60) == Verses.For(vT0.AddMinutes(50), 60) && Verses.For(vT0, 60) != Verses.For(vT0.AddHours(1), 60), "verse: every hour changes on the hour, not before");
+    Check(Verses.For(vT0, 1440) == Verses.For(vT0.AddHours(14), 1440) && Verses.For(vT0, 1440) != Verses.For(vT0.AddDays(1), 1440), "verse: every day changes at midnight");
+    var seenVerses = Enumerable.Range(0, Verses.All.Count).Select(h => Verses.For(vT0.AddHours(h), 60)!.Reference).Distinct().Count();
+    Check(seenVerses == Verses.All.Count, "verse: every verse comes up before any repeats");
+    Check(Verses.All.All(v => v.Text.Length > 10 && v.Reference.Length > 3), "verse: every verse has a text and a reference");
+    Check(Verses.Describe(60) == "every hour" && Verses.Describe(1440) == "every day" && Verses.Describe(0) == "off" && Verses.Describe(180) == "every 3 hours", "verse: setting names");
+    Check(Verses.Next(60) == Verses.Choices[1] && Verses.Next(Verses.Choices[^1]) == Verses.Choices[0], "verse: the setting cycles through the choices");
+
+    var slideDir = Path.Combine(Path.GetTempPath(), "kwslides-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(slideDir, "sub"));
+    foreach (var n in new[] { "a.jpg", "b.PNG", "notes.txt", "sub/c.jpeg" }) File.WriteAllText(Path.Combine(slideDir, n), "x");
+    var slidePhotos = Slideshow.Photos(slideDir, 1);
+    Check(slidePhotos.Count == 3 && slidePhotos.All(p => !p.EndsWith(".txt")), "slideshow: photos in the folder and its subfolders, nothing else");
+    Check(Slideshow.Photos(Path.Combine(slideDir, "missing"), 1).Count == 0 && Slideshow.Photos(null, 1).Count == 0, "slideshow: a missing folder shows nothing");
+    Directory.Delete(slideDir, true);
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

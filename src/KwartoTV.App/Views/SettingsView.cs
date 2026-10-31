@@ -97,6 +97,39 @@ public sealed class SettingsView : PageBase
         Body.Children.Add(Buttons(
             UiKit.ActionButton(startup ? "Start with Windows: On" : "Start with Windows: Off", () => { SetStartup(!startup); Refresh(); }),
             UiKit.ActionButton("Power…", () => Dialogs.PowerMenu(Shell), danger: true)));
+        // ---- lock screen (the phone's Lock · clock)
+        Body.Children.Add(UiKit.Heading("Lock screen"));
+        Body.Children.Add(UiKit.Dimmed("What the clock screen shows when you lock the TV from the phone (Power → Lock · clock).", 17));
+        var st = Tv.Settings;
+        Body.Children.Add(Buttons(
+            UiKit.ActionButton($"Bible verse: {Verses.Describe(st.VerseEveryMinutes)}", () => { st.VerseEveryMinutes = Verses.Next(st.VerseEveryMinutes); Tv.SaveSettings(); Refresh(); }),
+            UiKit.ActionButton(st.SlideshowOn ? "Photo slideshow: On" : "Photo slideshow: Off", () =>
+            {
+                if (!st.SlideshowOn && string.IsNullOrWhiteSpace(st.SlideshowFolder))
+                {
+                    var picked = Dialogs.PickFolder();
+                    if (picked is null) return;
+                    st.SlideshowFolder = picked;
+                }
+                st.SlideshowOn = !st.SlideshowOn; Tv.SaveSettings(); Refresh();
+            })));
+        if (st.SlideshowOn || !string.IsNullOrWhiteSpace(st.SlideshowFolder))
+        {
+            var count = Slideshow.Photos(st.SlideshowFolder, 0).Count;
+            Body.Children.Add(Buttons(
+                UiKit.ActionButton(string.IsNullOrWhiteSpace(st.SlideshowFolder) ? "Choose photo folder" : $"Photos: {Path.GetFileName(st.SlideshowFolder.TrimEnd('\\', '/'))} ({count})", () =>
+                {
+                    var picked = Dialogs.PickFolder();
+                    if (picked is null) return;
+                    st.SlideshowFolder = picked; Tv.SaveSettings(); Refresh();
+                }),
+                UiKit.ActionButton($"Each photo: {st.SlideshowSeconds} s", () =>
+                {
+                    var i = Array.IndexOf(AppSettings.SlideshowChoices, st.SlideshowSeconds);
+                    st.SlideshowSeconds = AppSettings.SlideshowChoices[(i + 1) % AppSettings.SlideshowChoices.Length]; Tv.SaveSettings(); Refresh();
+                })));
+        }
+
         Body.Children.Add(UiKit.Heading("Updates"));
         var upd = Tv.Updater.Available;
         Body.Children.Add(Buttons(

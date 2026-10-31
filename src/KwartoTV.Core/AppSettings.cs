@@ -31,6 +31,16 @@ public sealed class AppSettings
     /// <summary>Free TV guides (XMLTV) for the "on now" line of Live TV; the first one that has a channel wins.</summary>
     public List<string> GuideUrls { get; set; } = new(ProgramGuideSources.Default);
 
+    // ---- the lock screen (Lock · clock)
+    /// <summary>A Bible verse under the clock, changing every this many minutes (0 = no verse). See Verses.Choices.</summary>
+    public int VerseEveryMinutes { get; set; } = 60;
+    /// <summary>Photos from a folder fade in behind the clock.</summary>
+    public bool SlideshowOn { get; set; }
+    public string? SlideshowFolder { get; set; }
+    /// <summary>Seconds each photo stays. See SlideshowChoices.</summary>
+    public int SlideshowSeconds { get; set; } = 20;
+    public static readonly int[] SlideshowChoices = { 20, 30, 60, 10 };
+
     public static bool IsPlaylistFile(string path) =>
         Path.IsPathRooted(path) && (path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));
 

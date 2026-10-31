@@ -40,8 +40,21 @@ public sealed class LockScreenWindow : Window
 
     /// <param name="app">The KwartoTV window on screen (Home, the player or a web app). The lock screen covers exactly that
     /// window and stays on top of it only: other programs and other screens are left alone.</param>
-    public LockScreenWindow(Window app)
+    private readonly KwartoTV.Core.AppSettings _settings;
+    private readonly TextBlock _verse = new() { FontSize = 24, FontStyle = FontStyles.Italic, FontWeight = FontWeights.Light, Foreground = Soft, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, LineHeight = 34 };
+    private readonly TextBlock _verseRef = new() { FontSize = 16, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Accent), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) };
+    private readonly StackPanel _verseBox = new() { MaxWidth = 1100, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(60, 0, 60, 92) };
+    private string? _shownVerse;
+    // Photo slideshow: two layers that cross-fade, under a dark veil so the clock stays easy to read.
+    private readonly Image _photoA = new() { Stretch = Stretch.UniformToFill, Opacity = 0 }, _photoB = new() { Stretch = Stretch.UniformToFill, Opacity = 0 };
+    private bool _aOnTop;
+    private IReadOnlyList<string> _photos = Array.Empty<string>();
+    private int _photoIndex;
+    private readonly DispatcherTimer _slides = new();
+
+    public LockScreenWindow(Window app, KwartoTV.Core.AppSettings settings)
     {
+        _settings = settings;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; Owner = app;
         Background = Brushes.Black; Cursor = Cursors.None; Title = "KwartoTV locked";
         // Exactly over the KwartoTV window (in screen pixels, as Windows reports it), and again whenever it moves or resizes.
@@ -76,8 +89,15 @@ public sealed class LockScreenWindow : Window
             FontSize = 17, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, 36), RenderTransform = _drift,
         };
-        var root = new Grid { Background = Brushes.Black };
-        root.Children.Add(row); root.Children.Add(hint);
+        _verseBox.Children.Add(_verse); _verseBox.Children.Add(_verseRef);
+        _verseBox.RenderTransform = _drift;
+        var root = new Grid { Background = Brushes.Black, ClipToBounds = true };
+        // The photos have their own layer, so their cross-fade order never covers the clock.
+        var photos = new Grid();
+        photos.Children.Add(_photoA); photos.Children.Add(_photoB);
+        root.Children.Add(photos);
+        root.Children.Add(new Border { Background = new LinearGradientBrush(Color.FromArgb(0x99, 0, 0, 0), Color.FromArgb(0xD9, 0, 0, 0), 90) });
+        root.Children.Add(row); root.Children.Add(_verseBox); root.Children.Add(hint);
         Content = root;
 
         _tick.Tick += (_, _) => Draw();
@@ -85,10 +105,11 @@ public sealed class LockScreenWindow : Window
         Loaded += (_, _) =>
         {
             Draw(); _tick.Start(); _wander.Start();
+            StartSlideshow();
             root.Opacity = 0;
             root.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromSeconds(1.2)) { EasingFunction = new QuadraticEase() });
         };
-        Closed += (_, _) => { _tick.Stop(); _wander.Stop(); };
+        Closed += (_, _) => { _tick.Stop(); _wander.Stop(); _slides.Stop(); };
         // Locked: nothing on the PC itself gets past this screen.
         PreviewKeyDown += (_, e) => e.Handled = true;
         PreviewMouseDown += (_, e) => e.Handled = true;
@@ -116,6 +137,17 @@ public sealed class LockScreenWindow : Window
             _date.Text = now.ToString("dddd, MMMM d", culture);
         }
         if (now.Date != _calendarDay) { _calendarDay = now.Date; BuildCalendar(now); }
+        var verse = KwartoTV.Core.Verses.For(now, _settings.VerseEveryMinutes);
+        if (verse?.Reference != _shownVerse)
+        {
+            _shownVerse = verse?.Reference;
+            _verseBox.Visibility = verse is null ? Visibility.Collapsed : Visibility.Visible;
+            if (verse is not null)
+            {
+                _verse.Text = "“" + verse.Text + "”"; _verseRef.Text = verse.Reference;
+                _verseBox.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromSeconds(1.5)));
+            }
+        }
 
         // The arc follows the seconds smoothly, starting at the top and going clockwise.
         var frac = (now.Second + now.Millisecond / 1000.0) / 60.0;
@@ -162,6 +194,52 @@ public sealed class LockScreenWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         });
         return g;
+    }
+
+    private void StartSlideshow()
+    {
+        if (!_settings.SlideshowOn || string.IsNullOrWhiteSpace(_settings.SlideshowFolder)) return;
+        var folder = _settings.SlideshowFolder;
+        var seed = Environment.TickCount;
+        _ = Task.Run(() => KwartoTV.Core.Slideshow.Photos(folder, seed)).ContinueWith(t =>
+        {
+            if (t.IsFaulted || t.Result.Count == 0) return;
+            _photos = t.Result;
+            _slides.Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.SlideshowSeconds));
+            _slides.Tick += (_, _) => NextPhoto();
+            NextPhoto(); _slides.Start();
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    private void NextPhoto()
+    {
+        if (_photos.Count == 0) return;
+        var path = _photos[_photoIndex++ % _photos.Count];
+        var width = (int)Math.Min(2560, Math.Max(800, ActualWidth * 1.5));
+        // Decoded off the UI thread at screen size (a 24 MP photo would be slow and use a lot of memory).
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var b = new System.Windows.Media.Imaging.BitmapImage();
+                b.BeginInit();
+                b.UriSource = new Uri(path); b.DecodePixelWidth = width;
+                b.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                b.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreColorProfile;
+                b.EndInit(); b.Freeze();
+                return (ImageSource?)b;
+            }
+            catch { return null; }
+        }).ContinueWith(t =>
+        {
+            if (t.Result is not { } img) return;
+            var (show, hide) = _aOnTop ? (_photoB, _photoA) : (_photoA, _photoB);
+            _aOnTop = !_aOnTop;
+            show.Source = img;
+            Panel.SetZIndex(show, 1); Panel.SetZIndex(hide, 0);
+            show.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromSeconds(2)) { EasingFunction = new SineEase() });
+            hide.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromSeconds(2.5)));
+        }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     // A slow drift to a new spot now and then, so nothing stays in one place on the TV.
