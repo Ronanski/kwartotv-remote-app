@@ -59,6 +59,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val updater = Updater(app)
     val update = MutableStateFlow<UpdateState>(UpdateState.None)
+    private var lastUpdateCheck = 0L
 
     private val connectivity = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -131,6 +132,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onStart() {
         client.foreground = true
+        // The app can stay open for days (the remote runs in the background): look for an update each time it comes back,
+        // at most every 30 minutes.
+        if (android.os.SystemClock.elapsedRealtime() - lastUpdateCheck > 30 * 60_000L && update.value !is UpdateState.Working) checkForUpdate(manual = false)
         val tv = selected() ?: return
         client.ensureConnected(tv)
         com.kwartotv.remote.net.RemoteService.start(getApplication())
@@ -145,6 +149,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun reconnect() { if (selected() != null) connectSelected() }
 
     fun checkForUpdate(manual: Boolean) {
+        lastUpdateCheck = android.os.SystemClock.elapsedRealtime()
         viewModelScope.launch {
             val info = updater.check()
             if (info != null) update.value = UpdateState.Available(info)

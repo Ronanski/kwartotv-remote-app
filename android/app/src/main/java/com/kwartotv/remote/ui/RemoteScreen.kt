@@ -237,7 +237,7 @@ fun RemoteScreen(vm: AppViewModel) {
 
             Box(Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp)) {
                 when (tab) {
-                    Tab.Remote -> NavTab(vm, send)
+                    Tab.Remote -> NavTab(vm, send) { signInFor = it }
                     Tab.Media -> MediaTab(send)
                     Tab.Channels -> ChannelsTab(vm, send)
                     Tab.Music -> MusicTab(vm)
@@ -250,9 +250,21 @@ fun RemoteScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit) {
+private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: (String) -> Unit) {
     var kind by remember { mutableIntStateOf(vm.padKind) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // The apps first, with their logos: one tap opens them on the TV.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppTile(QuickApp.LiveTv, Modifier.weight(1f)) { send(Cmd.APP_LIVE, null) }
+            AppTile(QuickApp.YouTube, Modifier.weight(1f)) { send(Cmd.APP_YOUTUBE, null) }
+            AppTile(QuickApp.Netflix, Modifier.weight(1f)) { send(Cmd.APP_NETFLIX, null) }
+            AppTile(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
+        }
+        // Signing in with the TV's arrows is slow: sign in here on the phone, the TV picks it up by itself.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RemoteKey("Sign in to Netflix", "Sign in to Netflix on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("netflix") }
+            RemoteKey("Sign in to Bilibili", "Sign in to Bilibili on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("bilibili") }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val ctx = LocalContext.current
             FilterChip(selected = kind == 0, onClick = { Haptics.click(ctx); kind = 0; vm.padKind = 0 }, label = { Text("D-pad") })
@@ -272,13 +284,6 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("Vol −", "Volume down", Modifier.weight(1f), repeat = true, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
             RemoteKey("Vol +", "Volume up", Modifier.weight(1f), repeat = true, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
-        }
-        SectionLabel("Apps")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AppTile(QuickApp.LiveTv, Modifier.weight(1f)) { send(Cmd.APP_LIVE, null) }
-            AppTile(QuickApp.YouTube, Modifier.weight(1f)) { send(Cmd.APP_YOUTUBE, null) }
-            AppTile(QuickApp.Netflix, Modifier.weight(1f)) { send(Cmd.APP_NETFLIX, null) }
-            AppTile(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
         }
     }
 }

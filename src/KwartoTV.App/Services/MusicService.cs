@@ -113,6 +113,7 @@ public sealed class MusicService
             {
                 if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && u.Scheme != Uri.UriSchemeHttps && u.Scheme != "about") e.Cancel = true;
             };
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(WebAppWindow.NoForcedColorsScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(PageScript);
             core.WebMessageReceived += (_, e) => OnMessage(e.TryGetWebMessageAsString());
             core.NavigationCompleted += (_, _) =>

@@ -380,7 +380,10 @@ public sealed class TvServices : IDisposable
     // ---------- channel finder (the phone): check every channel, list the ones that work, pick and star them
 
     /// <summary>The running (or last) scan of every channel.</summary>
-    public ScanProgress Scan { get; private set; } = ScanProgress.Idle;
+    public ScanProgress Scan { get => _scan; private set { _scan = value; ScanChanged?.Invoke(value); } }
+    private ScanProgress _scan = ScanProgress.Idle;
+    /// <summary>The scan moved on (any thread).</summary>
+    public event Action<ScanProgress>? ScanChanged;
     private CancellationTokenSource? _scanCts;
 
     private sealed class InlineProgress<T> : IProgress<T>

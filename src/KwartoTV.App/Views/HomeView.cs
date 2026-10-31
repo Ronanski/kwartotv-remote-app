@@ -11,7 +11,24 @@ public sealed class HomeView : PageBase
 {
     private const int MaxPerRow = 40, MaxRows = 12;
 
-    public HomeView(MainWindow shell) : base(shell) { }
+    private TextBlock? _scanText;
+    private Button? _scanButton;
+
+    public HomeView(MainWindow shell) : base(shell)
+    {
+        shell.Tv.ScanChanged += s => Dispatcher.BeginInvoke(() => ShowScan(s));
+    }
+
+    private void ShowScan(ScanProgress s)
+    {
+        if (_scanText is null || _scanButton is null) return;
+        _scanText.Text = s.Running
+            ? $"Checking every channel from this PC… {s.Done:N0} of {s.Total:N0}  ·  {s.Ok:N0} work  ·  {s.Dead:N0} do not"
+            : s.Total > 0
+                ? $"Last scan: {s.Ok:N0} channels work, {s.Dead:N0} do not. Channels that do not work are hidden. Pick working ones on the phone: Channels → Find channels."
+                : "Find out which of your channels really play here: the scan checks every channel of every playlist from this PC.";
+        if (_scanButton.Content is TextBlock t) t.Text = s.Running ? "■  Stop scan" : s.Total > 0 ? "🔍  Scan again" : "🔍  Scan all channels";
+    }
 
     public override void Refresh() => Rebuild(Build);
 
@@ -21,7 +38,7 @@ public sealed class HomeView : PageBase
         var lineup = tv.Lineup;
         var channels = lineup.Channels;
         var numbers = new Dictionary<string, int>();
-        foreach (var (n, c) in lineup.Numbered) numbers[c.Id] = n;
+        foreach (var (n, c) in lineup.Numbered) numbers.GetValueOrDefault(c.Id) = n;
 
         if (tv.Updater.Available is { } upd)
         {
@@ -52,6 +69,19 @@ public sealed class HomeView : PageBase
         apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Add website", "+", Color.FromRgb(0x1E, 0x24, 0x30), Color.FromRgb(0x2B, 0x31, 0x40)), Shell.ShowSettings, "Add website"));
         Body.Children.Add(UiKit.Row("Apps", apps));
 
+        // The channel scan, right on the TV: which channels really play from this PC.
+        if (tv.Settings.Playlists.Count > 0)
+        {
+            _scanText = UiKit.Dimmed("", 18);
+            _scanText.TextWrapping = TextWrapping.Wrap; _scanText.VerticalAlignment = VerticalAlignment.Center; _scanText.Margin = new Thickness(18, 0, 0, 0);
+            _scanButton = UiKit.ActionButton("🔍  Scan all channels", () => { if (Shell.Tv.Scan.Running) Shell.Tv.StopScan(); else Shell.Tv.StartScan(full: false); });
+            var scanRow = new DockPanel { Margin = new Thickness(0, 4, 0, 8), LastChildFill = true };
+            DockPanel.SetDock(_scanButton, Dock.Left);
+            scanRow.Children.Add(_scanButton); scanRow.Children.Add(_scanText);
+            Body.Children.Add(scanRow);
+            ShowScan(tv.Scan);
+        }
+
         // Each playlist the user gave its own space gets its own row right under the apps.
         foreach (var (space, chs) in tv.Spaces())
             if (chs.Count > 0) Body.Children.Add(UiKit.Row("📺  " + space.Name, chs.Take(MaxPerRow).Select(x => Card(x.Channel, x.Number, lineup.IsFavorite(x.Channel.Id)))));
@@ -61,14 +91,14 @@ public sealed class HomeView : PageBase
         if (recent.Count > 1) Body.Children.Add(UiKit.Row("Recently watched", recent.Select(c => Card(c, numbers.GetValueOrDefault(c.Id), lineup.IsFavorite(c.Id)))));
 
         var favs = lineup.Favorites;
-        if (favs.Count > 0) Body.Children.Add(UiKit.Row("My favorites", favs.Take(MaxPerRow).Select(c => Card(c, numbers[c.Id], true))));
+        if (favs.Count > 0) Body.Children.Add(UiKit.Row("My favorites", favs.Take(MaxPerRow).Select(c => Card(c, numbers.GetValueOrDefault(c.Id), true))));
 
         int rows = 0;
         foreach (var g in lineup.Groups)
         {
             if (rows++ >= MaxRows) break;
             var inGroup = lineup.InGroup(g);
-            Body.Children.Add(UiKit.Row(inGroup.Count > MaxPerRow ? $"{g}  ·  {inGroup.Count}" : g, inGroup.Take(MaxPerRow).Select(c => Card(c, numbers[c.Id], lineup.IsFavorite(c.Id)))));
+            Body.Children.Add(UiKit.Row(inGroup.Count > MaxPerRow ? $"{g}  ·  {inGroup.Count}" : g, inGroup.Take(MaxPerRow).Select(c => Card(c, numbers.GetValueOrDefault(c.Id), lineup.IsFavorite(c.Id)))));
         }
 
         if (channels.Count == 0)

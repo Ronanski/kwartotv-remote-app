@@ -96,6 +96,28 @@ public sealed class WebAppWindow : Window
   }, true);
 })();";
 
+    /// <summary>
+    /// Windows contrast themes (and some display settings) make the browser draw a black box behind every text and icon
+    /// over pictures ("backplate") and change the site's colors. A TV app must look like the site: turn that off.
+    /// YouTube's security policy blocks added style tags, so a constructed style sheet is used, with a tag as fallback.
+    /// </summary>
+    public const string NoForcedColorsScript = @"
+(function () {
+  if (window.__kwColors) return; window.__kwColors = true;
+  var css = '*,*::before,*::after{forced-color-adjust:none!important}';
+  var sheet = null;
+  function add() {
+    try {
+      if (!sheet) { sheet = new CSSStyleSheet(); sheet.replaceSync(css); }
+      if (document.adoptedStyleSheets.indexOf(sheet) < 0) document.adoptedStyleSheets = document.adoptedStyleSheets.concat([sheet]);
+    } catch (x) {
+      if (document.getElementById('kw-colors') || !document.documentElement) return;
+      var s = document.createElement('style'); s.id = 'kw-colors'; s.textContent = css; (document.head || document.documentElement).appendChild(s);
+    }
+  }
+  add(); document.addEventListener('DOMContentLoaded', add); setInterval(add, 3000);
+})();";
+
     public WebAppWindow(string url, string profileName, ForegroundKind kind, string? userAgent = null, bool videoOnly = false)
     {
         _url = url; _profile = profileName; Kind = kind; _userAgent = userAgent; _videoOnly = videoOnly;
@@ -138,6 +160,7 @@ public sealed class WebAppWindow : Window
                 "window.addEventListener('keydown', e => { if (e.key === 'F1') { e.preventDefault(); window.chrome.webview.postMessage('home'); } }, true);");
             // The on-screen keyboard for text fields. YouTube TV has its own keyboard, so skip it there.
             if (Kind != ForegroundKind.YouTube) await core.AddScriptToExecuteOnDocumentCreatedAsync(WebTextTarget.PageScript);
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(NoForcedColorsScript);
             if (_videoOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(VideoOnlyScript);
             // Netflix and other websites are made for a mouse: add TV-style remote navigation and make them bigger for the couch.
             if (Kind is ForegroundKind.Netflix or ForegroundKind.Web)

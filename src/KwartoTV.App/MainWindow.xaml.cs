@@ -89,13 +89,13 @@ public partial class MainWindow : Window, IShell
     public TvServices Tv => _tv;
 
     // ---------- automatic updates
-    // Checked every 6 hours (a TV PC stays on for days). A new version installs by itself once nobody has used the TV for
-    // 15 minutes and nothing is playing, through the update task the installer made (no Windows permission prompt).
+    // Checked every 30 minutes (and at start). A new version installs by itself once nobody has used the TV for
+    // 5 minutes and nothing is playing, through the update task the installer made (no Windows permission prompt).
 
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(5) };
     private DateTime _lastUpdateCheck = DateTime.MinValue;
     private bool _updateToastShown, _updating, _noUpdateTask;
-    private static readonly TimeSpan UpdateCheckEvery = TimeSpan.FromHours(6), IdleBeforeUpdate = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan UpdateCheckEvery = TimeSpan.FromMinutes(30), IdleBeforeUpdate = TimeSpan.FromMinutes(5);
 
     private async Task AutoUpdateTickAsync()
     {
