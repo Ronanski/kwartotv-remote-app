@@ -419,6 +419,22 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(wo[0].Referrer == "https://example.invalid/" && wo[0].UserAgent == "Custom UA/1.0", "EXTVLCOPT referrer and user agent are kept");
     Check(wo[1].Referrer is null && wo[1].UserAgent is null, "EXTVLCOPT options do not leak into the next channel");
 
+    // Headers written into the link, the way VLC / Kodi / TiviMate read them
+    const string piped = "#EXTM3U\n#EXTINF:-1,Piped\nhttps://example.invalid/live.m3u8|User-Agent=Mozilla%2F5.0%20Test&Referer=https://site.invalid/&Origin=https://site.invalid\n#EXTINF:-1,After\nhttps://example.invalid/a.m3u8\n";
+    var pp = M3uParser.Parse(piped);
+    Check(pp.Count == 2 && pp[0].Url == "https://example.invalid/live.m3u8" && pp[0].Kind == StreamKind.Hls, "a link with |headers plays the address before the bar");
+    Check(pp[0].UserAgent == "Mozilla/5.0 Test" && pp[0].Referrer == "https://site.invalid/" && pp[0].Headers == "Origin: https://site.invalid", "|User-Agent, Referer and Origin are read (URL-encoded too)");
+    Check(pp[0].Id == Channel.StableId("https://example.invalid/live.m3u8|User-Agent=Mozilla%2F5.0%20Test&Referer=https://site.invalid/&Origin=https://site.invalid"), "the channel id of a |headers link stays the same as before");
+    Check(pp[1].UserAgent is null && pp[1].Referrer is null && pp[1].Headers is null, "|headers do not leak into the next channel");
+    var eh = M3uParser.Parse("#EXTM3U\n#EXTINF:-1 user-agent=\"UA-Attr\" http-referrer=\"https://r.invalid/\",Attr\nhttps://example.invalid/b.m3u8\n#EXTINF:-1,Json\n#EXTHTTP:{\"User-Agent\":\"UA-Json\",\"Cookie\":\"a=1\"}\nhttps://example.invalid/c.m3u8\n");
+    Check(eh[0].UserAgent == "UA-Attr" && eh[0].Referrer == "https://r.invalid/", "user-agent and http-referrer on the #EXTINF line are read");
+    Check(eh[1].UserAgent == "UA-Json" && eh[1].Headers == "Cookie: a=1", "#EXTHTTP JSON headers are read");
+    Check(StreamLink.Parse("https://x.invalid/s.m3u8").Url == "https://x.invalid/s.m3u8" && StreamLink.Parse("https://x.invalid/s|Bad Key=v&Evil=a\r\nb").Headers is null, "plain links unchanged; odd header names and control characters are dropped");
+    var st = new AppSettings();
+    Check(st.AddStream("Mine", "https://x.invalid/s.m3u8|User-Agent=VLC") is null, "a single stream may carry |headers");
+    var sc = ChannelCatalog.LoadOneAsync(st.Playlists[^1], new HttpClient()).Result.Single();
+    Check(sc.Url == "https://x.invalid/s.m3u8" && sc.UserAgent == "VLC", "a single stream with |headers plays its address with its headers");
+
     var mh = new FakeHost(); var mr = new CommandRouter(new ChannelLineup(), mh);
     Check(mr.Handle(new(null, "mouse.move", "12,-30")).Ok && mh.Last == "mouse.move:12,-30" && mr.Handle(new(null, "mouse.click", null)).Ok && mr.Handle(new(null, "mouse.scroll", "-3")).Ok, "router mouse commands");
     Check(!mr.Handle(new(null, "mouse.move", "9999,0")).Ok && !mr.Handle(new(null, "mouse.move", "abc")).Ok && !mr.Handle(new(null, "mouse.scroll", "0")).Ok && !mr.Handle(new(null, "mouse.scroll", "99")).Ok, "router mouse bounds");

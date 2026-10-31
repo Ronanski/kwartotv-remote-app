@@ -112,6 +112,7 @@ public static class StreamProbe
         using var req = new HttpRequestMessage(HttpMethod.Get, uri);
         req.Headers.TryAddWithoutValidation("User-Agent", ch.UserAgent ?? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         if (ch.Referrer is { } rf) req.Headers.TryAddWithoutValidation("Referer", rf);
+        foreach (var (name, value) in StreamLink.Pairs(ch.Headers)) req.Headers.TryAddWithoutValidation(name, value);
         if (range) req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 65535);
         using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         var type = resp.Content.Headers.ContentType?.MediaType ?? "";

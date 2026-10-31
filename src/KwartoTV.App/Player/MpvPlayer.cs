@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using KwartoTV.App.Services;
+using KwartoTV.Core;
 
 namespace KwartoTV.App.Player;
 
@@ -148,10 +149,12 @@ public sealed class MpvPlayer : IDisposable
     private void Set(string name, string value) { if (_ctx != IntPtr.Zero) mpv_set_property_string(_ctx, name, value); }
 
     /// <summary>Per-stream headers from the playlist (#EXTVLCOPT). Pass nulls to go back to the defaults.</summary>
-    public void SetHeaders(string? referrer, string? userAgent)
+    public void SetHeaders(string? referrer, string? userAgent, string? headers = null)
     {
         Set("referrer", referrer ?? "");
         Set("user-agent", userAgent ?? DefaultUserAgent);
+        // Other headers from the playlist (Origin, Cookie, ...). mpv's list is comma separated, so values with commas are left out.
+        Set("http-header-fields", string.Join(",", StreamLink.Pairs(headers).Where(h => !h.Value.Contains(',') && !h.Name.Contains(',')).Select(h => $"{h.Name}: {h.Value}")));
     }
 
     /// <summary>Subtitles / closed captions: off for live TV (like a TV), automatic for your own files.</summary>

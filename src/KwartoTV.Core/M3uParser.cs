@@ -28,7 +28,7 @@ public static class M3uParser
     {
         var result = new List<Channel>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string? name = null, logo = null, group = null, referrer = null, userAgent = null, tvgId = null;
+        string? name = null, logo = null, group = null, referrer = null, userAgent = null, tvgId = null, headers = null;
         bool pending = false;
 
         foreach (var raw in text.Split('\n'))
@@ -50,6 +50,10 @@ public static class M3uParser
                 logo = attrs.GetValueOrDefault("tvg-logo");
                 group = attrs.GetValueOrDefault("group-title");
                 tvgId = attrs.GetValueOrDefault("tvg-id");
+                // Some lists put the headers on the #EXTINF line: user-agent="..." http-referrer="..."
+                foreach (var key in new[] { "user-agent", "http-user-agent", "referrer", "referer", "http-referrer", "http-referer" })
+                    if (attrs.TryGetValue(key, out var v) && v.Length is > 0 and < 512 && !v.Any(char.IsControl))
+                    { if (key.Contains("agent")) userAgent = v; else referrer = v; }
                 pending = true;
                 continue;
             }
@@ -71,7 +75,25 @@ public static class M3uParser
                 continue;
             }
 
+            // #EXTHTTP:{"User-Agent":"...","Referer":"...","Cookie":"..."}
+            if (line.StartsWith("#EXTHTTP:", StringComparison.OrdinalIgnoreCase))
+            {
+                var h = StreamLink.FromJson(line["#EXTHTTP:".Length..]);
+                referrer = h.Referrer ?? referrer; userAgent = h.UserAgent ?? userAgent; headers = h.Headers ?? headers;
+                continue;
+            }
+
             if (line.StartsWith('#')) continue;
+
+            // "address|User-Agent=...&Referer=..." (VLC, Kodi, TiviMate): the headers are not part of the address.
+            // The channel id still comes from the whole line, so numbers and favorites stay with the channel.
+            var idSource = line;
+            if (line.Contains('|'))
+            {
+                var link = StreamLink.Parse(line);
+                line = link.Url;
+                referrer = link.Referrer ?? referrer; userAgent = link.UserAgent ?? userAgent; headers = link.Headers ?? headers;
+            }
 
             Uri? uri;
             // "/path" counts as an absolute file path on Linux/macOS, so treat a leading slash as relative to the playlist link first.
@@ -83,18 +105,18 @@ public static class M3uParser
                 if (Uri.TryCreate(baseUri, line, out uri) && uri.IsAbsoluteUri) line = uri.AbsoluteUri;
             }
             if (uri is null || !uri.IsAbsoluteUri || !IsStreamUri(uri))
-            { pending = false; referrer = userAgent = tvgId = null; continue; }
-            if (!seen.Add(line)) { pending = false; referrer = userAgent = tvgId = null; continue; }
+            { pending = false; referrer = userAgent = tvgId = headers = null; continue; }
+            if (!seen.Add(line)) { pending = false; referrer = userAgent = tvgId = headers = null; continue; }
 
             var finalName = pending && !string.IsNullOrWhiteSpace(name)
                 ? name!
                 : (uri.Segments.LastOrDefault()?.Trim('/') is { Length: > 0 } seg ? seg : uri.Host);
             result.Add(new Channel(
-                Channel.StableId(line), finalName, line,
+                Channel.StableId(idSource), finalName, line,
                 string.IsNullOrWhiteSpace(logo) ? null : logo,
                 CleanGroup(group, finalName),
-                Channel.DetectKind(line), referrer, userAgent, string.IsNullOrWhiteSpace(tvgId) ? null : tvgId));
-            name = logo = group = referrer = userAgent = tvgId = null; pending = false;
+                Channel.DetectKind(line), referrer, userAgent, string.IsNullOrWhiteSpace(tvgId) ? null : tvgId, headers));
+            name = logo = group = referrer = userAgent = tvgId = headers = null; pending = false;
         }
         return result;
     }

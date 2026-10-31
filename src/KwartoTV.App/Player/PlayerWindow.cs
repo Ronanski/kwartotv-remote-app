@@ -135,7 +135,7 @@ public sealed class PlayerWindow : Window
         if (attempt == 0 && !reconnect) { _healthMarked = false; _playedOk = false; _reconnects = 0; _reconnecting = false; }
         _osd.ShowMessage(reconnect ? $"Connection lost. Reconnecting… ({_reconnects})" : attempt == 0 ? null : "Trying another way to connect…");
         var ua = ch.UserAgent ?? UserAgents[Math.Min(attempt, UserAgents.Length - 1)];
-        _mpv!.SetHeaders(ch.Referrer, ua);
+        _mpv!.SetHeaders(ch.Referrer, ua, ch.Headers);
         _mpv.SetSubtitles(false);
         // A speed chosen for a video (phone remote) must not carry over to live TV.
         if (!reconnect) _mpv.SetSpeed(1);

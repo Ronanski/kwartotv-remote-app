@@ -80,7 +80,7 @@ public sealed class AppSettings
     public string? AddStream(string name, string url)
     {
         url = (url ?? "").Trim();
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || !M3uParser.IsStreamUri(u)) return "Use a stream address that starts with http://, https://, rtmp://, rtsp:// or udp://";
+        if (!Uri.TryCreate(StreamLink.Parse(url).Url, UriKind.Absolute, out var u) || !M3uParser.IsStreamUri(u)) return "Use a stream address that starts with http://, https://, rtmp://, rtsp:// or udp://";
         if (Playlists.Any(p => string.Equals(p.Source, url, StringComparison.OrdinalIgnoreCase))) return "That stream is already added.";
         Playlists.Add(new PlaylistEntry(Channel.StableId(url), Clean(name, u.Host), url, null, IsStream: true));
         return null;

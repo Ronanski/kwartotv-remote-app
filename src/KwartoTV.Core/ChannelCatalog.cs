@@ -19,8 +19,9 @@ public static class ChannelCatalog
     {
         if (p.IsStream)
         {
-            if (!Uri.TryCreate(p.Source, UriKind.Absolute, out var s) || !M3uParser.IsStreamUri(s)) throw new ArgumentException("Not a stream address.");
-            return new[] { new Channel(Channel.StableId(p.Source), p.Name, p.Source, null, "Streams", Channel.DetectKind(p.Source)) };
+            var link = StreamLink.Parse(p.Source);
+            if (!Uri.TryCreate(link.Url, UriKind.Absolute, out var s) || !M3uParser.IsStreamUri(s)) throw new ArgumentException("Not a stream address.");
+            return new[] { new Channel(Channel.StableId(p.Source), p.Name, link.Url, null, "Streams", Channel.DetectKind(link.Url), link.Referrer, link.UserAgent, null, link.Headers) };
         }
         if (Uri.TryCreate(p.Source, UriKind.Absolute, out var u) && u.Scheme != Uri.UriSchemeFile)
             return await PlaylistLoader.LoadAsync(p.Source, http, IptvOrg.Mirrors, PlaylistLoader.AttemptTimeout, ct, fallback);
