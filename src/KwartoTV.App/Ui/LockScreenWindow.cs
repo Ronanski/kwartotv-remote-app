@@ -11,7 +11,7 @@ using System.Windows.Threading;
 namespace KwartoTV.App.Ui;
 
 /// <summary>
-/// The lock screen: a calm clock on black (the time inside a ring that sweeps with the seconds, the date, and this
+/// The lock screen, over the KwartoTV window only: a calm clock on black (the time inside a ring that sweeps with the seconds, the date, and this
 /// month's calendar). Everything drifts slowly so nothing burns into the TV. While it is up the TV is locked: keys,
 /// clicks and remote buttons do nothing; only Unlock on the phone closes it (see MainWindow.ScreenOn).
 /// </summary>
@@ -38,22 +38,22 @@ public sealed class LockScreenWindow : Window
     private string _shownTime = "";
     private bool _allowClose;
 
-    /// <param name="screenOf">The window on the TV: the lock screen fills that screen only (a PC can have more than one,
-    /// such as a laptop with a TV attached), so the clock is in the middle of the TV.</param>
-    public LockScreenWindow(Window screenOf)
+    /// <param name="app">The KwartoTV window on screen (Home, the player or a web app). The lock screen covers exactly that
+    /// window and stays on top of it only: other programs and other screens are left alone.</param>
+    public LockScreenWindow(Window app)
     {
-        WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; Topmost = true;
+        WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; Owner = app;
         Background = Brushes.Black; Cursor = Cursors.None; Title = "KwartoTV locked";
-        // Moved onto the TV's screen first (Windows says which monitor that window is on), then maximized there:
-        // maximizing fills the screen the window is on.
-        var tv = new System.Windows.Interop.WindowInteropHelper(screenOf).Handle;
+        // Exactly over the KwartoTV window (in screen pixels, as Windows reports it), and again whenever it moves or resizes.
+        var appHandle = new System.Windows.Interop.WindowInteropHelper(app).Handle;
         WindowStartupLocation = WindowStartupLocation.Manual;
         Width = 640; Height = 480;
-        SourceInitialized += (_, _) =>
-        {
-            Services.Native.MoveToScreenOf(new System.Windows.Interop.WindowInteropHelper(this).Handle, tv);
-            WindowState = WindowState.Maximized;
-        };
+        void Cover() => Services.Native.CoverWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle, appHandle);
+        SourceInitialized += (_, _) => Cover();
+        EventHandler follow = (_, _) => Cover();
+        SizeChangedEventHandler followSize = (_, _) => Cover();
+        app.LocationChanged += follow; app.SizeChanged += followSize; app.StateChanged += follow;
+        Closed += (_, _) => { app.LocationChanged -= follow; app.SizeChanged -= followSize; app.StateChanged -= follow; };
         FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
 
         // The ring: a faint track that breathes, the arc of the current minute, and a dot at its tip.

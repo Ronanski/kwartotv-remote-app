@@ -57,16 +57,25 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
 
-    /// <summary>Moves [window] into the middle of the monitor that [reference] is on (the nearest one), keeping its size.</summary>
-    public static void MoveToScreenOf(IntPtr window, IntPtr reference)
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out NativeRect rect);
+
+    /// <summary>
+    /// Puts [window] exactly over [target] (same place and size on screen). A maximized window is measured by the screen
+    /// area it fills, so a cover never spills onto another monitor.
+    /// </summary>
+    public static void CoverWindow(IntPtr window, IntPtr target)
     {
-        if (window == IntPtr.Zero || reference == IntPtr.Zero) return;
-        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        if (!GetMonitorInfo(MonitorFromWindow(reference, 2 /* nearest */), ref info)) return;
-        var r = info.Monitor;
-        const uint NoSize = 0x0001, NoZOrder = 0x0004, NoActivate = 0x0010;
-        SetWindowPos(window, IntPtr.Zero, r.Left + (r.Right - r.Left) / 4, r.Top + (r.Bottom - r.Top) / 4, 0, 0, NoSize | NoZOrder | NoActivate);
+        if (window == IntPtr.Zero || target == IntPtr.Zero || !GetWindowRect(target, out var r)) return;
+        if (IsZoomed(target))
+        {
+            var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (GetMonitorInfo(MonitorFromWindow(target, 2 /* nearest */), ref info)) r = info.Monitor;
+        }
+        const uint NoZOrder = 0x0004, NoActivate = 0x0010;
+        SetWindowPos(window, IntPtr.Zero, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, NoZOrder | NoActivate);
     }
+
+    [DllImport("user32.dll")] private static extern bool IsZoomed(IntPtr hwnd);
 
     public static IntPtr Foreground => GetForegroundWindow();
     public static uint ForegroundProcessId() { GetWindowThreadProcessId(GetForegroundWindow(), out var pid); return pid; }
