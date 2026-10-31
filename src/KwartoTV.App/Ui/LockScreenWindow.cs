@@ -26,7 +26,7 @@ public sealed class LockScreenWindow : Window
     private readonly TextBlock _time = new() { FontSize = 168, FontWeight = FontWeights.Thin, Foreground = Soft, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TextBlock _ampm = new() { FontSize = 30, FontWeight = FontWeights.Light, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, -18, 0, 0) };
     private readonly TextBlock _date = new() { FontSize = 28, FontWeight = FontWeights.Light, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
-    private readonly Path _arc = new() { Stroke = new SolidColorBrush(Color.FromArgb(0xC8, Accent.R, Accent.G, Accent.B)), StrokeThickness = Stroke, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
+    private readonly System.Windows.Shapes.Path _arc = new() { Stroke = new SolidColorBrush(Color.FromArgb(0xC8, Accent.R, Accent.G, Accent.B)), StrokeThickness = Stroke, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
     private readonly Ellipse _head = new() { Width = 12, Height = 12, Fill = new SolidColorBrush(Accent) };
     private readonly TranslateTransform _headAt = new();
     private readonly StackPanel _calendar = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(90, 0, 0, 0) };
