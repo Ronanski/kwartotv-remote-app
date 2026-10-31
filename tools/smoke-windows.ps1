@@ -157,10 +157,13 @@ Shot "09-youtube-in-app"
 # Into YouTube's TV home (signed out), to see the real screen with thumbnails, icons and text over pictures.
 Keys "{ENTER}"; Start-Sleep -Seconds 8
 Shot "09b-youtube-after-get-started"
-Keys "{DOWN}"; Keys "{ENTER}"; Start-Sleep -Seconds 8
-Shot "09c-youtube-next"
-Keys "{RIGHT}"; Keys "{RIGHT}"; Start-Sleep -Seconds 4
-Shot "09d-youtube-browsing"
+# "Watch as guest" is the last choice: the home screen with thumbnails, icons and text over pictures.
+Keys "{DOWN}"; Keys "{DOWN}"; Keys "{DOWN}"; Keys "{ENTER}"; Start-Sleep -Seconds 12
+Shot "09c-youtube-guest-home"
+Keys "{DOWN}"; Start-Sleep -Seconds 4
+Shot "09d-youtube-guest-row"
+Keys "{LEFT}"; Start-Sleep -Seconds 3
+Shot "09e-youtube-guest-menu"
 Keys "{F1}"
 Start-Sleep -Seconds 2
 Keys "{F6}"
