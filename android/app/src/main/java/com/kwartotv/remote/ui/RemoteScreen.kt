@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -109,7 +110,7 @@ import kotlin.math.roundToInt
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Remote("Remote", Icons.Rounded.SettingsRemote), Media("Media", Icons.Rounded.PlayCircle), Channels("Channels", Icons.Rounded.LiveTv),
-    Keys("Keyboard", Icons.Rounded.Keyboard), Power("Power", Icons.Rounded.PowerSettingsNew)
+    Music("Music", Icons.Rounded.MusicNote), Keys("Keys", Icons.Rounded.Keyboard), Power("Power", Icons.Rounded.PowerSettingsNew)
 }
 
 @Composable
@@ -239,6 +240,7 @@ fun RemoteScreen(vm: AppViewModel) {
                     Tab.Remote -> NavTab(vm, send)
                     Tab.Media -> MediaTab(send)
                     Tab.Channels -> ChannelsTab(vm, send)
+                    Tab.Music -> MusicTab(vm)
                     Tab.Keys -> KeysTab(send)
                     Tab.Power -> PowerTab(send)
                 }

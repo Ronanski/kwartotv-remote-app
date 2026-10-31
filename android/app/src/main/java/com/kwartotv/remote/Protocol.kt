@@ -49,6 +49,15 @@ object Cmd {
     /** A sign-in made on the phone, handed to the TV: "netflix|cookie=value; ...". */
     const val SIGN_IN = "web.signin"
 
+    // YouTube Music on the TV (plays on behind the lock screen)
+    const val MUSIC_OPEN = "music.open"
+    const val MUSIC_PLAY_PAUSE = "music.playpause"
+    const val MUSIC_NEXT = "music.next"
+    const val MUSIC_PREV = "music.prev"
+    const val MUSIC_STOP = "music.stop"
+    const val MUSIC_SEARCH = "music.search"
+    const val MUSIC_PLAY = "music.play"
+
     const val MOUSE_MOVE = "mouse.move"
     const val MOUSE_CLICK = "mouse.click"
     const val MOUSE_RIGHT = "mouse.rightclick"
@@ -116,6 +125,8 @@ sealed interface TvMessage {
     data class Scanning(val scan: Scan) : TvMessage
     data class TextWanted(val request: TextRequest?) : TvMessage
     data class SignInWanted(val request: SignInRequest) : TvMessage
+    data class MusicNow(val music: MusicState) : TvMessage
+    data class MusicFound(val results: MusicResults) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -129,6 +140,8 @@ fun parseTvMessage(text: String): TvMessage = try {
         "scan" -> TvMessage.Scanning(parseScan(o))
         "text" -> TvMessage.TextWanted(parseTextRequest(o))
         "signin" -> parseSignIn(o)?.let { TvMessage.SignInWanted(it) } ?: TvMessage.Unknown
+        "music" -> TvMessage.MusicNow(parseMusic(o))
+        "music.results" -> TvMessage.MusicFound(parseMusicResults(o))
         else -> TvMessage.Unknown
     }
 } catch (_: Exception) {
@@ -296,4 +309,33 @@ fun parseHostPort(text: String): Pair<String, Int?>? {
         return t.substring(0, i) to port
     }
     return t to null
+}
+
+/** What YouTube Music on the TV is playing. */
+data class MusicState(val on: Boolean, val playing: Boolean, val title: String, val artist: String, val art: String?)
+
+data class MusicTrack(val id: String, val title: String, val artist: String)
+
+/** Songs found for [query]; [error] when the search did not work. */
+data class MusicResults(val query: String, val tracks: List<MusicTrack>, val error: Boolean)
+
+fun parseMusic(o: JSONObject) = MusicState(
+    on = o.optBoolean("on"), playing = o.optBoolean("playing"),
+    title = o.optString("title").take(120), artist = o.optString("artist").take(120),
+    art = o.text("art")?.takeIf { it.startsWith("https://") },
+)
+
+private val TRACK_ID = Regex("^[A-Za-z0-9_-]{11}$")
+
+fun parseMusicResults(o: JSONObject): MusicResults {
+    val arr = o.optJSONArray("items")
+    val list = ArrayList<MusicTrack>()
+    if (arr != null) for (i in 0 until minOf(arr.length(), 30)) {
+        val t = arr.optJSONObject(i) ?: continue
+        val id = t.optString("id")
+        val title = t.optString("title").take(120)
+        if (!TRACK_ID.matches(id) || title.isBlank()) continue
+        list.add(MusicTrack(id, title, t.optString("artist").take(120)))
+    }
+    return MusicResults(o.optString("q").take(64), list, o.optBoolean("error"))
 }

@@ -184,4 +184,12 @@ class LineupTest {
         assertTrue(isSignedIn(bb, "SESSDATA=x; bili_jct=y", "https://www.bilibili.tv/en/"))
         assertFalse(isSignedIn(bb, "buvid3=z", "https://www.bilibili.tv/en/"))
     }
+
+    @Test
+    fun musicMessages() {
+        val now = parseTvMessage("""{"type":"music","on":true,"playing":true,"title":"Song","artist":"Band","art":"http://x/a.jpg"}""")
+        assertEquals(TvMessage.MusicNow(MusicState(true, true, "Song", "Band", null)), now)
+        val r = parseTvMessage("""{"type":"music.results","q":"band","error":false,"items":[{"id":"abcdefghijk","title":"One","artist":"Band"},{"id":"bad","title":"X","artist":""},{"id":"abcdefghijl","title":"","artist":""}]}""")
+        assertEquals(TvMessage.MusicFound(MusicResults("band", listOf(MusicTrack("abcdefghijk", "One", "Band")), false)), r)
+    }
 }

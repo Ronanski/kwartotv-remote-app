@@ -15,6 +15,8 @@ public sealed class TvServices : IDisposable
     public ChannelLineup Lineup { get; } = new();
     public PairingService Pairing { get; } = new();
     public ExternalApps Apps { get; } = new();
+    /// <summary>YouTube Music in the background, controlled from the phone (plays on behind the lock screen).</summary>
+    public MusicService MusicPlayer { get; } = new();
     public Updater Updater { get; } = new();
     public CommandRouter Router { get; private set; } = null!;
     public RemoteServer? Server { get; private set; }
@@ -495,7 +497,8 @@ public sealed class TvServices : IDisposable
         var failures = new List<string>();
         foreach (var port in RemoteServer.PortsToTry(Settings.Port))
         {
-            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now, Catalog = CatalogJson, PendingText = () => OnUi(() => KwartoTV.App.Ui.TextBridge.Pending) };
+            var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now, Catalog = CatalogJson, PendingText = () => OnUi(() => KwartoTV.App.Ui.TextBridge.Pending),
+                MusicNow = () => MusicPlayer.State.On ? Music.StateMessage(MusicPlayer.State) : null };
             try
             {
                 server.Start();

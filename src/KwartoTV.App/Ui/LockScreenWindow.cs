@@ -51,6 +51,23 @@ public sealed class LockScreenWindow : Window
     private IReadOnlyList<string> _photos = Array.Empty<string>();
     private int _photoIndex;
     private readonly DispatcherTimer _slides = new();
+    // The song playing (YouTube Music from the phone), under the verse.
+    private readonly TextBlock _songTitle = new() { FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = Soft, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 900 };
+    private readonly TextBlock _songArtist = new() { FontSize = 17, Foreground = Dim, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 900 };
+    private readonly TextBlock _songIcon = new() { FontSize = 30, Foreground = new SolidColorBrush(Accent), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
+    private readonly Border _song = new() { Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 22, 0, 0), Padding = new Thickness(22, 12, 26, 12), CornerRadius = new CornerRadius(18), Background = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF)) };
+
+    /// <summary>Shows the song playing (or hides the line when the music is off).</summary>
+    public void SetMusic(KwartoTV.Core.MusicState s)
+    {
+        if (!s.On || s.Title.Length == 0) { _song.Visibility = Visibility.Collapsed; return; }
+        _songTitle.Text = s.Title;
+        _songArtist.Text = s.Artist;
+        _songArtist.Visibility = s.Artist.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        _songIcon.Text = s.Playing ? "♫" : "❚❚";
+        _song.Opacity = s.Playing ? 1 : 0.6;
+        _song.Visibility = Visibility.Visible;
+    }
 
     public LockScreenWindow(Window app, KwartoTV.Core.AppSettings settings)
     {
@@ -85,11 +102,17 @@ public sealed class LockScreenWindow : Window
 
         var hint = new TextBlock
         {
-            Text = "🔒  Locked  ·  unlock from KwartoTV Remote on your phone (Power → Unlock)",
+            Text = "🔒  Locked  ·  unlock from KwartoTV Remote on your phone (Power → Unlock)  ·  music: Music tab on the phone",
             FontSize = 17, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, 36), RenderTransform = _drift,
         };
         _verseBox.Children.Add(_verse); _verseBox.Children.Add(_verseRef);
+        var songText = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        songText.Children.Add(_songTitle); songText.Children.Add(_songArtist);
+        var songRow = new StackPanel { Orientation = Orientation.Horizontal };
+        songRow.Children.Add(_songIcon); songRow.Children.Add(songText);
+        _song.Child = songRow;
+        _verseBox.Children.Add(_song);
         _verseBox.RenderTransform = _drift;
         var root = new Grid { Background = Brushes.Black, ClipToBounds = true };
         // The photos have their own layer, so their cross-fade order never covers the clock.

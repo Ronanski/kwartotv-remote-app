@@ -9,6 +9,8 @@ import com.kwartotv.remote.SignInRequest
 import com.kwartotv.remote.TextRequest
 import com.kwartotv.remote.toggleArg
 import com.kwartotv.remote.Lineup
+import com.kwartotv.remote.MusicResults
+import com.kwartotv.remote.MusicState
 import com.kwartotv.remote.SavedTv
 import com.kwartotv.remote.TvMessage
 import com.kwartotv.remote.commandJson
@@ -86,6 +88,24 @@ class RemoteClient {
 
     /** Hands a sign-in made on the phone to the TV. False when not connected. */
     fun sendSignIn(service: String, cookies: String): Boolean = send(Cmd.SIGN_IN, "$service|${cookies.take(12000)}")
+
+    private val _music = MutableStateFlow(MusicState(false, false, "", "", null))
+    /** What YouTube Music on the TV is playing. */
+    val music: StateFlow<MusicState> = _music
+    private val _musicResults = MutableStateFlow<MusicResults?>(null)
+    /** The last song search, or null. */
+    val musicResults: StateFlow<MusicResults?> = _musicResults
+    private val _musicSearching = MutableStateFlow(false)
+    val musicSearching: StateFlow<Boolean> = _musicSearching
+
+    /** Searches songs on the TV's YouTube Music. False when not connected. */
+    fun searchMusic(query: String): Boolean {
+        val q = query.trim().take(64)
+        if (q.isEmpty()) return false
+        val ok = send(Cmd.MUSIC_SEARCH, q)
+        if (ok) _musicSearching.value = true
+        return ok
+    }
 
     /** The user closed the phone's text box without sending: do not open it again for the same request. */
     fun dismissText() { _textRequest.value = null }
@@ -167,6 +187,8 @@ class RemoteClient {
                         is TvMessage.Found -> { _catalog.value = m.catalog; _catalogUnsupported.value = false }
                         is TvMessage.TextWanted -> _textRequest.value = m.request
                         is TvMessage.SignInWanted -> _signIn.value = m.request
+                        is TvMessage.MusicNow -> _music.value = m.music
+                        is TvMessage.MusicFound -> { _musicResults.value = m.results; _musicSearching.value = false }
                         is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
                             ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)
                         is TvMessage.Ack -> when {

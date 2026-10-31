@@ -80,7 +80,10 @@ public partial class MainWindow : Window, IShell
             _tv.StartGuide();
             await _tv.RefreshChannelsAsync();
         };
-        Closed += (_, _) => { CloseWeb(); _player?.Close(); _tv.Apps.Close(); _tv.Dispose(); };
+        Closed += (_, _) => { _tv.MusicPlayer.Stop(); CloseWeb(); _player?.Close(); _tv.Apps.Close(); _tv.Dispose(); };
+        // The song on the lock screen and on the phones.
+        _tv.MusicPlayer.Changed += s => { _lock?.SetMusic(s); _tv.Server?.Broadcast(KwartoTV.Core.Music.StateMessage(s)); };
+        _tv.MusicPlayer.Results += (q, tracks, failed) => _tv.Server?.Broadcast(KwartoTV.Core.Music.ResultsMessage(q, tracks, failed));
     }
 
     public TvServices Tv => _tv;
@@ -204,7 +207,7 @@ public partial class MainWindow : Window, IShell
     public void PreviewChannel(Channel ch)
     {
         if (!MpvPlayer.IsAvailable()) { ShowToast("Video engine (libmpv-2.dll) is missing. Reinstall KwartoTV."); return; }
-        CloseWeb(); _tv.Apps.Close();
+        CloseWeb(); _tv.Apps.Close(); _tv.MusicPlayer.Pause();
         _player ??= new PlayerWindow(_tv, this);
         _player.PlayPreview(ch);
     }
@@ -278,6 +281,7 @@ public partial class MainWindow : Window, IShell
     private void OpenPlayerLive(Channel ch)
     {
         if (!MpvPlayer.IsAvailable()) { ShowToast("Video engine (libmpv-2.dll) is missing. Reinstall KwartoTV."); return; }
+        _tv.MusicPlayer.Pause();
         _player ??= new PlayerWindow(_tv, this);
         _player.PlayLive(ch, _tv.Lineup.CurrentNumber);
     }
@@ -285,7 +289,7 @@ public partial class MainWindow : Window, IShell
     public void PlayFiles(IReadOnlyList<LibraryItem> items, int index)
     {
         if (!MpvPlayer.IsAvailable()) { ShowToast("Video engine (libmpv-2.dll) is missing. Reinstall KwartoTV."); return; }
-        CloseWeb(); _tv.Apps.Close();
+        CloseWeb(); _tv.Apps.Close(); _tv.MusicPlayer.Pause();
         _player ??= new PlayerWindow(_tv, this);
         _player.PlayFiles(items, index);
     }
@@ -343,6 +347,7 @@ public partial class MainWindow : Window, IShell
         PrepareExternal();
         _tv.Apps.Close();
         CloseWeb();
+        _tv.MusicPlayer.Pause();
         ShowToast($"Opening {name}…");
         // Netflix and Bilibili can be signed in from the phone (PhoneSignIn).
         var signIn = profile == "netflix" ? "netflix" : profile == "web-bilibili" ? "bilibili" : null;
@@ -535,6 +540,7 @@ public partial class MainWindow : Window, IShell
         Window tvWindow = _player is { IsVisible: true } p ? p : _web is { IsVisible: true } w ? w : this;
         var l = new LockScreenWindow(tvWindow, _tv.Settings);
         _lock = l;
+        l.SetMusic(_tv.MusicPlayer.State);
         l.Show();
         l.Activate();
         // The PC must not go to sleep behind the clock (the phone could not reach it to unlock), and the clock stays on screen.
@@ -553,6 +559,21 @@ public partial class MainWindow : Window, IShell
         if (_player is { IsVisible: true } p) { p.Activate(); p.Focus(); }
         else if (_web is { IsVisible: true } w) w.Activate();
         else { Native.BringToFront(Handle); Activate(); }
+    }
+
+    public void Music(string cmd, string? arg)
+    {
+        var m = _tv.MusicPlayer;
+        switch (cmd)
+        {
+            case "music.open": _ = m.OpenAsync(); break;
+            case "music.playpause": m.PlayPause(); break;
+            case "music.next": m.Next(); break;
+            case "music.prev": m.Previous(); break;
+            case "music.stop": m.Stop(); break;
+            case "music.search": m.Search(arg!.Trim()); break;
+            case "music.play": m.Play(arg!); break;
+        }
     }
 
     public void SignInFromPhone(string arg)

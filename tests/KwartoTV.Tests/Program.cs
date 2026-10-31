@@ -442,6 +442,23 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(defaults.NetflixInApp, "defaults: Netflix opens in the app");
 }
 
+// ---- YouTube Music from the phone
+{
+    Check(Music.IsTrackId("dQw4w9WgXcQ") && !Music.IsTrackId("short") && !Music.IsTrackId("dQw4w9WgXc!") && Music.WatchUrl("dQw4w9WgXcQ") == "https://music.youtube.com/watch?v=dQw4w9WgXcQ", "music: song ids and the play link");
+    var mnow = Music.ParseNow("{\"type\":\"now\",\"title\":\"Song\\u0007\",\"artist\":\"Band\",\"art\":\"javascript:x\",\"playing\":true}");
+    Check(mnow is { On: true, Playing: true, Title: "Song", Artist: "Band", Art: null }, "music: now playing from the page (control characters and non-https art dropped)");
+    Check(Music.ParseNow("{\"type\":\"results\"}") is null && Music.ParseNow("garbage") is null, "music: other messages are not now playing");
+    var res = Music.ParseResults("{\"type\":\"results\",\"q\":\"band\",\"items\":[{\"id\":\"abcdefghijk\",\"t\":\"One\",\"a\":\"Band\"},{\"id\":\"abcdefghijk\",\"t\":\"Dup\"},{\"id\":\"bad\",\"t\":\"X\"},{\"id\":\"abcdefghijl\",\"t\":\"\"}]}");
+    Check(res is { Query: "band", Error: false } r0 && r0.Tracks.Count == 1 && r0.Tracks[0] == new MusicTrack("abcdefghijk", "One", "Band"), "music: search results keep valid, unique songs only");
+    var msg = Music.ResultsMessage("band", res!.Value.Tracks);
+    Check(msg.Contains("\"type\":\"music.results\"") && msg.Contains("\"id\":\"abcdefghijk\"") && Music.StateMessage(MusicState.Off).Contains("\"on\":false"), "music: messages for the phones");
+
+    var mh2 = new FakeHost(); var mr2 = new CommandRouter(new ChannelLineup(), mh2) { IsLocked = () => true };
+    Check(mr2.Handle(new(null, "music.search", "Ben&Ben")).Ok && mh2.Last == "music.search:Ben&Ben", "music: search works while the TV is locked");
+    Check(mr2.Handle(new(null, "music.play", "abcdefghijk")).Ok && mr2.Handle(new(null, "music.playpause", null)).Ok && mr2.Handle(new(null, "music.next", null)).Ok, "music: play, pause and next work while locked");
+    Check(!mr2.Handle(new(null, "music.play", "../../etc")).Ok && !mr2.Handle(new(null, "music.search", "  ")).Ok && !mr2.Handle(new(null, "nav.ok", null)).Ok, "music: bad song ids and empty searches refused; other keys still locked");
+}
+
 // ---- updates
 {
     var h = new string('a', 64);

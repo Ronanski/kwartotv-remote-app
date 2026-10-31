@@ -35,6 +35,8 @@ public sealed class CommandRouter
         "text.set",
         // a sign-in made on the phone (Netflix, Bilibili) handed to the TV: "netflix|cookie=value; ..."
         "web.signin",
+        // YouTube Music on the TV (it plays on behind the lock screen)
+        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play",
     };
 
     // While the TV is locked (clock screen) only these work: unlock, power, and volume.
@@ -42,6 +44,8 @@ public sealed class CommandRouter
     {
         "power.screenon", "power.screenoff", "power.sleep", "power.shutdown", "power.restart",
         "media.volup", "media.voldown", "media.volume", "media.mute",
+        // music is what the lock screen is for: it can be changed without unlocking
+        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play",
     };
 
     /// <summary>The message a phone gets for a button pressed while the TV is locked.</summary>
@@ -118,6 +122,12 @@ public sealed class CommandRouter
                 break;
             case "catalog.choosegroup":
                 if (!ChannelFinder.TryParseToggle(c.Arg, out _, out var grp) || grp.Length > 60) return new(false, "bad category");
+                break;
+            case "music.search":
+                if (!Music.IsQuery(c.Arg)) return new(false, "Type a song or artist.");
+                break;
+            case "music.play":
+                if (!Music.IsTrackId(c.Arg)) return new(false, "bad song");
                 break;
             case "media.speed":
                 if (!double.TryParse(c.Arg, System.Globalization.NumberStyles.Float,

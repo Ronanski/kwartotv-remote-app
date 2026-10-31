@@ -306,6 +306,79 @@ if (Test-Path $navReport) { Get-Content $navReport | ForEach-Object { Write-Host
 else { Write-Host "nav: no report; app log:"; Get-Content (Join-Path $data "log.txt") -Tail 30 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "nav log: $_" } }
 Check ((Test-Path $navReport) -and (Select-String -Path $navReport -Pattern "RESULT: every control" -Quiet)) "the remote's arrows reach every control on every page and dialog"
 Stop-Process -Id $na.Id -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+# YouTube Music from the phone: a paired phone locks the TV, searches a song, plays it; the lock screen shows it.
+$token = "smoke-music-token"
+$hash = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($token)))
+Set-Content -Path (Join-Path $data "devices.json") -Value ("[{""Id"":""smoke001"",""Name"":""Smoke phone"",""TokenHash"":""$hash"",""PairedAt"":""2026-01-01T00:00:00+00:00"",""Blocked"":false}]") -Encoding UTF8
+$logBefore = @(Get-Content (Join-Path $data "log.txt") -ErrorAction SilentlyContinue).Count
+$mp = Start-Process -FilePath $Exe -PassThru
+$port = $null
+for ($i = 0; $i -lt 40 -and -not $port; $i++) {
+    Start-Sleep -Seconds 1
+    $l = @(Get-Content (Join-Path $data "log.txt") -ErrorAction SilentlyContinue) | Select-Object -Skip $logBefore | Where-Object { $_ -match "remote: listening on port (\d+)" } | Select-Object -Last 1
+    if ($l -match "port (\d+)") { $port = $Matches[1] }
+}
+$musicResults = $null
+try {
+    $ws = [System.Net.WebSockets.ClientWebSocket]::new()
+    $ws.ConnectAsync([Uri]"ws://127.0.0.1:$port/ws?device=smoke001&token=$token", [Threading.CancellationToken]::None).Wait(10000) | Out-Null
+    function WsSend($cmd, $arg) {
+        $json = @{ id = [guid]::NewGuid().ToString("N").Substring(0, 6); cmd = $cmd; arg = $arg } | ConvertTo-Json -Compress
+        $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+        $ws.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).Wait(5000) | Out-Null
+    }
+    function WsReceiveUntil($type, $seconds) {
+        $deadline = (Get-Date).AddSeconds($seconds)
+        while ((Get-Date) -lt $deadline -and $ws.State -eq "Open") {
+            $buf = New-Object byte[] 65536; $ms = New-Object IO.MemoryStream
+            do {
+                $t = $ws.ReceiveAsync([ArraySegment[byte]]::new($buf), [Threading.CancellationToken]::None)
+                if (-not $t.Wait([int][Math]::Max(1000, ($deadline - (Get-Date)).TotalMilliseconds))) { return $null }
+                $ms.Write($buf, 0, $t.Result.Count)
+            } while (-not $t.Result.EndOfMessage)
+            $text = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+            try { $o = $text | ConvertFrom-Json } catch { continue }
+            if ($o.type -eq $type) { return $o }
+        }
+        return $null
+    }
+    Check ($ws.State -eq "Open") "a paired phone connects (port $port)"
+    WsSend "power.screenoff" $null
+    Start-Sleep -Seconds 2
+    WsSend "music.search" "Ben&Ben Maybe the Night"
+    $musicResults = WsReceiveUntil "music.results" 45
+    $count = if ($musicResults) { @($musicResults.items).Count } else { 0 }
+    if ($musicResults) { @($musicResults.items) | Select-Object -First 5 | ForEach-Object { Write-Host "music result: $($_.id) $($_.title) - $($_.artist)" } }
+    Check ($count -gt 0) "music: a song search from the phone finds songs on the TV ($count)"
+    if ($count -gt 0) {
+        WsSend "music.play" (@($musicResults.items)[0].id)
+        $playing = $null
+        $deadline = (Get-Date).AddSeconds(40)
+        while ((Get-Date) -lt $deadline -and -not $playing) { $m = WsReceiveUntil "music" 10; if ($m -and $m.playing -and $m.title) { $playing = $m } }
+        if ($playing) { Write-Host "music now: $($playing.title) - $($playing.artist)" }
+        Check ($null -ne $playing) "music: the picked song plays on the TV and the phone sees its title"
+        Start-Sleep -Seconds 2
+        Shot "36-lock-screen-with-music"
+        WsSend "music.next" $null
+        $next = $null
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline -and -not $next) { $m = WsReceiveUntil "music" 10; if ($m -and $m.title -and $playing -and $m.title -ne $playing.title) { $next = $m } }
+        Check ($null -ne $next) "music: next song from the phone ($($next.title))"
+        WsSend "music.playpause" $null
+        $paused = $null
+        $deadline = (Get-Date).AddSeconds(15)
+        while ((Get-Date) -lt $deadline -and -not $paused) { $m = WsReceiveUntil "music" 5; if ($m -and -not $m.playing -and $m.on) { $paused = $m } }
+        Check ($null -ne $paused) "music: pause from the phone, while the TV is locked"
+    }
+    WsSend "music.stop" $null
+    WsSend "power.screenon" $null
+    Start-Sleep -Seconds 1
+}
+catch { Write-Host "music check error: $_"; Check $false "music check ran" }
+@(Get-Content (Join-Path $data "log.txt") -ErrorAction SilentlyContinue) | Select-Object -Skip $logBefore | Where-Object { $_ -match "music|screen:" } | ForEach-Object { Write-Host "music log: $_" }
+Stop-Process -Id $mp.Id -Force -ErrorAction SilentlyContinue
 $blocker.Stop()
 if ($fail -gt 0) { throw "$fail smoke check(s) failed" }
 Write-Host "Smoke test passed"

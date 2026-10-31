@@ -49,6 +49,9 @@ public sealed class RemoteServer : IAsyncDisposable
     /// <summary>The text request waiting on the TV right now (TextRequest.Message), sent to a phone when it connects. Null: none.</summary>
     public Func<string?>? PendingText { get; set; }
 
+    /// <summary>The music player's state (Music.StateMessage), sent to a phone when it connects. Null: no music.</summary>
+    public Func<string?>? MusicNow { get; set; }
+
     /// <summary>Sends a message to every connected phone (sign-in requests, text requests).</summary>
     public void Broadcast(string message)
     {
@@ -338,6 +341,7 @@ public sealed class RemoteServer : IAsyncDisposable
         _clients[id] = (device!, ws);
         await Send(ws, StateMessage(_lineup.Current, _lineup.CurrentNumber));
         try { if (PendingText?.Invoke() is { } pending) await Send(ws, pending); } catch { }
+        try { if (MusicNow?.Invoke() is { } music) await Send(ws, music); } catch { }
 
         var buf = new byte[4096];
         try

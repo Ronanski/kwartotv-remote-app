@@ -38,6 +38,8 @@ public interface IShell
 
     /// <summary>True while the clock lock screen is up (power.screenoff = lock, power.screenon = unlock).</summary>
     bool ScreenIsOff { get; }
+    /// <summary>YouTube Music: music.open, music.playpause, music.next, music.prev, music.stop, music.search, music.play.</summary>
+    void Music(string cmd, string? arg);
     void ScreenOff();
     void ScreenOn();
 }
@@ -112,6 +114,9 @@ public sealed class WindowsHostActions : IHostActions
             }
             case "scan.start" or "scan.stop" or "catalog.choose" or "catalog.choosegroup" or "catalog.favorite":
                 ui.Invoke(() => shell.Finder(cmd, arg)); return;
+
+            case "music.open" or "music.playpause" or "music.next" or "music.prev" or "music.stop" or "music.search" or "music.play":
+                ui.Invoke(() => shell.Music(cmd, arg)); return;
 
             case "power.sleep": PowerActions.Sleep(); return;
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.
