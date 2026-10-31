@@ -32,7 +32,12 @@ public partial class App : Application
             _ = Dispatcher.InvokeAsync(async () =>
             {
                 await Task.Delay(8000);
-                try { if (MainWindow is global::KwartoTV.App.MainWindow mw) await mw.RunNavAuditAsync(report); }
+                // Not Application.MainWindow: that is the first window made (the volume overlay), not the home window.
+                try
+                {
+                    if (Windows.OfType<global::KwartoTV.App.MainWindow>().FirstOrDefault() is { } mw) await mw.RunNavAuditAsync(report);
+                    else File.WriteAllText(report, "RESULT: audit failed: no home window");
+                }
                 catch (Exception ex) { File.WriteAllText(report, "RESULT: audit failed: " + ex); }
                 Shutdown();
             });

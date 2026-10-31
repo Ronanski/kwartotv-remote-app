@@ -299,6 +299,7 @@ Remove-Item $navReport -ErrorAction SilentlyContinue
 $na = Start-Process -FilePath $Exe -ArgumentList "--nav-audit", "`"$navReport`"" -PassThru
 for ($i = 0; $i -lt 90 -and -not (Test-Path $navReport); $i++) { Start-Sleep -Seconds 1 }
 if (Test-Path $navReport) { Get-Content $navReport | ForEach-Object { Write-Host "nav: $_" } }
+else { Write-Host "nav: no report; app log:"; Get-Content (Join-Path $data "log.txt") -Tail 30 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "nav log: $_" } }
 Check ((Test-Path $navReport) -and (Select-String -Path $navReport -Pattern "RESULT: every control" -Quiet)) "the remote's arrows reach every control on every page and dialog"
 Stop-Process -Id $na.Id -Force -ErrorAction SilentlyContinue
 $blocker.Stop()

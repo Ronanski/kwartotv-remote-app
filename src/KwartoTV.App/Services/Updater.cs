@@ -105,7 +105,7 @@ public sealed class Updater
         var app = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "KwartoTV.exe");
         // The waiting screen goes on the screen KwartoTV is on (the TV), in screen pixels.
         var screen = Application.Current?.Dispatcher.Invoke(() =>
-            Application.Current.MainWindow is { } mw ? Native.ScreenOf(new System.Windows.Interop.WindowInteropHelper(mw).Handle) : null);
+            Application.Current.Windows.OfType<MainWindow>().FirstOrDefault() is { } mw ? Native.ScreenOf(new System.Windows.Interop.WindowInteropHelper(mw).Handle) : null);
         var where = screen is { } r ? $" -X {r.X} -Y {r.Y} -W {r.W} -H {r.H}" : "";
         var args = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -STA -File \"{script}\" -AppPid {Environment.ProcessId} " +
                    $"-Installer \"{installer}\" -App \"{app}\" -Log \"{Path.Combine(dir, "install.log")}\" -Version \"{version ?? ""}\"{where}";
