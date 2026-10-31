@@ -458,7 +458,9 @@ public partial class MainWindow : Window, IShell
         AppPaths.LogLine("screen: locked (clock)");
         CloseDialog(); HideKeyboard();
         _locked = true;
-        var l = new LockScreenWindow();
+        // On the screen KwartoTV is showing on (the player's or a web app's when one is open).
+        Window tvWindow = _player is { IsVisible: true } p ? p : _web is { IsVisible: true } w ? w : this;
+        var l = new LockScreenWindow(tvWindow);
         _lock = l;
         l.Show();
         l.Activate();

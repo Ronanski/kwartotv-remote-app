@@ -38,12 +38,22 @@ public sealed class LockScreenWindow : Window
     private string _shownTime = "";
     private bool _allowClose;
 
-    public LockScreenWindow()
+    /// <param name="screenOf">The window on the TV: the lock screen fills that screen only (a PC can have more than one,
+    /// such as a laptop with a TV attached), so the clock is in the middle of the TV.</param>
+    public LockScreenWindow(Window screenOf)
     {
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; Topmost = true;
         Background = Brushes.Black; Cursor = Cursors.None; Title = "KwartoTV locked";
-        Left = SystemParameters.VirtualScreenLeft; Top = SystemParameters.VirtualScreenTop;
-        Width = SystemParameters.VirtualScreenWidth; Height = SystemParameters.VirtualScreenHeight;
+        // Moved onto the TV's screen first (Windows says which monitor that window is on), then maximized there:
+        // maximizing fills the screen the window is on.
+        var tv = new System.Windows.Interop.WindowInteropHelper(screenOf).Handle;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Width = 640; Height = 480;
+        SourceInitialized += (_, _) =>
+        {
+            Services.Native.MoveToScreenOf(new System.Windows.Interop.WindowInteropHelper(this).Handle, tv);
+            WindowState = WindowState.Maximized;
+        };
         FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
 
         // The ring: a faint track that breathes, the arc of the current minute, and a dot at its tip.

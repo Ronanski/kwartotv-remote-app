@@ -50,6 +50,23 @@ internal static class Native
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("powrprof.dll")] private static extern bool SetSuspendState(bool hibernate, bool forceCritical, bool disableWakeEvent);
     [DllImport("kernel32.dll")] private static extern uint SetThreadExecutionState(uint flags);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+    [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
+
+    /// <summary>Moves [window] into the middle of the monitor that [reference] is on (the nearest one), keeping its size.</summary>
+    public static void MoveToScreenOf(IntPtr window, IntPtr reference)
+    {
+        if (window == IntPtr.Zero || reference == IntPtr.Zero) return;
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(MonitorFromWindow(reference, 2 /* nearest */), ref info)) return;
+        var r = info.Monitor;
+        const uint NoSize = 0x0001, NoZOrder = 0x0004, NoActivate = 0x0010;
+        SetWindowPos(window, IntPtr.Zero, r.Left + (r.Right - r.Left) / 4, r.Top + (r.Bottom - r.Top) / 4, 0, 0, NoSize | NoZOrder | NoActivate);
+    }
 
     public static IntPtr Foreground => GetForegroundWindow();
     public static uint ForegroundProcessId() { GetWindowThreadProcessId(GetForegroundWindow(), out var pid); return pid; }
