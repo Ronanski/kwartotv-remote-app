@@ -39,8 +39,9 @@ public sealed class Updater
     /// </summary>
     public async Task<string?> InstallAsync(UpdateInfo info, IProgress<double>? progress = null)
     {
-        // Installed with the update task: it downloads, checks and installs by itself, with no permission prompt.
-        if (await StartUpdateTaskAsync()) return null;
+        // Older Program Files installs with the update task: it downloads, checks and installs by itself, with no prompt.
+        // (Current installs are per user: the installer below needs no permission prompt at all.)
+        if (!IsPerUserInstall && await StartUpdateTaskAsync()) return null;
         try
         {
             var path = Path.Combine(Path.GetTempPath(), "KwartoTV-update", $"KwartoTV-{info.Build}.exe");
@@ -52,6 +53,14 @@ public sealed class Updater
     }
 
     public const string TaskName = "KwartoTV Update";
+
+    /// <summary>
+    /// Installed for this user (in %LocalAppData%), so an update replaces the files with no Windows permission prompt.
+    /// Older versions were installed in Program Files.
+    /// </summary>
+    public static bool IsPerUserInstall =>
+        AppContext.BaseDirectory.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), StringComparison.OrdinalIgnoreCase)
+        || !AppContext.BaseDirectory.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Starts the "KwartoTV Update" scheduled task that the installer made (see installer/update-task.ps1), when it exists for

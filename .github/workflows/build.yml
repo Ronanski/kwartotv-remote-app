@@ -99,6 +99,9 @@ jobs:
           netsh advfirewall firewall show rule name="KwartoTV remote" | Select-String "Rule Name","LocalPort","Enabled","Profiles"
           if (-not ((netsh advfirewall firewall show rule name="KwartoTV remote") -match "8765")) { throw "Firewall rule for port 8765 was not created" }
           if (-not ((netsh advfirewall firewall show rule name="KwartoTV app" verbose) -match "KwartoTV.exe")) { throw "Firewall rule for the app was not created" }
+          $done = (Get-ItemProperty -Path 'HKCU:\Software\KwartoTV' -Name SetupDoneFor -ErrorAction SilentlyContinue).SetupDoneFor
+          if ($done -ne 'C:\KwartoTV-test') { throw "The one-time firewall setup was not recorded ($done)" }
+          Write-Host "Per-user install; one-time firewall setup recorded for $done"
 
       - name: Smoke test the installed app (server, discovery, screenshots)
         shell: pwsh

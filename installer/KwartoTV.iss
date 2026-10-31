@@ -6,20 +6,24 @@
 #endif
 
 [Setup]
-AppId={{B0D9A2C4-5E61-4B0B-9D3C-6C1F1E5D7A10}
+; Installed for the current user (in %LocalAppData%\Programs\KwartoTV), so updates replace the files with no Windows
+; permission prompt. The firewall rules for the phone remote are the only admin step, done once (setup-admin.ps1).
+; A new AppId: the old Program Files install ({B0D9A2C4-...}) is moved out by setup-admin.ps1.
+AppId={{6E0C5E1B-2F4A-4C8E-9A57-3B1D0F7C2E44}
 AppName=KwartoTV
 AppVersion={#AppVersion}
 AppPublisher=KwartoTV
 DefaultDirName={autopf}\KwartoTV
 DefaultGroupName=KwartoTV
 DisableProgramGroupPage=yes
+DisableDirPage=auto
 OutputDir=..\dist
 OutputBaseFilename=KwartoTV
 SetupIconFile=..\src\KwartoTV.App\Assets\kwartotv.ico
 UninstallDisplayIcon={app}\KwartoTV.exe
 Compression=lzma2/max
 SolidCompression=yes
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
@@ -31,42 +35,26 @@ Name: "autostart"; Description: "Start KwartoTV when Windows starts (recommended
 
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
-Source: "update-task.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "setup-admin.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\KwartoTV"; Filename: "{app}\KwartoTV.exe"
 Name: "{autodesktop}\KwartoTV"; Filename: "{app}\KwartoTV.exe"; Tasks: desktopicon
 
 [Registry]
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "KwartoTV"; ValueData: """{app}\KwartoTV.exe"""; Tasks: autostart; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "KwartoTV"; ValueData: """{app}\KwartoTV.exe"""; Tasks: autostart; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\KwartoTV"; Flags: uninsdeletekeyifempty
 
 [Run]
-; Open the phone remote ports on any network profile
-; (Windows often marks home Wi-Fi as Public). Pairing still needs the code shown on the TV screen.
-; (Older versions used an http.sys URL reservation; remove it.)
-Filename: "{sys}\netsh.exe"; Parameters: "http delete urlacl url=http://+:8765/"; Flags: runhidden; StatusMsg: "Preparing the remote…"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV app"""; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV app"" dir=in action=allow program=""{app}\KwartoTV.exe"" profile=any"; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV remote"""; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV remote"" dir=in action=allow protocol=TCP localport=8765,8766,8767,8768,8769,18765,28765,38765,48765,58765 profile=any"; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""KwartoTV discovery"" dir=in action=allow protocol=UDP localport=5353 profile=any"; Flags: runhidden
-; In-app updates without a Windows permission prompt: a scheduled task for this user, run with the highest privileges.
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\update-task.ps1"" -Register -User ""{username}"""; Flags: runhidden; StatusMsg: "Setting up automatic updates…"
 Filename: "{app}\KwartoTV.exe"; Description: "Start KwartoTV"; Flags: nowait postinstall skipifsilent
-; Older in-app updates start the installer with /RELAUNCH=1, and it opens the new version (as the normal user).
-Filename: "{app}\KwartoTV.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
-
-[UninstallRun]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\update-task.ps1"" -Unregister"; Flags: runhidden; RunOnceId: "DelUpdateTask"
-Filename: "{sys}\netsh.exe"; Parameters: "http delete urlacl url=http://+:8765/"; Flags: runhidden; RunOnceId: "DelUrlAcl"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV app"""; Flags: runhidden; RunOnceId: "DelFw0"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV remote"""; Flags: runhidden; RunOnceId: "DelFw1"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KwartoTV discovery"""; Flags: runhidden; RunOnceId: "DelFw2"
 
 [Code]
 const
   AppMutexName = 'KwartoTV.SingleInstance';
+  OldUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B0D9A2C4-5E61-4B0B-9D3C-6C1F1E5D7A10}_is1';
+
+var
+  Migrated: Boolean;
 
 // An in-app update starts this installer just before KwartoTV closes. Wait for it to close
 // instead of quitting (a silent install used to stop right here, so nothing was updated).
@@ -96,6 +84,55 @@ begin
   end;
 end;
 
+// The old KwartoTV in Program Files (needed a permission prompt for every update). Returns its uninstaller, or ''.
+function OldUninstaller: String;
+var
+  S: String;
+begin
+  Result := '';
+  if RegQueryStringValue(HKLM64, OldUninstallKey, 'UninstallString', S) or RegQueryStringValue(HKLM32, OldUninstallKey, 'UninstallString', S) then
+    Result := RemoveQuotes(S);
+end;
+
+function PowerShell: String;
+begin
+  Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+end;
+
+// The one admin step (firewall rules, moving the old install out). Asked for on a normal install, or when an old
+// Program Files install has to be moved; a silent update that already has its rules never asks.
+procedure AdminSetup;
+var
+  Old, Done: String;
+  Code: Integer;
+begin
+  Old := OldUninstaller;
+  if not RegQueryStringValue(HKCU, 'Software\KwartoTV', 'SetupDoneFor', Done) then Done := '';
+  if (Old = '') and (CompareText(Done, ExpandConstant('{app}')) = 0) then Exit;
+  if (Old = '') and WizardSilent and (Done <> '') then Exit;
+  WizardForm.StatusLabel.Caption := 'Letting your phone reach the TV (Windows asks permission once)…';
+  if ShellExec('runas', PowerShell,
+      '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + ExpandConstant('{app}\setup-admin.ps1') + '" -App "' + ExpandConstant('{app}') + '"' +
+      ' -OldUninstaller "' + Old + '"', '', SW_HIDE, ewWaitUntilTerminated, Code) then
+  begin
+    RegWriteStringValue(HKCU, 'Software\KwartoTV', 'SetupDoneFor', ExpandConstant('{app}'));
+    Migrated := Old <> '';
+  end
+  else
+    Log('Admin setup was not allowed: the phone remote may need "Fix network access" in KwartoTV Settings.');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Code: Integer;
+begin
+  if CurStep = ssPostInstall then AdminSetup;
+  // An in-app update (or the move out of Program Files) opens KwartoTV again. Through Explorer, so it runs as the
+  // normal user even when this installer was started with admin rights.
+  if (CurStep = ssDone) and WizardSilent and (Migrated or (ExpandConstant('{param:RELAUNCH|0}') = '1')) then
+    Exec(ExpandConstant('{win}\explorer.exe'), '"' + ExpandConstant('{app}\KwartoTV.exe') + '"', '', SW_SHOW, ewNoWait, Code);
+end;
+
 function InitializeUninstall: Boolean;
 var
   Code: Integer;
@@ -105,7 +142,15 @@ begin
     Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KwartoTV.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 
-function RelaunchRequested: Boolean;
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Code: Integer;
 begin
-  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+  // Remove the firewall rules (the second and last admin step).
+  if CurUninstallStep = usUninstall then
+  begin
+    ShellExec('runas', PowerShell, '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + ExpandConstant('{app}\setup-admin.ps1') + '" -Remove',
+      '', SW_HIDE, ewWaitUntilTerminated, Code);
+    RegDeleteValue(HKCU, 'Software\KwartoTV', 'SetupDoneFor');
+  end;
 end;

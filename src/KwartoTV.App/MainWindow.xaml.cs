@@ -110,8 +110,18 @@ public partial class MainWindow : Window, IShell
         {
             _updating = true;
             AppPaths.LogLine($"update: installing {info.Version} while the TV is not in use");
+            // Per-user install: download, close, install silently and open again, with no Windows permission prompt.
+            if (Updater.IsPerUserInstall)
+            {
+                if (await _tv.Updater.InstallAsync(info) is not { } err) { await Task.Delay(1500); Application.Current.Shutdown(); return; }
+                AppPaths.LogLine("update: " + err);
+                _updating = false;
+                _lastUpdateCheck = DateTime.UtcNow - UpdateCheckEvery + TimeSpan.FromHours(1);   // try again in an hour
+                return;
+            }
             if (await Updater.StartUpdateTaskAsync()) { await Task.Delay(1500); Application.Current.Shutdown(); return; }
-            // Installed before the update task existed: install from the banner or Settings (Windows asks permission once).
+            // An old Program Files install without the update task: install from the banner or Settings (Windows asks once,
+            // and that update moves KwartoTV to a per-user install that never asks again).
             _noUpdateTask = true; _updating = false;
         }
         if (!_updateToastShown)

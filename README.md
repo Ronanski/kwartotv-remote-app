@@ -20,7 +20,7 @@ Every push to `main` that passes the tests becomes a release `vMAJOR.MINOR.PATCH
 
 ## Using it
 
-1. Run `KwartoTV.exe` on the TV PC. It sets up the Wi-Fi remote (URL reservation, firewall) for you.
+1. Run `KwartoTV.exe` on the TV PC. It installs for your Windows user (no admin needed) and asks Windows permission **once**, only to open the phone remote's ports in the firewall. Updates then install by themselves with no permission prompt. (An older install in Program Files is moved over on its next update.)
 2. In **Settings → Playlists → Add playlist**, paste an https link to a playlist or choose a file.
 3. **Settings → Paired devices → Pair new device** shows a 6-digit code and a QR code.
 4. On the phone: open **KwartoTV Remote**, scan the QR (or type the code). The TV is also found automatically on the Wi-Fi (mDNS).

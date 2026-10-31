@@ -187,7 +187,7 @@ public static class Dialogs
         var status = UiKit.Dimmed("", 18);
         var panel = new StackPanel { Width = 700 };
         panel.Children.Add(new TextBlock { Text = "Update available", FontSize = 32, FontWeight = FontWeights.Bold });
-        panel.Children.Add(UiKit.Dimmed($"Version {info.Version} is ready (you have {Updater.CurrentVersion}). KwartoTV will close, install it and open again by itself. (Older installs: Windows asks permission once.)", 18));
+        panel.Children.Add(UiKit.Dimmed($"Version {info.Version} is ready (you have {Updater.CurrentVersion}). KwartoTV will close, install it and open again by itself." + (Updater.IsPerUserInstall ? "" : " Windows asks permission this one last time: this update moves KwartoTV to a place where updates never ask again."), 18));
         if (!string.IsNullOrWhiteSpace(info.Notes)) panel.Children.Add(UiKit.Dimmed(info.Notes!, 16));
         panel.Children.Add(status);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 20, 0, 0) };
