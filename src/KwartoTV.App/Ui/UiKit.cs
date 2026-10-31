@@ -24,7 +24,7 @@ public static class UiKit
 
     public static TextBlock Heading(string text) => new()
     {
-        Text = text, FontSize = 26, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 22, 0, 8),
+        Text = text, FontSize = 24, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 34, 0, 10),
     };
 
     public static TextBlock Dimmed(string text, double size = 18) =>
@@ -119,7 +119,7 @@ public static class UiKit
 
     public static Button ActionButton(string text, Action onClick, bool danger = false)
     {
-        var b = new Button { Content = new TextBlock { Text = text, FontSize = 20 }, Style = (Style)Application.Current.FindResource("Pill"), Margin = new Thickness(0, 0, 10, 0), Tag = danger ? "danger" : "action" };
+        var b = new Button { Content = new TextBlock { Text = text, FontSize = 18 }, Style = (Style)Application.Current.FindResource("Pill"), Margin = new Thickness(0, 0, 12, 12), Tag = danger ? "danger" : "action" };
         b.Click += (_, _) => onClick();
         return b;
     }

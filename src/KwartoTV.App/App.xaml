@@ -13,6 +13,12 @@
     <SolidColorBrush x:Key="Accent" Color="#FF7A45"/>
     <SolidColorBrush x:Key="AccentText" Color="#1A0D05"/>
     <SolidColorBrush x:Key="Danger" Color="#FF6B7A"/>
+    <SolidColorBrush x:Key="Hairline" Color="#1FFFFFFF"/>
+    <SolidColorBrush x:Key="Surface3" Color="#232938"/>
+    <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,1">
+      <GradientStop Color="#FF7A45" Offset="0"/>
+      <GradientStop Color="#FF5470" Offset="1"/>
+    </LinearGradientBrush>
 
     <Style TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -30,13 +36,16 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="Frame" CornerRadius="14" BorderThickness="3" BorderBrush="Transparent" Background="{StaticResource Surface}" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
+            <Border x:Name="Frame" CornerRadius="16" BorderThickness="3" BorderBrush="{StaticResource Hairline}" Background="{StaticResource Surface}" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
               <Border.RenderTransform><ScaleTransform x:Name="PressScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
               <ContentPresenter/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                <Setter TargetName="Frame" Property="BorderBrush" Value="White"/>
+                <Setter TargetName="Frame" Property="Effect">
+                  <Setter.Value><DropShadowEffect Color="{StaticResource AccentColor}" BlurRadius="30" ShadowDepth="0" Opacity="0.7"/></Setter.Value>
+                </Setter>
                 <Setter Property="Panel.ZIndex" Value="5"/>
                 <Trigger.EnterActions>
                   <BeginStoryboard>
@@ -83,35 +92,64 @@
       </Setter>
     </Style>
 
-    <!-- Top navigation tab and action buttons. -->
+    <!-- Top navigation tabs (no Tag; "current" = the page shown) and action buttons (Tag "action" / "danger").
+         Focus from the remote: the accent gradient, white text, a soft glow and a slight lift, easy to see from the couch. -->
     <Style x:Key="Pill" TargetType="Button">
       <Setter Property="Focusable" Value="True"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Foreground" Value="{StaticResource Dim}"/>
-      <Setter Property="FontSize" Value="20"/>
+      <Setter Property="FontSize" Value="18"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="FontFamily" Value="Segoe UI"/>
-      <Setter Property="Padding" Value="22,10"/>
-      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="Padding" Value="22,11"/>
+      <Setter Property="Margin" Value="0,0,10,0"/>
       <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+      <Setter Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1" ScaleY="1"/></Setter.Value></Setter>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="Frame" CornerRadius="24" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="2" BorderBrush="Transparent">
+            <Border x:Name="Frame" CornerRadius="14" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="1.5" BorderBrush="Transparent">
               <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
+              <Trigger Property="Tag" Value="current">
+                <Setter TargetName="Frame" Property="Background" Value="#1FFF7A45"/>
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+              </Trigger>
               <Trigger Property="Tag" Value="action">
+                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Surface2}"/>
+                <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource Hairline}"/>
                 <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
               </Trigger>
               <Trigger Property="Tag" Value="danger">
+                <Setter TargetName="Frame" Property="Background" Value="#261418"/>
+                <Setter TargetName="Frame" Property="BorderBrush" Value="#44FF6B7A"/>
                 <Setter Property="Foreground" Value="{StaticResource Danger}"/>
               </Trigger>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Accent}"/>
-                <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
-              </Trigger>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                <Setter TargetName="Frame" Property="BorderBrush" Value="#AAFF7A45"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Frame" Property="Background" Value="{StaticResource AccentGradient}"/>
+                <Setter TargetName="Frame" Property="BorderBrush" Value="#66FFFFFF"/>
+                <Setter TargetName="Frame" Property="Effect">
+                  <Setter.Value><DropShadowEffect Color="{StaticResource AccentColor}" BlurRadius="22" ShadowDepth="0" Opacity="0.55"/></Setter.Value>
+                </Setter>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="Panel.ZIndex" Value="5"/>
+                <Trigger.EnterActions>
+                  <BeginStoryboard><Storyboard>
+                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1.05" Duration="0:0:0.14"><DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1.05" Duration="0:0:0.14"><DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                  </Storyboard></BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard><Storyboard>
+                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="0:0:0.1"/>
+                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="0:0:0.1"/>
+                  </Storyboard></BeginStoryboard>
+                </Trigger.ExitActions>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>

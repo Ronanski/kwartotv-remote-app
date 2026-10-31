@@ -139,14 +139,14 @@ public sealed class SettingsView : PageBase
 
     private static FrameworkElement Buttons(params UIElement[] buttons)
     {
-        var p = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0) };
+        var p = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0) };
         foreach (var b in buttons) p.Children.Add(b);
         return p;
     }
 
     private static FrameworkElement ItemRow(string title, string? sub, params (string Label, Action Do, bool Danger)[] actions)
     {
-        var g = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        var g = new Grid();
         g.ColumnDefinitions.Add(new ColumnDefinition());
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -157,7 +157,7 @@ public sealed class SettingsView : PageBase
         foreach (var (label, act, danger) in actions) btns.Children.Add(UiKit.ActionButton(label, act, danger));
         Grid.SetColumn(btns, 1);
         g.Children.Add(btns);
-        return new Border { Background = UiKit.B("Surface"), CornerRadius = new CornerRadius(14), Padding = new Thickness(22, 10, 12, 10), Child = g };
+        return new Border { Background = UiKit.B("Surface"), BorderBrush = UiKit.B("Hairline"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(16), Padding = new Thickness(24, 14, 14, 2), Margin = new Thickness(0, 10, 0, 0), Child = g };
     }
 
     private void AddWebsite() => Dialogs.Form(Shell, "Add website tile",

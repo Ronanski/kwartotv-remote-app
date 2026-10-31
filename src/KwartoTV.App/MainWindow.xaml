@@ -10,10 +10,10 @@
       <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
 
-    <Grid Margin="56,28,56,6">
+    <Grid Margin="56,24,56,10">
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
         <Image Source="/Assets/kwartotv.png" Width="40" Height="40" Margin="0,0,12,0"/>
-        <TextBlock Text="KwartoTV" FontSize="28" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,40,0"/>
+        <TextBlock Text="KwartoTV" FontSize="26" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,36,0"/>
         <StackPanel x:Name="Nav" Orientation="Horizontal" VerticalAlignment="Center"/>
       </StackPanel>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -21,22 +21,25 @@
           <TextBlock Text="⏻" FontSize="24"/>
         </Button>
         <TextBlock x:Name="RemoteDot" Text="●" FontSize="14" Foreground="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-        <TextBlock x:Name="Clock" FontSize="26" Foreground="{StaticResource Dim}"/>
+        <TextBlock x:Name="Clock" FontSize="24" FontWeight="Light" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
       </StackPanel>
     </Grid>
 
     <ContentControl x:Name="Page" Grid.Row="1" IsTabStop="False"/>
 
     <Grid x:Name="Overlay" Grid.RowSpan="2" Visibility="Collapsed" Background="#D0060810">
-      <Border x:Name="DialogCard" Background="{StaticResource Surface}" CornerRadius="22" BorderBrush="{StaticResource Line}" BorderThickness="2"
-              HorizontalAlignment="Center" VerticalAlignment="Center" Padding="40,32" MinWidth="720" MaxWidth="1100"/>
+      <Border x:Name="DialogCard" Background="{StaticResource Surface}" CornerRadius="24" BorderBrush="{StaticResource Hairline}" BorderThickness="1.5"
+              HorizontalAlignment="Center" VerticalAlignment="Center" Padding="44,36" MinWidth="720" MaxWidth="1100">
+        <Border.Effect><DropShadowEffect Color="Black" BlurRadius="60" ShadowDepth="0" Opacity="0.6"/></Border.Effect>
+      </Border>
     </Grid>
 
     <Border x:Name="OskHost" Grid.RowSpan="2" Visibility="Collapsed" VerticalAlignment="Bottom"/>
 
     <Border x:Name="Toast" Grid.Row="1" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,44"
-            Background="{StaticResource Surface2}" BorderBrush="{StaticResource Accent}" BorderThickness="2" CornerRadius="16" Padding="26,14">
-      <TextBlock x:Name="ToastText" FontSize="22" TextAlignment="Center"/>
+            Background="{StaticResource Surface3}" BorderBrush="#55FF7A45" BorderThickness="1.5" CornerRadius="16" Padding="28,14">
+      <Border.Effect><DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="0" Opacity="0.5"/></Border.Effect>
+      <TextBlock x:Name="ToastText" FontSize="20" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="1100"/>
     </Border>
   </Grid>
 </Window>

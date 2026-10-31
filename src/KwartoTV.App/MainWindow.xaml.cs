@@ -167,8 +167,7 @@ public partial class MainWindow : Window, IShell
         for (int i = 0; i < _navButtons.Count; i++)
         {
             var on = i == 0 ? name == "Home" : (i == 2 && name == "Library") || (i == 3 && name == "Settings");
-            ((TextBlock)_navButtons[i].Content).FontWeight = on ? FontWeights.Bold : FontWeights.Normal;
-            ((TextBlock)_navButtons[i].Content).TextDecorations = on ? TextDecorations.Underline : null;
+            _navButtons[i].Tag = on ? "current" : null;   // the page shown: a soft accent pill (see the Pill style)
         }
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _current?.FocusFirst());
     }
@@ -195,8 +194,7 @@ public partial class MainWindow : Window, IShell
         for (int i = 0; i < _navButtons.Count; i++)
         {
             var on = i == 3;
-            ((TextBlock)_navButtons[i].Content).FontWeight = on ? FontWeights.Bold : FontWeights.Normal;
-            ((TextBlock)_navButtons[i].Content).TextDecorations = on ? TextDecorations.Underline : null;
+            _navButtons[i].Tag = on ? "current" : null;   // the page shown: a soft accent pill (see the Pill style)
         }
         Native.BringToFront(Handle);
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _current?.FocusFirst());
