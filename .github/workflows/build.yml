@@ -164,6 +164,6 @@ jobs:
           ls -la dist
           gh release delete latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
           gh release create latest dist/KwartoTV.exe dist/KwartoTV-Remote.apk dist/KwartoTV-update.json --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --prerelease \
+            --target "$GITHUB_SHA" --latest \
             --title "KwartoTV (latest build)" \
             --notes "Built from ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). KwartoTV.exe is the Windows installer. KwartoTV-Remote.apk is the Android remote. Both update themselves from inside the apps."
