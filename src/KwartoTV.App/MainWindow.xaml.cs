@@ -442,6 +442,54 @@ public partial class MainWindow : Window, IShell
     public bool PlayerSpeed(double speed) => _player is { IsVisible: true } p && p.SetSpeed(speed);
     public bool PlayerStop() { if (_player is not { IsVisible: true } p) return false; GoHome(); return true; }
 
+    // ---------- navigation check (--nav-audit): can the arrow keys reach every button on every screen?
+
+    /// <summary>Opens each page and the main dialogs and writes, for each, the buttons the arrows cannot reach.</summary>
+    public async Task RunNavAuditAsync(string reportPath)
+    {
+        var lines = new List<string>();
+        int problems = 0;
+        void Audit(string name, FrameworkElement scope)
+        {
+            scope.UpdateLayout();
+            var missing = SpatialNav.Unreachable(scope, out var total);
+            problems += missing.Count;
+            lines.Add($"{name}: {total} controls, {missing.Count} unreachable" + (missing.Count > 0 ? ": " + string.Join(" | ", missing.Select(SpatialNav.NameOf)) : ""));
+        }
+        async Task Settle() { await Task.Delay(1200); await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle); }
+
+        CloseDialog();
+        foreach (var page in new[] { "Home", "Settings", "Library" })
+        {
+            Navigate(page); await Settle();
+            Audit("page " + page, (FrameworkElement)Content);
+        }
+        Navigate("Home"); await Settle();
+        foreach (var (name, open) in new (string, Action)[] { ("dialog Power", () => Dialogs.PowerMenu(this)), ("dialog Add channels", () => Dialogs.AddChannels(this)), ("dialog Pair", () => Dialogs.Pair(this)) })
+        {
+            open(); await Settle();
+            Audit(name, DialogCard);
+            CloseDialog(); await Settle();
+        }
+        lines.Add(problems == 0 ? "RESULT: every control can be reached with the arrows" : $"RESULT: {problems} control(s) cannot be reached with the arrows");
+        File.WriteAllLines(reportPath, lines);
+        foreach (var l in lines) AppPaths.LogLine("nav audit: " + l);
+    }
+
+    // ---------- the remote's keys go to KwartoTV
+
+    public bool EnsureInFront()
+    {
+        if (_tv.Apps.IsRunning) return false;                                         // an outside app KwartoTV opened has them
+        if (Native.ForegroundProcessId() == (uint)Environment.ProcessId) return false; // already ours (any KwartoTV window)
+        Window target = _lock is not null ? _lock : _player is { IsVisible: true } p ? p : _web is { IsVisible: true } w ? w : this;
+        AppPaths.LogLine("remote: KwartoTV was not in front; bringing it back for the remote");
+        Native.BringToFront(new WindowInteropHelper(target).Handle);
+        target.Activate();
+        if (target == this) Dispatcher.BeginInvoke(DispatcherPriority.Input, () => { if (Keyboard.FocusedElement is null) _current?.FocusFirst(); });
+        return true;
+    }
+
     // ---------- lock screen (the remote's "Lock"): a calm clock, and the TV is locked until the phone unlocks it
 
     private LockScreenWindow? _lock;

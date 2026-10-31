@@ -284,6 +284,16 @@ $log = Join-Path $data "log.txt"
 if (Test-Path $log) { Write-Host "---- app log ----"; Get-Content $log; Check (-not (Select-String -Path $log -Pattern "UI error|Fatal|Task error" -Quiet)) "no errors in the app log" } else { Check $true "no errors in the app log (no log file)" }
 
 Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+# Navigation check: on every page and the main dialogs, the arrow keys (the remote) must reach every button.
+$navReport = Join-Path $OutDir "nav-audit.txt"
+Remove-Item $navReport -ErrorAction SilentlyContinue
+$na = Start-Process -FilePath $Exe -ArgumentList "--nav-audit", "`"$navReport`"" -PassThru
+for ($i = 0; $i -lt 90 -and -not (Test-Path $navReport); $i++) { Start-Sleep -Seconds 1 }
+if (Test-Path $navReport) { Get-Content $navReport | ForEach-Object { Write-Host "nav: $_" } }
+Check ((Test-Path $navReport) -and (Select-String -Path $navReport -Pattern "RESULT: every control" -Quiet)) "the remote's arrows reach every control on every page and dialog"
+Stop-Process -Id $na.Id -Force -ErrorAction SilentlyContinue
 $blocker.Stop()
 if ($fail -gt 0) { throw "$fail smoke check(s) failed" }
 Write-Host "Smoke test passed"

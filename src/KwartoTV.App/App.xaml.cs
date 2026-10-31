@@ -24,6 +24,20 @@ public partial class App : Application
 
         new MainWindow().Show();
 
+        // Test hook used by CI: checks that the arrow keys reach every control on every screen, then quits.
+        var audit = Array.IndexOf(e.Args, "--nav-audit");
+        if (audit >= 0 && audit + 1 < e.Args.Length)
+        {
+            var report = Path.GetFullPath(e.Args[audit + 1]);
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(8000);
+                try { if (MainWindow is global::KwartoTV.App.MainWindow mw) await mw.RunNavAuditAsync(report); }
+                catch (Exception ex) { File.WriteAllText(report, "RESULT: audit failed: " + ex); }
+                Shutdown();
+            });
+        }
+
         // Test hook used by CI: runs the same update path the Update dialog uses, with a local installer.
         var i = Array.IndexOf(e.Args, "--apply-update");
         if (i >= 0 && i + 1 < e.Args.Length && File.Exists(e.Args[i + 1]))

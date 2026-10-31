@@ -27,6 +27,12 @@ public interface IShell
     bool PlayerStop();
     /// <summary>The phone's channel finder: scan.start/stop, catalog.choose/choosegroup/favorite.</summary>
     void Finder(string cmd, string? arg);
+    /// <summary>
+    /// Brings KwartoTV (its window on screen) to the front when another program has the keyboard, so the remote's keys
+    /// reach KwartoTV. Returns true when it had to switch. Leaves an outside app KwartoTV opened (Netflix app) alone.
+    /// </summary>
+    bool EnsureInFront();
+
     /// <summary>True while the clock lock screen is up (power.screenoff = lock, power.screenon = unlock).</summary>
     bool ScreenIsOff { get; }
     void ScreenOff();
@@ -43,6 +49,13 @@ public sealed class WindowsHostActions : IHostActions
     {
         var shell = _shell ?? throw new InvalidOperationException("shell not ready");
         var ui = Application.Current.Dispatcher;
+
+        // The remote's keys are sent as key presses, and Windows gives key presses to the window in front. On a PC that
+        // is also used for other things (a laptop with the TV as a second screen), that may be another program: put
+        // KwartoTV in front first, so arrows, OK, Back, typing and play/pause always reach it.
+        if ((cmd.StartsWith("nav.", StringComparison.Ordinal) || cmd.StartsWith("key.", StringComparison.Ordinal) || cmd is "media.playpause" or "media.next" or "media.prev" or "media.stop" or "media.seek")
+            && ui.Invoke(shell.EnsureInFront))
+            Thread.Sleep(60);   // let the switch finish before the key goes out
 
         switch (cmd)
         {

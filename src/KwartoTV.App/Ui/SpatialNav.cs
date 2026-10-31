@@ -15,18 +15,18 @@ public static class SpatialNav
     /// <summary>Moves the focus inside [scope]. Returns false when nothing lies in that direction.</summary>
     public static bool Move(FrameworkElement scope, Key key)
     {
+        var target = Target(scope, Keyboard.FocusedElement as FrameworkElement, key);
+        return target is not null && target.Focus();
+    }
+
+    /// <summary>The control an arrow key moves to from [current] (null or outside: the top-left control), or null.</summary>
+    public static FrameworkElement? Target(FrameworkElement scope, FrameworkElement? current, Key key)
+    {
         var all = Focusables(scope).ToList();
-        if (all.Count == 0) return false;
-        var current = Keyboard.FocusedElement as FrameworkElement;
-        if (current is null || !all.Contains(current))
-        {
-            // Nothing (or something outside this area) has the focus: start at the top-left control.
-            var first = all.Select(e => (e, r: RectOf(e, scope))).Where(x => x.r.HasValue)
-                           .OrderBy(x => Math.Round(x.r!.Value.Top / 20)).ThenBy(x => x.r!.Value.Left).Select(x => x.e).FirstOrDefault();
-            return first is not null && first.Focus();
-        }
+        if (all.Count == 0) return null;
+        if (current is null || !all.Contains(current)) return First(scope, all);
         var from = RectOf(current, scope);
-        if (from is null) return false;
+        if (from is null) return null;
         var c = from.Value;
 
         var scored = new List<(FrameworkElement El, double Primary, double Secondary)>();
@@ -47,11 +47,52 @@ public static class SpatialNav
             }
             if (inDirection) scored.Add((el, primary, secondary));
         }
-        if (scored.Count == 0) return false;
+        if (scored.Count == 0) return null;
         // The nearest row/column first (like a TV), then the control most in line with the current one.
         double nearest = scored.Min(s => s.Primary);
-        var best = scored.Where(s => s.Primary <= nearest + 40).OrderBy(s => s.Secondary).ThenBy(s => s.Primary).First().El;
-        return best.Focus();
+        return scored.Where(s => s.Primary <= nearest + 40).OrderBy(s => s.Secondary).ThenBy(s => s.Primary).First().El;
+    }
+
+    private static FrameworkElement? First(FrameworkElement scope, List<FrameworkElement> all) =>
+        all.Select(e => (e, r: RectOf(e, scope))).Where(x => x.r.HasValue)
+           .OrderBy(x => Math.Round(x.r!.Value.Top / 20)).ThenBy(x => x.r!.Value.Left).Select(x => x.e).FirstOrDefault();
+
+    /// <summary>
+    /// The controls in [scope] that the arrow keys can never reach from the first control (the remote could not use
+    /// them). Used by the navigation check (--nav-audit).
+    /// </summary>
+    public static IReadOnlyList<FrameworkElement> Unreachable(FrameworkElement scope, out int total)
+    {
+        var all = Focusables(scope).ToList();
+        total = all.Count;
+        if (all.Count == 0) return Array.Empty<FrameworkElement>();
+        var seen = new HashSet<FrameworkElement>();
+        var queue = new Queue<FrameworkElement>();
+        if (First(scope, all) is { } start) { seen.Add(start); queue.Enqueue(start); }
+        while (queue.Count > 0)
+        {
+            var at = queue.Dequeue();
+            foreach (var key in new[] { Key.Up, Key.Down, Key.Left, Key.Right })
+                if (Target(scope, at, key) is { } next && seen.Add(next)) queue.Enqueue(next);
+        }
+        return all.Where(e => !seen.Contains(e)).ToList();
+    }
+
+    /// <summary>A readable name for a control (its label), for the navigation check's report.</summary>
+    public static string NameOf(FrameworkElement e)
+    {
+        var n = System.Windows.Automation.AutomationProperties.GetName(e);
+        if (!string.IsNullOrWhiteSpace(n)) return n;
+        if (e is ContentControl { Content: string s }) return s;
+        var texts = new List<string>();
+        var stack = new Stack<DependencyObject>(); stack.Push(e);
+        while (stack.Count > 0 && texts.Count < 3)
+        {
+            var o = stack.Pop();
+            if (o is TextBlock { Text: { Length: > 0 } t }) texts.Add(t);
+            for (int i = VisualTreeHelper.GetChildrenCount(o) - 1; i >= 0; i--) stack.Push(VisualTreeHelper.GetChild(o, i));
+        }
+        return texts.Count > 0 ? string.Join(" ", texts) : e.GetType().Name;
     }
 
     private static double CenterX(Rect r) => r.Left + r.Width / 2;
