@@ -77,6 +77,13 @@ public partial class MainWindow : Window, IShell
             _updateTimer.Tick += async (_, _) => await AutoUpdateTickAsync();
             _updateTimer.Start();
             _ = AutoUpdateTickAsync();
+            // A phone connecting is a good moment to look for an update (it may have just updated itself).
+            if (_tv.Server is { } srv) srv.PhoneConnected += () => Dispatcher.BeginInvoke(async () =>
+            {
+                if (DateTime.UtcNow - _lastUpdateCheck < TimeSpan.FromSeconds(30)) return;
+                _lastUpdateCheck = DateTime.MinValue;
+                await AutoUpdateTickAsync();
+            });
             _tv.StartGuide();
             await _tv.RefreshChannelsAsync();
         };
@@ -89,13 +96,13 @@ public partial class MainWindow : Window, IShell
     public TvServices Tv => _tv;
 
     // ---------- automatic updates
-    // Checked every 30 minutes (and at start). A new version installs by itself once nobody has used the TV for
-    // 5 minutes and nothing is playing, through the update task the installer made (no Windows permission prompt).
+    // Checked at start, every 5 minutes, and when a phone connects. A new version installs by itself once nobody has pressed anything for
+    // a minute and nothing is playing, through the update task the installer made (no Windows permission prompt).
 
-    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(5) };
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(1) };
     private DateTime _lastUpdateCheck = DateTime.MinValue;
     private bool _updateToastShown, _updating, _noUpdateTask;
-    private static readonly TimeSpan UpdateCheckEvery = TimeSpan.FromMinutes(30), IdleBeforeUpdate = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan UpdateCheckEvery = TimeSpan.FromMinutes(5), IdleBeforeUpdate = TimeSpan.FromSeconds(60);
 
     private async Task AutoUpdateTickAsync()
     {
@@ -119,7 +126,7 @@ public partial class MainWindow : Window, IShell
                 if (await _tv.Updater.InstallAsync(info) is not { } err) { await ShowUpdatingNoticeAsync(info.Version); Application.Current.Shutdown(); return; }
                 AppPaths.LogLine("update: " + err);
                 _updating = false;
-                _lastUpdateCheck = DateTime.UtcNow - UpdateCheckEvery + TimeSpan.FromHours(1);   // try again in an hour
+                _lastUpdateCheck = DateTime.UtcNow;   // try again at the next check
                 return;
             }
             if (await Updater.StartUpdateTaskAsync()) { await ShowUpdatingNoticeAsync(info.Version); Application.Current.Shutdown(); return; }

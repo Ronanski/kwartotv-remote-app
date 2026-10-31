@@ -69,6 +69,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         checkForUpdate(manual = false)
+        // While the app is on screen, look again every 5 minutes.
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(5 * 60_000L)
+                if (client.foreground && update.value is UpdateState.None) checkForUpdate(manual = false)
+            }
+        }
         // When the Wi-Fi comes back (or changes) reconnect right away instead of waiting for the next retry.
         val callback = object : ConnectivityManager.NetworkCallback() {
             // Called on a ConnectivityManager thread: hop to the main thread before touching the client.
@@ -132,9 +139,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onStart() {
         client.foreground = true
-        // The app can stay open for days (the remote runs in the background): look for an update each time it comes back,
-        // at most every 30 minutes.
-        if (android.os.SystemClock.elapsedRealtime() - lastUpdateCheck > 30 * 60_000L && update.value !is UpdateState.Working) checkForUpdate(manual = false)
+        // The app can stay open for days (the remote runs in the background): look for an update each time it comes back.
+        if (android.os.SystemClock.elapsedRealtime() - lastUpdateCheck > 20_000L && update.value !is UpdateState.Working) checkForUpdate(manual = false)
         val tv = selected() ?: return
         client.ensureConnected(tv)
         com.kwartotv.remote.net.RemoteService.start(getApplication())

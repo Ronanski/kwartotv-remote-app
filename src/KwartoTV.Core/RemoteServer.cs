@@ -52,6 +52,9 @@ public sealed class RemoteServer : IAsyncDisposable
     /// <summary>The music player's state (Music.StateMessage), sent to a phone when it connects. Null: no music.</summary>
     public Func<string?>? MusicNow { get; set; }
 
+    /// <summary>A paired phone connected (the TV looks for an update right away). Any thread.</summary>
+    public event Action? PhoneConnected;
+
     /// <summary>Sends a message to every connected phone (sign-in requests, text requests).</summary>
     public void Broadcast(string message)
     {
@@ -339,6 +342,7 @@ public sealed class RemoteServer : IAsyncDisposable
         using var ws = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true, KeepAliveInterval = TimeSpan.FromSeconds(20) });
         var id = Guid.NewGuid();
         _clients[id] = (device!, ws);
+        try { PhoneConnected?.Invoke(); } catch { }
         await Send(ws, StateMessage(_lineup.Current, _lineup.CurrentNumber));
         try { if (PendingText?.Invoke() is { } pending) await Send(ws, pending); } catch { }
         try { if (MusicNow?.Invoke() is { } music) await Send(ws, music); } catch { }
