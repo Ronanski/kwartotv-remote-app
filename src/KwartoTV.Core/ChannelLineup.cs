@@ -56,6 +56,19 @@ public sealed class ChannelLineup
 
     public Channel? TuneNumber(int number) => Go(number - 1);
 
+    /// <summary>
+    /// Tunes a channel by its id. Use this from lists drawn earlier: numbers move when channels are added or hidden,
+    /// the id stays the same.
+    /// </summary>
+    public Channel? TuneId(string id)
+    {
+        int i; lock (_gate) i = _channels.FindIndex(c => c.Id == id);
+        return i < 0 ? null : Go(i);
+    }
+
+    /// <summary>The channel's current number (1-based), or 0 when it is not in the lineup.</summary>
+    public int NumberOf(string id) { lock (_gate) return _channels.FindIndex(c => c.Id == id) + 1; }
+
     public Channel? Next()
     {
         int n; lock (_gate) { if (_channels.Count == 0) return null; n = (_current + 1) % _channels.Count; }

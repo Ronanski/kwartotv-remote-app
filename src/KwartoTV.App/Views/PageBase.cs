@@ -30,23 +30,27 @@ public abstract class PageBase : UserControl
     {
         var offset = Scroll.VerticalOffset;
         var focusedIndex = FocusIndex();
+        var focusedKey = Keyboard.FocusedElement is Button { Tag: string k } fb && IsAncestorOf(fb) ? k : null;
         Body.Children.Clear();
         build();
         UpdateLayout();
         Scroll.ScrollToVerticalOffset(offset);
-        RestoreFocus(focusedIndex);
+        RestoreFocus(focusedIndex, focusedKey);
     }
 
     private int FocusIndex() => Keyboard.FocusedElement is Button b ? AllButtons().ToList().IndexOf(b) : -1;
 
-    private void RestoreFocus(int index)
+    private void RestoreFocus(int index, string? key)
     {
         // Only when this page is what the user is looking at: a refresh in the background (new channel checks, downloads)
         // must never take the keyboard away from the player, a web app or a dialog.
         if (Window.GetWindow(this) is not { IsActive: true } || Shell.DialogOpen) return;
         var all = AllButtons().ToList();
-        if (all.Count == 0) return;
-        if (index >= 0 && index < all.Count) all[index].Focus(); else if (index == -1 && !IsKeyboardFocusWithin) { }
+        if (all.Count == 0 || index < 0) return;
+        // The same card again (cards move when channels are added or hidden), the one nearest to where the selection was;
+        // otherwise whatever is now at that place.
+        var same = key is null ? null : all.Select((b, i) => (b, i)).Where(x => Equals(x.b.Tag, key)).OrderBy(x => Math.Abs(x.i - index)).Select(x => x.b).FirstOrDefault();
+        (same ?? all[Math.Min(index, all.Count - 1)]).Focus();
     }
 
     protected IEnumerable<Button> AllButtons()

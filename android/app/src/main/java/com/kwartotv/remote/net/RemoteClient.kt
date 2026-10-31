@@ -244,6 +244,9 @@ class RemoteClient {
     fun disconnect() {
         generation++
         main.removeCallbacksAndMessages(null)
+        // Close the old socket for real: dropping the reference left it open (with its 10 s pings) in the background,
+        // and the TV kept a ghost connection for every reconnect.
+        socket?.let { old -> try { if (!old.close(1000, null)) old.cancel() } catch (_: Exception) { old.cancel() } }
         socket = null
         _conn.value = Conn.Idle
     }

@@ -13,9 +13,10 @@ public static class UiKit
 
     public static Brush B(string key) => (Brush)Application.Current.FindResource(key);
 
-    public static Button Tile(double w, double h, UIElement content, Action onClick, string name)
+    /// <summary>A focusable card. [key] identifies it across redraws (default: [name]) so the selection stays on it.</summary>
+    public static Button Tile(double w, double h, UIElement content, Action onClick, string name, string? key = null)
     {
-        var b = new Button { Width = w, Height = h, Content = content, Style = (Style)Application.Current.FindResource("Tile"), RenderTransform = new ScaleTransform(1, 1) };
+        var b = new Button { Width = w, Height = h, Content = content, Style = (Style)Application.Current.FindResource("Tile"), RenderTransform = new ScaleTransform(1, 1), Tag = key ?? name };
         System.Windows.Automation.AutomationProperties.SetName(b, name);
         b.Click += (_, _) => onClick();
         return b;

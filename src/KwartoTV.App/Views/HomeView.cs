@@ -89,7 +89,7 @@ public sealed class HomeView : PageBase
     }
 
     private FrameworkElement Card(Channel c, int number, bool fav) =>
-        UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.ChannelCard(c, number, fav), () => Shell.Tv.Lineup.TuneNumber(number), $"{number} {c.Name}");
+        UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.ChannelCard(c, number, fav), () => Shell.TuneChannel(c), $"{number} {c.Name}", key: "ch:" + c.Id);
 
     private FrameworkElement Hero(int count, Channel? current, int number, bool loading)
     {

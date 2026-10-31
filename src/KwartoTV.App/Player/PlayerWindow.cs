@@ -20,6 +20,11 @@ public sealed class PlayerWindow : Window
     private DateTime _streamStarted;
     private bool _startedLogged;
     private bool _healthMarked;
+    // A live channel that played and then dropped is opened again by itself (see HealthPolicy.ReconnectDelay).
+    private bool _playedOk;
+    private int _reconnects;
+    private bool _reconnecting;
+    private DateTime? _reconnectAt;
 
     private readonly TvServices _tv;
     private readonly MainWindow _main;
@@ -50,7 +55,7 @@ public sealed class PlayerWindow : Window
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible) { _osd.Owner ??= this; SyncOsd(); _osd.Show(); _poll.Start(); }
-            else { _poll.Stop(); _osd.Hide(); _osd.HideAll(); _mpv?.Stop(); _guideOpen = false; }
+            else { _poll.Stop(); _osd.Hide(); _osd.HideAll(); SaveFilePosition(); _mpv?.Stop(); _guideOpen = false; _reconnectAt = null; }
         };
         SizeChanged += (_, _) => SyncOsd();
         LocationChanged += (_, _) => SyncOsd();
@@ -101,6 +106,7 @@ public sealed class PlayerWindow : Window
             _main.PlayYouTubeChannel(ch);
             return;
         }
+        SaveFilePosition();
         _mode = Mode.Live; _failed = false; CloseGuide();
         Present();
         WhenReady(() =>
@@ -113,6 +119,7 @@ public sealed class PlayerWindow : Window
     /// <summary>Plays a channel that is not in the lineup yet, so the user can check it before choosing it. Back returns to the picker.</summary>
     public void PlayPreview(Channel ch)
     {
+        SaveFilePosition();
         _mode = Mode.Preview; _failed = false; CloseGuide();
         Present();
         WhenReady(() =>
@@ -122,14 +129,16 @@ public sealed class PlayerWindow : Window
         });
     }
 
-    private void StartStream(Channel ch, int attempt)
+    private void StartStream(Channel ch, int attempt, bool reconnect = false)
     {
-        _channel = ch; _attempt = attempt; _problem = null; _failed = false; _startedLogged = false;
-        if (attempt == 0) _healthMarked = false;
-        _osd.ShowMessage(attempt == 0 ? null : "Trying another way to connect…");
+        _channel = ch; _attempt = attempt; _problem = null; _failed = false; _startedLogged = false; _reconnectAt = null;
+        if (attempt == 0 && !reconnect) { _healthMarked = false; _playedOk = false; _reconnects = 0; _reconnecting = false; }
+        _osd.ShowMessage(reconnect ? $"Connection lost. Reconnecting… ({_reconnects})" : attempt == 0 ? null : "Trying another way to connect…");
         var ua = ch.UserAgent ?? UserAgents[Math.Min(attempt, UserAgents.Length - 1)];
         _mpv!.SetHeaders(ch.Referrer, ua);
         _mpv.SetSubtitles(false);
+        // A speed chosen for a video (phone remote) must not carry over to live TV.
+        if (!reconnect) _mpv.SetSpeed(1);
         _mpv.Load(ch.Url); _mpv.Paused = false;
         _loadedAt = _streamStarted = DateTime.UtcNow;
         AppPaths.LogLine($"player: opening {ch.Name} (attempt {attempt + 1}) {ch.Url}");
@@ -137,9 +146,22 @@ public sealed class PlayerWindow : Window
 
     public void PlayFiles(IReadOnlyList<LibraryItem> items, int index)
     {
+        SaveFilePosition();
         _mode = Mode.Files; _files = items; _fileIndex = index; _failed = false;
         Present();
         WhenReady(() => LoadFile());
+    }
+
+    /// <summary>Remembers where the current video was stopped, so it continues from there next time.</summary>
+    private void SaveFilePosition()
+    {
+        if (_mode == Mode.Files && _mpv is not null && !_mpv.Idle) _mpv.SavePosition();
+    }
+
+    /// <summary>A video that played to the end starts from the beginning next time.</summary>
+    private void ForgetPosition()
+    {
+        if (_mpv is not null && _fileIndex < _files.Count) _mpv.ForgetPosition(_files[_fileIndex].Path);
     }
 
     private void LoadFile()
@@ -148,6 +170,7 @@ public sealed class PlayerWindow : Window
         _osd.ShowMessage(null);
         _mpv!.SetHeaders(null, null);
         _mpv.SetSubtitles(true);
+        _mpv.SetSpeed(1);
         _mpv.Load(item.Path); _mpv.Paused = false;
         _loadedAt = DateTime.UtcNow; _failed = false;
         _osd.ShowProgress(item.Title, 0, 0, false, false);
@@ -195,6 +218,13 @@ public sealed class PlayerWindow : Window
 
         if (_mode != Mode.Files && _channel is not null)
         {
+            // Waiting to reconnect a dropped live channel.
+            if (_reconnectAt is { } at)
+            {
+                _mpv.TakeEvents();
+                if (DateTime.UtcNow >= at) StartStream(_channel, _attempt, reconnect: true);
+                return;
+            }
             var ev = _mpv.TakeEvents();
             if (ev.Loaded && !_startedLogged)
             {
@@ -204,19 +234,28 @@ public sealed class PlayerWindow : Window
             if (ev.Problem is not null)
             {
                 _problem = ev.Problem;
-                if (_attempt < UserAgents.Length - 1) { StartStream(_channel, _attempt + 1); return; }
+                if (_playedOk && TryReconnect()) return;
+                if (!_playedOk && _attempt < UserAgents.Length - 1) { StartStream(_channel, _attempt + 1); return; }
             }
-            // Opened but nothing moves (no picture or sound) after a while: treat it as not working.
             var since = DateTime.UtcNow - _streamStarted;
-            if (_startedLogged && !_healthMarked && since > TimeSpan.FromSeconds(4) && _mpv.Position > 1.5)
-            { _healthMarked = true; _tv.MarkHealth(_channel, HealthStatus.Ok, null); }
-            if (_startedLogged && !_healthMarked && !_failed && since > TimeSpan.FromSeconds(18) && _mpv.Position < 0.5 && !_mpv.Paused)
+            if (_startedLogged && since > TimeSpan.FromSeconds(4) && _mpv.Position > 1.5)
             {
-                _problem = "no picture or sound";
-                _failed = true; _healthMarked = true;
-                _tv.MarkHealth(_channel, HealthStatus.Dead, _problem);
-                _osd.ShowMessage(_mode == Mode.Preview ? "Can't play this stream.\nNo picture or sound.\nPress Back to return." : "Can't play this channel.\nNo picture or sound. It is hidden from your list now.\nPress ▲ or ▼ for another one.");
-                return;
+                if (!_playedOk) { _playedOk = true; }
+                if (_reconnecting) { _reconnecting = false; _reconnects = 0; AppPaths.LogLine($"player: {_channel.Name} reconnected"); _osd.ShowMessage(null); }
+                if (!_healthMarked) { _healthMarked = true; _tv.MarkHealth(_channel, HealthStatus.Ok, null); }
+            }
+            // Opened but nothing moves (no picture or sound) after a while.
+            if (_startedLogged && !_failed && since > TimeSpan.FromSeconds(18) && _mpv.Position < 0.5 && !_mpv.Paused)
+            {
+                if (_playedOk && TryReconnect()) return;
+                if (!_healthMarked)
+                {
+                    _problem = "no picture or sound";
+                    _failed = true; _healthMarked = true;
+                    _tv.MarkHealth(_channel, HealthStatus.Dead, _problem);
+                    _osd.ShowMessage(_mode == Mode.Preview ? "Can't play this stream.\nNo picture or sound.\nPress Back to return." : "Can't play this channel.\nNo picture or sound. It is hidden from your list for now.\nPress ▲ or ▼ for another one.");
+                    return;
+                }
             }
         }
 
@@ -226,17 +265,25 @@ public sealed class PlayerWindow : Window
             if (_mode == Mode.Files)
             {
                 // Finished (or failed): move on to the next file, or leave.
+                ForgetPosition();
                 if (_fileIndex + 1 < _files.Count) { _fileIndex++; LoadFile(); }
                 else _main.GoHome();
                 return;
             }
+            // It was playing and stopped: the connection dropped, not the channel. Open it again by itself.
+            if (_playedOk && TryReconnect()) return;
             _failed = true;
+            var offline = !TvServices.IsOnline();
             if (_channel is not null && !_healthMarked) { _healthMarked = true; _tv.MarkHealth(_channel, HealthStatus.Dead, _problem ?? "cannot be opened"); }
             // "loading failed" alone says little: the usual causes are an offline address, a country block, or a login requirement.
             var why = string.IsNullOrEmpty(_problem) ? "" : "\n" + (_problem.StartsWith("loading failed") ? _problem + "\nThe stream may be offline, blocked in your country, or need a login." : _problem);
-            _osd.ShowMessage(_mode == Mode.Preview
+            _osd.ShowMessage(offline
+                ? "No internet connection.\nCheck the PC's Wi-Fi or cable, then press OK on the channel again."
+                : _mode == Mode.Preview
                 ? "Can't play this stream." + why + "\nPress Back to return."
-                : "Can't play this channel." + why + "\nIt is hidden from your list now. Press ▲ or ▼ for another one.");
+                : _playedOk
+                ? "The channel stopped and did not come back." + why + "\nPress ▲ or ▼ for another one."
+                : "Can't play this channel." + why + "\nIt is hidden from your list for now. Press ▲ or ▼ for another one.");
             return;
         }
         if (_failed && !_mpv.Idle) { _failed = false; _osd.ShowMessage(null); }
@@ -244,12 +291,25 @@ public sealed class PlayerWindow : Window
         if (!_failed)
         {
             if (_mpv.Buffering) _osd.ShowMessage("Buffering…");
-            else if (!_mpv.Paused) _osd.ShowMessage(null);
+            else if (!_mpv.Paused && !_reconnecting) _osd.ShowMessage(null);
         }
         if (_mode == Mode.Files && _osd.ProgressVisible && !_failed) ShowStatus();
     }
 
     private string? _lastOnNow;
+
+    /// <summary>Schedules the next reconnect of a live channel that dropped. False when it has been tried enough.</summary>
+    private bool TryReconnect()
+    {
+        if (_mode != Mode.Live || _channel is null) return false;
+        if (HealthPolicy.ReconnectDelay(_reconnects) is not { } wait) return false;
+        _reconnects++;
+        _reconnecting = true;
+        _reconnectAt = DateTime.UtcNow + wait;
+        AppPaths.LogLine($"player: {_channel.Name} dropped ({_problem ?? "stopped"}); reconnect {_reconnects} in {wait.TotalSeconds:0}s");
+        _osd.ShowMessage($"Connection lost. Reconnecting… ({_reconnects})");
+        return true;
+    }
 
     private void ShowLiveBanner(Channel ch, int number)
     {
@@ -312,7 +372,7 @@ public sealed class PlayerWindow : Window
                 case Key.PageDown: MoveGuide(8); return true;
                 case Key.Enter:
                     if (_guideIndex < _guideList.Count && _guideList[_guideIndex].Number == 0) OpenSearchKeyboard();
-                    else if (_guideIndex < _guideList.Count) lineup.TuneNumber(_guideList[_guideIndex].Number);
+                    else if (_guideIndex < _guideList.Count) lineup.TuneId(_guideList[_guideIndex].Channel.Id);
                     return true;
                 case Key.Left: SwitchGroup(-1); return true;
                 case Key.Right: SwitchGroup(+1); return true;
@@ -357,8 +417,8 @@ public sealed class PlayerWindow : Window
             case Key.Up: Seek(60); return true;
             case Key.Down: Seek(-60); return true;
             case Key.Enter or Key.Space or Key.MediaPlayPause or Key.P: TogglePause(); return true;
-            case Key.MediaNextTrack or Key.PageDown when _fileIndex + 1 < _files.Count: _fileIndex++; LoadFile(); return true;
-            case Key.MediaPreviousTrack or Key.PageUp when _fileIndex > 0: _fileIndex--; LoadFile(); return true;
+            case Key.MediaNextTrack or Key.PageDown when _fileIndex + 1 < _files.Count: SaveFilePosition(); _fileIndex++; LoadFile(); return true;
+            case Key.MediaPreviousTrack or Key.PageUp when _fileIndex > 0: SaveFilePosition(); _fileIndex--; LoadFile(); return true;
             case Key.I: ShowStatus(); return true;
             case Key.Escape or Key.BrowserBack or Key.MediaStop: _main.GoHome(); return true;
         }

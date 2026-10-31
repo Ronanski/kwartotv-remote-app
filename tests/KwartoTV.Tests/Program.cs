@@ -794,6 +794,33 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     }
 }
 
+// ---- smooth use: health rechecks, reconnect reconnectWaits, tuning by id after the lineup changed
+{
+    var nowP = DateTimeOffset.UtcNow;
+    var hlsCh = new Channel("h1", "H", "https://example.invalid/h.m3u8", null, "G", StreamKind.Hls);
+    var ytLive = new Channel("y1", "Y", "https://www.youtube.com/watch?v=PLACEHOLDER", null, "G", StreamKind.YouTube);
+    Check(HealthPolicy.NeedsCheck(hlsCh, null, nowP) && HealthPolicy.NeedsCheck(hlsCh, new ChannelHealth(HealthStatus.Unknown, null, nowP), nowP), "health: never checked is checked");
+    Check(!HealthPolicy.NeedsCheck(hlsCh, new ChannelHealth(HealthStatus.Ok, null, nowP.AddHours(-23)), nowP)
+          && HealthPolicy.NeedsCheck(hlsCh, new ChannelHealth(HealthStatus.Ok, null, nowP.AddHours(-25)), nowP), "health: working channels again after a day");
+    Check(!HealthPolicy.NeedsCheck(hlsCh, new ChannelHealth(HealthStatus.Dead, "x", nowP.AddMinutes(-90)), nowP)
+          && HealthPolicy.NeedsCheck(hlsCh, new ChannelHealth(HealthStatus.Dead, "x", nowP.AddHours(-3)), nowP), "health: a channel that failed gets another chance after 2 hours, not a day");
+    Check(HealthPolicy.NeedsCheck(ytLive, new ChannelHealth(HealthStatus.Ok, null, nowP.AddMinutes(-21)), nowP), "health: YouTube live links every 20 minutes");
+
+    var reconnectWaits = Enumerable.Range(0, 10).Select(HealthPolicy.ReconnectDelay).ToList();
+    Check(reconnectWaits[0] is { } w0 && w0 <= TimeSpan.FromSeconds(2) && reconnectWaits.TakeWhile(w => w is not null).Count() is >= 3 and <= 8, "reconnect: starts fast and gives up after a few tries");
+    Check(reconnectWaits.TakeWhile(w => w is not null).Select(w => w!.Value).Zip(reconnectWaits.Skip(1).TakeWhile(w => w is not null).Select(w => w!.Value)).All(p => p.Second >= p.First), "reconnect: each wait is at least as long as the one before");
+
+    var lineupById = new ChannelLineup();
+    var chA = new Channel("a", "A", "https://example.invalid/a", null, "G", StreamKind.Hls);
+    var chB = new Channel("b", "B", "https://example.invalid/b", null, "G", StreamKind.Hls);
+    var chC = new Channel("c", "C", "https://example.invalid/c", null, "G", StreamKind.Hls);
+    lineupById.Load(new[] { chA, chB, chC });
+    Check(lineupById.NumberOf("c") == 3, "lineup: number of a channel");
+    lineupById.Load(new[] { chB, chC });   // A was hidden: C is now channel 2
+    Check(lineupById.TuneId("c")?.Id == "c" && lineupById.CurrentNumber == 2 && lineupById.NumberOf("a") == 0, "lineup: a card drawn before the change still opens its own channel");
+    Check(lineupById.TuneId("a") is null && lineupById.Current?.Id == "c", "lineup: a hidden channel is not replaced by another one");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

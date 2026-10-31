@@ -216,9 +216,18 @@ public partial class MainWindow : Window, IShell
     {
         if (_tv.Lineup.Channels.Count == 0) { ShowToast("No channels yet. Add a playlist in Settings."); ShowSettings(); return; }
         CloseWeb(); _tv.Apps.Close();
-        var ch = _tv.Lineup.Current ?? _tv.Lineup.TuneNumber(1);
-        if (ch is null) return;
-        if (_tv.Lineup.Current is not null) OpenPlayerLive(ch);
+        // Nothing watched yet: tuning channel 1 opens the player through OnTuned. Opening it here as well started the stream twice.
+        if (_tv.Lineup.Current is { } ch) OpenPlayerLive(ch);
+        else _tv.Lineup.TuneNumber(1);
+    }
+
+    /// <summary>
+    /// Plays a channel from a card on screen. If the channel is no longer in the lineup (hidden after a check since the
+    /// screen was drawn), says so instead of playing another channel.
+    /// </summary>
+    public void TuneChannel(Channel ch)
+    {
+        if (_tv.Lineup.TuneId(ch.Id) is null) { ShowToast($"{ch.Name} is not available right now."); _current?.Refresh(); }
     }
 
     /// <summary>Starts watching a playlist's own space: its first channel, with the channel list open on that space.</summary>

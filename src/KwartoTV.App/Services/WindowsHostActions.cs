@@ -86,7 +86,8 @@ public sealed class WindowsHostActions : IHostActions
             case "power.restart": PowerActions.Restart(); return;
         }
 
-        var keys = HostKeyMap.Navigation(cmd, shell.ForegroundApp) ?? HostKeyMap.Media(cmd);
+        // Which app is in front is read from the windows, so ask on the UI thread (this runs on the server's thread).
+        var keys = HostKeyMap.Navigation(cmd, ui.Invoke(() => shell.ForegroundApp)) ?? HostKeyMap.Media(cmd);
         if (keys is null) throw new NotSupportedException(cmd);
         Native.Press(keys);
     }

@@ -24,6 +24,7 @@ button{font:inherit;color:var(--text)}
 .btn{background:var(--card2);border:0;border-radius:16px;min-height:56px;font-size:20px;display:flex;align-items:center;justify-content:center;gap:6px;user-select:none}
 .btn:active,.btn.press{background:var(--accent);color:#1a0d05}
 .btn small{font-size:12px;color:var(--dim)}
+.glyph{font-size:30px;line-height:1}
 .grid{display:grid;gap:10px}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
 .dpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 14px}
 .dpad .btn{min-height:68px;font-size:26px}.dpad .ok{background:var(--accent);color:#1a0d05;font-weight:700;font-size:20px}
@@ -86,7 +87,7 @@ dialog::backdrop{background:#000a}
       <div class="grid g3">
         <button class="btn" data-cmd="nav.back">⟵ <small>Back</small></button>
         <button class="btn" data-cmd="nav.home">⌂ <small>Home</small></button>
-        <button class="btn" data-cmd="media.mute">🔇 <small>Mute</small></button>
+        <button class="btn" data-cmd="media.mute" aria-label="Mute"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="m16 9 5 6m0-6-5 6"/></svg> <small>Mute</small></button>
       </div>
       <div class="grid g3" style="margin-top:10px">
         <button class="btn" data-cmd="media.voldown" data-repeat="1" aria-label="Volume down">−</button>
@@ -102,17 +103,17 @@ dialog::backdrop{background:#000a}
     </section>
     <section id="t-media">
       <div class="grid g3">
-        <button class="btn" data-cmd="media.prev" aria-label="Previous">⏮</button>
-        <button class="btn primary" data-cmd="media.playpause" aria-label="Play or pause">⏯</button>
-        <button class="btn" data-cmd="media.next" aria-label="Next">⏭</button>
+        <button class="btn" data-cmd="media.prev" aria-label="Previous"><span class="glyph">⏮︎</span></button>
+        <button class="btn primary" data-cmd="media.playpause" aria-label="Play or pause"><span class="glyph">⏯︎</span></button>
+        <button class="btn" data-cmd="media.next" aria-label="Next"><span class="glyph">⏭︎</span></button>
         <button class="btn" data-cmd="media.seek" data-arg="-10">↺ <small>10s</small></button>
-        <button class="btn" data-cmd="media.stop" aria-label="Stop">⏹</button>
+        <button class="btn" data-cmd="media.stop" aria-label="Stop"><span class="glyph">⏹︎</span></button>
         <button class="btn" data-cmd="media.seek" data-arg="10">↻ <small>10s</small></button>
       </div>
       <h2>Volume</h2>
       <div class="grid g3">
         <button class="btn" data-cmd="media.voldown" data-repeat="1" aria-label="Volume down">−</button>
-        <button class="btn" data-cmd="media.mute">🔇</button>
+        <button class="btn" data-cmd="media.mute" aria-label="Mute"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="m16 9 5 6m0-6-5 6"/></svg></button>
         <button class="btn" data-cmd="media.volup" data-repeat="1" aria-label="Volume up">+</button>
       </div>
     </section>

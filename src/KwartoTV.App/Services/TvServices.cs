@@ -129,26 +129,36 @@ public sealed class TvServices : IDisposable
     // ---------- playlists and the channels the user chose
 
     /// <summary>Every channel of every playlist (what the channel picker shows). The lineup holds only the selected ones.</summary>
-    public Dictionary<string, IReadOnlyList<Channel>> Library { get; } = new();
-    private readonly Dictionary<string, string> _errors = new();
+    public System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<Channel>> Library { get; } = new();
+    // Written by downloads (which can finish on a background thread) and read by the UI: thread-safe.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _errors = new();
 
     /// <summary>Whether each channel works on this PC (checked here, so country blocks are seen as they are for this connection).</summary>
     public System.Collections.Concurrent.ConcurrentDictionary<string, ChannelHealth> Health { get; } = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _checking = new();
     private static readonly HttpClient ProbeHttp = ResilientHttp.Create(TimeSpan.FromSeconds(30));
-    public static readonly TimeSpan RecheckAfter = TimeSpan.FromHours(24);
-    /// <summary>YouTube live links come and go during the day, so they are checked much more often.</summary>
-    public static readonly TimeSpan LiveRecheckAfter = TimeSpan.FromMinutes(20);
-
-    private static TimeSpan RecheckFor(Channel c) => c.Kind == StreamKind.YouTube ? LiveRecheckAfter : RecheckAfter;
+    /// <summary>How often the background check runs (YouTube live links and channels that did not work get rechecked).</summary>
+    public static readonly TimeSpan LiveRecheckAfter = HealthPolicy.RecheckLive;
 
     public HealthStatus StatusOf(Channel c) => Health.TryGetValue(c.Id, out var h) ? h.Status : HealthStatus.Unknown;
 
     /// <summary>Remembers what happened when a channel was played (the player knows best) and saves it.</summary>
     public void MarkHealth(Channel c, HealthStatus status, string? reason)
     {
+        // With no network every channel fails: that says nothing about the channel, so do not hide it.
+        if (status == HealthStatus.Dead && !IsOnline())
+        {
+            AppPaths.LogLine($"health: {c.Name} failed while offline; not marked");
+            return;
+        }
         Health[c.Id] = new ChannelHealth(status, reason, DateTimeOffset.UtcNow);
         SaveHealthSoon();
+    }
+
+    /// <summary>False when this PC has no working network connection at all.</summary>
+    public static bool IsOnline()
+    {
+        try { return NetworkInterface.GetIsNetworkAvailable(); } catch { return true; }
     }
 
     private int _healthQueued;
@@ -168,8 +178,10 @@ public sealed class TvServices : IDisposable
     /// </summary>
     public async Task<(int Ok, int Dead)> CheckChannelsAsync(IEnumerable<Channel> channels, bool force = false, IProgress<(int Done, int Total)>? progress = null, CancellationToken ct = default)
     {
+        // Offline: every check would fail and hide channels that are fine.
+        if (!IsOnline()) return (0, 0);
         var now = DateTimeOffset.UtcNow;
-        var todo = channels.Where(c => force || !Health.TryGetValue(c.Id, out var h) || now - h.CheckedAt > RecheckFor(c))
+        var todo = channels.Where(c => force || HealthPolicy.NeedsCheck(c, Health.GetValueOrDefault(c.Id), now))
                            .Where(c => _checking.TryAdd(c.Id, 0)).ToList();
         int done = 0, ok = 0, dead = 0, network = 0;
         var results = new System.Collections.Concurrent.ConcurrentDictionary<string, ChannelHealth>();
@@ -281,7 +293,7 @@ public sealed class TvServices : IDisposable
         {
             var list = await ChannelCatalog.LoadOneAsync(p, Http, SystemDownload);
             Library[p.Id] = list;
-            _errors.Remove(p.Id);
+            _errors.TryRemove(p.Id, out _);
             SaveLibraryCache();
             AppPaths.LogLine($"playlist: {p.Name}: {list.Count} channels");
             return null;
@@ -323,7 +335,7 @@ public sealed class TvServices : IDisposable
     public void RemovePlaylist(string id)
     {
         Settings.RemovePlaylist(id);
-        Library.Remove(id); _errors.Remove(id);
+        Library.TryRemove(id, out _); _errors.TryRemove(id, out _);
         SaveSettings(); SaveLibraryCache(); RebuildLineup();
     }
 

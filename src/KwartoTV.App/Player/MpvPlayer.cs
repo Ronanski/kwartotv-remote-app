@@ -65,6 +65,15 @@ public sealed class MpvPlayer : IDisposable
         p.Opt("audio-client-name", "KwartoTV");
         p.Opt("ytdl", "no");   // YouTube is handled by the in-app browser; the youtube-dl hook only slows down and confuses live streams
         p.Opt("user-agent", DefaultUserAgent);
+        // Live streams: let the network layer reconnect by itself after a short drop, before the player gives up.
+        p.Opt("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=4");
+        // Library videos continue where they were stopped (only the position is remembered, not pause, speed or volume).
+        var later = Path.Combine(AppPaths.Root, "watch-later");
+        try { Directory.CreateDirectory(later); } catch { }
+        p.Opt("watch-later-dir", later);
+        p.Opt("watch-later-directory", later);   // older libmpv name; the unknown one is ignored
+        p.Opt("watch-later-options", "start");
+        p.Opt("resume-playback", "yes");
         if (mpv_initialize(p._ctx) < 0) { p.Dispose(); throw new InvalidOperationException("mpv_initialize failed"); }
         mpv_request_log_messages(p._ctx, "warn");
         return p;
@@ -149,6 +158,12 @@ public sealed class MpvPlayer : IDisposable
     public void SetSubtitles(bool on) => Set("sid", on ? "auto" : "no");
 
     public void Load(string urlOrPath) => Command("loadfile", urlOrPath, "replace");
+
+    /// <summary>Saves where the current file is, for resume-playback.</summary>
+    public void SavePosition() => Command("write-watch-later-config");
+
+    /// <summary>Forgets the saved position of a file (it was watched to the end).</summary>
+    public void ForgetPosition(string path) => Command("delete-watch-later-config", path);
     public void Stop() => Command("stop");
 
     public bool Paused

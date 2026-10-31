@@ -39,3 +39,14 @@ What was actually run, where, and what could not be checked from the build envir
 3. **Playing real channels**: no channel sources are bundled, so playback of real streams was not tested, only that libmpv starts and reports failures.
 4. Multiple monitors, HDR, and sleep/wake of your specific PC. "Wake" from a phone is not possible (a sleeping PC has no network listener): use the power button or wake-on-LAN separately.
 5. Windows SmartScreen may warn about the unsigned installer. Click "More info" then "Run anyway". Code signing needs a paid certificate.
+
+## Audit (v1.1.x): found and fixed
+- A live channel that dropped for a moment (Wi-Fi blip, server hiccup) showed "Can't play" and was hidden from the list. It now reconnects by itself (5 tries over about 40 s), and the network layer also retries short drops.
+- With the internet down, every channel tried was marked as not working and hidden for a day. Failures while offline are no longer recorded, and a channel that failed is checked again after 2 hours instead of 24.
+- A playback speed set from the phone (for example 2x) carried over to the next live channel or video.
+- Live TV from the start (nothing watched yet) opened the stream twice.
+- Home cards and the channel list kept the channel number from when they were drawn; after channels were hidden in the background, a card could open a different channel. They now open by channel id.
+- A background refresh of Home (channel checks) moved the selection to another card. It now stays on the same card.
+- Library videos now continue where they were stopped (position only); a video watched to the end starts from the beginning.
+- Android remote: reconnecting, or leaving the app, did not close the old connection, so it stayed open in the background (battery) and the TV kept ghost connections.
+- Browser remote: media and mute icons are clearer (no colour emoji).
