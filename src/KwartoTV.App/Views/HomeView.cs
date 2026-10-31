@@ -21,7 +21,7 @@ public sealed class HomeView : PageBase
         var lineup = tv.Lineup;
         var channels = lineup.Channels;
         var numbers = new Dictionary<string, int>();
-        for (int i = 0; i < channels.Count; i++) numbers[channels[i].Id] = i + 1;
+        foreach (var (n, c) in lineup.Numbered) numbers[c.Id] = n;
 
         if (tv.Updater.Available is { } upd)
         {

@@ -55,7 +55,12 @@ public sealed class SettingsView : PageBase
                 Tv.Settings.MaxChannels = Tv.Settings.MaxChannels switch { 100 => 200, 200 => 300, 300 => 0, _ => 100 };
                 Tv.SaveSettings(); Tv.RebuildLineup(); Tv.CheckChosenInBackground(); Refresh();
             }),
-            UiKit.ActionButton(Tv.ChannelsLoading ? "Loading…" : $"Reload channels ({Tv.Lineup.Channels.Count})", () => _ = Tv.RefreshChannelsAsync())));
+            UiKit.ActionButton(Tv.ChannelsLoading ? "Loading…" : $"Reload channels ({Tv.Lineup.Channels.Count})", () => _ = Tv.RefreshChannelsAsync()),
+            // Numbers stay put like on cable (a hidden channel leaves a gap); this closes the gaps: 1, 2, 3...
+            UiKit.ActionButton("Renumber channels", () => Dialogs.Confirm(Shell, "Number the channels 1, 2, 3… again, closing the gaps? Channel numbers you know will change.", "Renumber", () =>
+            {
+                Tv.Lineup.Renumber(); Tv.SaveSettings(); Refresh(); Shell.ShowToast("Channels numbered 1, 2, 3… again.");
+            }))));
 
         // ---- website tiles
         Body.Children.Add(UiKit.Heading("Website tiles"));

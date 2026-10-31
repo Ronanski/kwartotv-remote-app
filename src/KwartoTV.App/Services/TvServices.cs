@@ -99,8 +99,12 @@ public sealed class TvServices : IDisposable
         // Start with what was loaded last time, so the channels are there even before (or without) the internet.
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, List<Channel>>>(AppPaths.PlaylistCache)) Library[kv.Key] = kv.Value;
         foreach (var kv in JsonFile.LoadOrNew<Dictionary<string, ChannelHealth>>(AppPaths.Health)) Health[kv.Key] = kv.Value;
+        // Channel numbers are kept for good (like cable): restore them before the first load.
+        Lineup.SetNumbers(Settings.Lineup.Numbers);
         Lineup.Load(ChannelCatalog.BuildLineup(Settings.Playlists, Library, Settings.HideUnavailable ? Health : null, onlyVerified: Settings.HideUnavailable, maxChannels: Settings.MaxChannels));
         Lineup.Restore(Settings.Lineup);
+        // New channels get numbers when the lineup changes: save them.
+        Lineup.Changed += SaveSettingsSoon;
         Lineup.Tuned += (_, _) => SaveSettingsSoon();
         Lineup.FavoritesChanged += SaveSettingsSoon;
         Router = new CommandRouter(Lineup, host);
@@ -231,9 +235,8 @@ public sealed class TvServices : IDisposable
     /// <summary>Playlists shown as their own space, with the lineup numbers of their channels (only the ones that work).</summary>
     public IReadOnlyList<(PlaylistEntry Playlist, IReadOnlyList<(int Number, Channel Channel)> Channels)> Spaces()
     {
-        var lineup = Lineup.Channels;
         var number = new Dictionary<string, int>();
-        for (int i = 0; i < lineup.Count; i++) number[lineup[i].Id] = i + 1;
+        foreach (var (n, c) in Lineup.Numbered) number[c.Id] = n;
         var result = new List<(PlaylistEntry, IReadOnlyList<(int, Channel)>)>();
         foreach (var p in Settings.Playlists.Where(p => p.ShowAsSpace))
         {
@@ -276,7 +279,7 @@ public sealed class TvServices : IDisposable
         // Nothing changed: do nothing (a rebuild redraws the home screen, which is slow with many channels).
         if (next.Select(c => c.Id).SequenceEqual(Lineup.Channels.Select(c => c.Id))) return;
         Lineup.Load(next);
-        if (Lineup.Current is null && Lineup.Channels.Count > 0) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites });
+        if (Lineup.Current is null && Lineup.Channels.Count > 0) Lineup.Restore(Settings.Lineup with { Favorites = Lineup.Export().Favorites, Recent = Lineup.Export().Recent });
         ChannelsChanged?.Invoke();
     }
 

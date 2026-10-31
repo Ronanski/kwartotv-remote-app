@@ -78,7 +78,7 @@ Check(lu.Groups.SequenceEqual(new[] { "News", "Kids, Fun", "Other" }), "groups: 
 
 lu.TuneNumber(2);
 lu.Load(parsed.Skip(1)); 
-Check(lu.Current?.Id == parsed[1].Id && lu.CurrentNumber == 1, "reload keeps current channel, renumbers");
+Check(lu.Current?.Id == parsed[1].Id && lu.CurrentNumber == 2 && lu.TuneNumber(1) is null, "reload keeps current channel and its number (no renumbering; the gap stays empty)");
 
 // ---- Pairing
 var pairing = new PairingService();
@@ -816,8 +816,8 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     var chC = new Channel("c", "C", "https://example.invalid/c", null, "G", StreamKind.Hls);
     lineupById.Load(new[] { chA, chB, chC });
     Check(lineupById.NumberOf("c") == 3, "lineup: number of a channel");
-    lineupById.Load(new[] { chB, chC });   // A was hidden: C is now channel 2
-    Check(lineupById.TuneId("c")?.Id == "c" && lineupById.CurrentNumber == 2 && lineupById.NumberOf("a") == 0, "lineup: a card drawn before the change still opens its own channel");
+    lineupById.Load(new[] { chB, chC });   // A was hidden: C keeps number 3
+    Check(lineupById.TuneId("c")?.Id == "c" && lineupById.CurrentNumber == 3 && lineupById.NumberOf("a") == 0, "lineup: a card drawn before the change still opens its own channel");
     Check(lineupById.TuneId("a") is null && lineupById.Current?.Id == "c", "lineup: a hidden channel is not replaced by another one");
 }
 
@@ -979,6 +979,30 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     var rl3 = new ChannelLineup(); rl3.Load(rc.Where(c => c.Id != "r19").ToList()); rl3.Restore(saved);
     Check(rl3.Recent[0].Id == "r20" && rl3.Recent.All(c => c.Id != "r19"), "recent: survives a restart; channels no longer in the lineup are left out");
     Check(new ChannelLineup().Recent.Count == 0, "recent: none yet");
+}
+
+// ---- permanent channel numbers (like cable)
+{
+    Channel Pc(string id) => new(id, id.ToUpperInvariant(), $"https://example.invalid/{id}", null, "G", StreamKind.Hls);
+    var pl = new ChannelLineup();
+    pl.Load(new[] { Pc("a"), Pc("b"), Pc("c"), Pc("d") });
+    Check(pl.Numbered.Select(x => x.Number).SequenceEqual(new[] { 1, 2, 3, 4 }), "numbers: first time 1, 2, 3, 4 in order");
+    pl.Load(new[] { Pc("a"), Pc("c"), Pc("d") });   // b stops working and is hidden
+    Check(pl.NumberOf("c") == 3 && pl.NumberOf("d") == 4 && pl.TuneNumber(2) is null, "numbers: a hidden channel leaves a gap, nobody else moves");
+    pl.Load(new[] { Pc("a"), Pc("b"), Pc("c"), Pc("d"), Pc("e") });   // b is back, e is new
+    Check(pl.NumberOf("b") == 2 && pl.NumberOf("e") == 5 && pl.Numbered.Select(x => x.Channel.Id).SequenceEqual(new[] { "a", "b", "c", "d", "e" }), "numbers: a channel that comes back gets its own number; a new one gets the next");
+    pl.TuneNumber(4); pl.Next();
+    Check(pl.CurrentNumber == 5, "numbers: channel up goes to the next channel by number");
+    var savedNumbers = pl.Export().Numbers!;
+    var pl2 = new ChannelLineup(); pl2.SetNumbers(savedNumbers); pl2.Load(new[] { Pc("e"), Pc("a") });
+    Check(pl2.NumberOf("e") == 5 && pl2.NumberOf("a") == 1 && pl2.Numbered[0].Channel.Id == "a", "numbers: kept after a restart, list in number order");
+    pl2.Renumber();
+    Check(pl2.NumberOf("a") == 1 && pl2.NumberOf("e") == 2, "numbers: Renumber closes the gaps");
+    var big = new ChannelLineup(); big.Load(Enumerable.Range(0, 1200).Select(n => Pc("x" + n)));
+    var t = DateTimeOffset.UtcNow;
+    Check(big.PressDigit(1, t) is null && big.PressDigit(1, t) is null && big.PressDigit(5, t) is null && big.PressDigit(0, t)?.Id == "x1149", "numbers: four-digit channels can be typed");
+    var lm = JsonDocument.Parse(RemoteServer.LineupMessage(pl.Numbered, null)).RootElement.GetProperty("channels");
+    Check(lm[1].GetProperty("number").GetInt32() == 2 && lm[4].GetProperty("number").GetInt32() == 5, "numbers: phones get each channel's own number");
 }
 
 Console.WriteLine($"{pass} passed, {fail} failed");

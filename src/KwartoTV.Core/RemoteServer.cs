@@ -362,7 +362,7 @@ public sealed class RemoteServer : IAsyncDisposable
                 {
                     // Answered here, not by the router: the reply is the lineup itself, not an ack.
                     _lineupWatchers[id] = ws;
-                    await Send(ws, LineupMessage(_lineup.Channels, OnAir, _lineup.IsFavorite, cmd.Id));
+                    await Send(ws, LineupMessage(_lineup.Numbered, OnAir, _lineup.IsFavorite, cmd.Id));
                     continue;
                 }
                 if (cmd?.Cmd == "catalog.get" && Catalog is { } catalog)
@@ -402,14 +402,20 @@ public sealed class RemoteServer : IAsyncDisposable
     /// {"type":"lineup","id":..,"total":N,"channels":[{"number":1,"name":"..","group":"..","favorite":false,"now":".." or null}]}.
     /// At most MaxLineupChannels channels (the first ones), texts cut to a sane length.
     /// </summary>
-    public static string LineupMessage(IReadOnlyList<Channel> channels, Func<Channel, string?>? onAir, Func<string, bool>? isFavorite = null, string? id = null)
+    public static string LineupMessage(IReadOnlyList<Channel> channels, Func<Channel, string?>? onAir, Func<string, bool>? isFavorite = null, string? id = null) =>
+        LineupMessage(channels.Select((c, i) => (i + 1, c)).ToList(), onAir, isFavorite, id);
+
+    /// <summary>The same, with each channel's own (permanent) number.</summary>
+    public static string LineupMessage(IReadOnlyList<(int Number, Channel Channel)> numbered, Func<Channel, string?>? onAir, Func<string, bool>? isFavorite = null, string? id = null)
     {
+        var channels = numbered.Select(x => x.Channel).ToList();
         static string? Cut(string? s, int max) => s is null ? null : s.Length <= max ? s : s[..max];
-        var list = channels.Take(MaxLineupChannels).Select((ch, i) =>
+        var list = numbered.Take(MaxLineupChannels).Select(x =>
         {
+            var (number, ch) = x;
             string? now = null;
             try { now = onAir?.Invoke(ch); } catch { }
-            return new { number = i + 1, id = ch.Id, name = Cut(ch.Name, 80), group = Cut(ch.Group, 40), favorite = isFavorite?.Invoke(ch.Id) ?? false, now = Cut(now, 120) };
+            return new { number, id = ch.Id, name = Cut(ch.Name, 80), group = Cut(ch.Group, 40), favorite = isFavorite?.Invoke(ch.Id) ?? false, now = Cut(now, 120) };
         }).ToList();
         return JsonSerializer.Serialize(new { type = "lineup", id, total = channels.Count, channels = list }, Json);
     }
@@ -422,7 +428,7 @@ public sealed class RemoteServer : IAsyncDisposable
         _ = Task.Run(() =>
         {
             string msg;
-            try { msg = LineupMessage(_lineup.Channels, OnAir, _lineup.IsFavorite); } catch { return; }
+            try { msg = LineupMessage(_lineup.Numbered, OnAir, _lineup.IsFavorite); } catch { return; }
             foreach (var ws in _lineupWatchers.Values) _ = Send(ws, msg);
         });
     }

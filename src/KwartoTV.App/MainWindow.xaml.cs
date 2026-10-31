@@ -229,7 +229,7 @@ public partial class MainWindow : Window, IShell
         CloseWeb(); _tv.Apps.Close();
         // Nothing watched yet: tuning channel 1 opens the player through OnTuned. Opening it here as well started the stream twice.
         if (_tv.Lineup.Current is { } ch) OpenPlayerLive(ch);
-        else _tv.Lineup.TuneNumber(1);
+        else _tv.Lineup.Next();   // the first channel (number 1 may be a gap left by a hidden channel)
     }
 
     /// <summary>

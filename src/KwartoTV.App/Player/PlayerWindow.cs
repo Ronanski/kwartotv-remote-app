@@ -470,7 +470,9 @@ public sealed class PlayerWindow : Window
 
     private void BuildGuideList()
     {
-        var all = _tv.Lineup.Channels;
+        // Each channel with its own (permanent) number.
+        var numbered = _tv.Lineup.Numbered;
+        var all = numbered.Select(x => x.Channel).ToList();
         var name = _guideGroups[_guideGroup];
         var list = new List<(int, Channel)>();
         if (name == SearchGroup)
@@ -484,8 +486,8 @@ public sealed class PlayerWindow : Window
                 var hits = new List<(int, Channel)>();
                 for (int i = 0; i < all.Count; i++)
                 {
-                    var hit = digits ? (i + 1).ToString().StartsWith(q, StringComparison.Ordinal) : all[i].Name.ToLowerInvariant().Replace(" ", "").Contains(squeezed, StringComparison.Ordinal);
-                    if (hit) hits.Add((i + 1, all[i]));
+                    var hit = digits ? numbered[i].Number.ToString().StartsWith(q, StringComparison.Ordinal) : all[i].Name.ToLowerInvariant().Replace(" ", "").Contains(squeezed, StringComparison.Ordinal);
+                    if (hit) hits.Add((numbered[i].Number, all[i]));
                 }
                 // an exact number first ("12" → channel 12 before 120-129)
                 list.AddRange(digits ? hits.OrderBy(h => h.Item1.ToString() == q ? 0 : 1).ThenBy(h => h.Item1) : hits);
@@ -497,7 +499,7 @@ public sealed class PlayerWindow : Window
         {
             var c = all[i];
             if (name == AllGroup || (name == FavoritesGroup && _tv.Lineup.IsFavorite(c.Id))
-                || (_spaceMembers.TryGetValue(name, out var members) ? members.Contains(c.Id) : c.Group == name)) list.Add((i + 1, c));
+                || (_spaceMembers.TryGetValue(name, out var members) ? members.Contains(c.Id) : c.Group == name)) list.Add((numbered[i].Number, c));
         }
         _guideList = list;
     }
