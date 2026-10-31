@@ -86,7 +86,7 @@ fun RemoteScreen(vm: AppViewModel) {
 
     LaunchedEffect(error) {
         error?.let {
-            Toast.makeText(context, if (it == "no such channel") "No such channel" else "Not done: $it", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, if (it == "no such channel") "No such channel" else if (it.startsWith("The TV is locked")) it else "Not done: $it", Toast.LENGTH_SHORT).show()
             client.clearError()
         }
     }
@@ -524,8 +524,8 @@ private fun PowerTab(send: (String, String?) -> Unit) {
     var confirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Screen on", "Turn the TV screen on", Modifier.weight(1f), fontSize = 18, height = 72.dp) { send(Cmd.SCREEN_ON, null) }
-            RemoteKey("Screen off", "Turn the TV screen off", Modifier.weight(1f), fontSize = 18, height = 72.dp) { send(Cmd.SCREEN_OFF, null) }
+            RemoteKey("🔓  Unlock", "Unlock the TV", Modifier.weight(1f), primary = true, fontSize = 18, height = 72.dp) { send(Cmd.SCREEN_ON, null) }
+            RemoteKey("🔒  Lock · clock", "Lock the TV and show the clock", Modifier.weight(1f), fontSize = 18, height = 72.dp) { send(Cmd.SCREEN_OFF, null) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("Sleep PC", "Put the whole PC to sleep", Modifier.weight(1f), fontSize = 18, height = 72.dp) { confirm = Cmd.SLEEP to "Put the whole TV PC to sleep?" }

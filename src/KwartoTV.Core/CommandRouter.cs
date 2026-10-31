@@ -33,6 +33,19 @@ public sealed class CommandRouter
         "scan.start", "scan.stop", "catalog.choose", "catalog.favorite", "catalog.choosegroup",
     };
 
+    // While the TV is locked (clock screen) only these work: unlock, power, and volume.
+    private static readonly HashSet<string> AllowedWhileLocked = new()
+    {
+        "power.screenon", "power.screenoff", "power.sleep", "power.shutdown", "power.restart",
+        "media.volup", "media.voldown", "media.volume", "media.mute",
+    };
+
+    /// <summary>The message a phone gets for a button pressed while the TV is locked.</summary>
+    public const string LockedMessage = "The TV is locked. Unlock it on the phone: Power → Unlock.";
+
+    /// <summary>True while the TV shows its lock screen. Set by the shell.</summary>
+    public Func<bool>? IsLocked { get; set; }
+
     private readonly ChannelLineup _lineup;
     private readonly IHostActions _host;
     private readonly Func<DateTimeOffset> _clock;
@@ -49,6 +62,8 @@ public sealed class CommandRouter
         if (c.Arg is { Length: > 64 } && !(c.Cmd == "playlist.add" && c.Arg.Length <= 1024)) return new(false, "bad argument");
         if (c.Cmd == "playlist.add" && !AppSettings.IsHttpsUrl(c.Arg ?? "") && !(Uri.TryCreate(c.Arg, UriKind.Absolute, out var pu) && M3uParser.IsStreamUri(pu) && pu.Scheme != "file"))
             return new(false, "bad link");
+
+        if (!AllowedWhileLocked.Contains(c.Cmd) && IsLocked?.Invoke() == true) return new(false, LockedMessage);
 
         switch (c.Cmd)
         {

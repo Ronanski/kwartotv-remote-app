@@ -147,8 +147,8 @@ dialog::backdrop{background:#000a}
     </section>
     <section id="t-power">
       <div class="grid g2">
-        <button class="btn" data-cmd="power.screenon">🖥 <small>Screen on</small></button>
-        <button class="btn" data-cmd="power.screenoff">⬛ <small>Screen off</small></button>
+        <button class="btn" data-cmd="power.screenon" aria-label="Unlock the TV">🔓 <small>Unlock</small></button>
+        <button class="btn" data-cmd="power.screenoff" aria-label="Lock the TV and show the clock">🔒 <small>Lock · clock</small></button>
         <button class="btn" data-cmd="power.sleep" data-confirm="Put the TV PC to sleep?">🌙 <small>Sleep</small></button>
         <button class="btn danger" data-cmd="power.restart" data-confirm="Restart the TV PC?">↻ <small>Restart</small></button>
         <button class="btn danger" data-cmd="power.shutdown" data-confirm="Shut down the TV PC? You will need to switch it on by hand." style="grid-column:span 2">⏻ <small>Shut down</small></button>
@@ -182,7 +182,7 @@ function connect(){
   s.onopen=()=>{opened=true;retry=0;failedOpens=0;setStatus(true,'connected')};
   s.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}
     if(m.type==='state'){$('#chNum').textContent=m.number>0?m.number:'–';$('#chName').textContent=m.channel?m.channel.name:'No channel yet'}
-    else if(m.type==='ack'){const p=pending.get(m.id);pending.delete(m.id);if(!m.ok)toast(m.error==='no such channel'?'No such channel':'Not done: '+(m.error||'error'))}};
+    else if(m.type==='ack'){const p=pending.get(m.id);pending.delete(m.id);if(!m.ok)toast(m.error==='no such channel'?'No such channel':/^The TV is locked/.test(m.error||'')?m.error:'Not done: '+(m.error||'error'))}};
   s.onclose=ev=>{
     if(s!==ws)return;
     if(ev.code===1008){forget('This device was removed on the TV.');return}

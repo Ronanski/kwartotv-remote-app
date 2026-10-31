@@ -27,6 +27,10 @@ public interface IShell
     bool PlayerStop();
     /// <summary>The phone's channel finder: scan.start/stop, catalog.choose/choosegroup/favorite.</summary>
     void Finder(string cmd, string? arg);
+    /// <summary>True while the clock lock screen is up (power.screenoff = lock, power.screenon = unlock).</summary>
+    bool ScreenIsOff { get; }
+    void ScreenOff();
+    void ScreenOn();
 }
 
 /// <summary>Windows implementation of IHostActions: navigation keys, media keys, volume, text, apps and power.</summary>
@@ -85,8 +89,8 @@ public sealed class WindowsHostActions : IHostActions
 
             case "power.sleep": PowerActions.Sleep(); return;
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.
-            case "power.screenoff": Native.ScreenOff(ui.Invoke(() => shell.WindowHandle)); return;
-            case "power.screenon": Native.WakeScreen(); return;
+            case "power.screenoff": ui.Invoke(shell.ScreenOff); return;
+            case "power.screenon": ui.Invoke(shell.ScreenOn); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;
         }

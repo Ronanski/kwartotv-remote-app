@@ -33,6 +33,8 @@ public partial class MainWindow : Window, IShell
         InitializeComponent();
         _tv = new TvServices(_host);
         _host.Attach(this);
+        // While the clock lock screen is up, the remote can only unlock it (and use volume and power).
+        _tv.Router.IsLocked = () => _locked;
 
         foreach (var (label, action) in new (string, Action)[] { ("Home", GoHome), ("Live TV", ShowLiveTv), ("Library", ShowLibrary), ("Settings", ShowSettings) })
         {
@@ -46,6 +48,7 @@ public partial class MainWindow : Window, IShell
         // behind it gets activated (a click, a notification closing), hand the focus straight back.
         Activated += (_, _) =>
         {
+            if (_lock is { } locked) { Dispatcher.BeginInvoke(() => locked.Activate()); return; }
             if (_player is { IsVisible: true } p) Dispatcher.BeginInvoke(() => { p.Activate(); p.Focus(); });
             else if (_web is { IsVisible: true } w) Dispatcher.BeginInvoke(() => w.Activate());
         };
@@ -429,6 +432,44 @@ public partial class MainWindow : Window, IShell
     public bool PlayerSpeed(double speed) => _player is { IsVisible: true } p && p.SetSpeed(speed);
     public bool PlayerStop() { if (_player is not { IsVisible: true } p) return false; GoHome(); return true; }
 
+    // ---------- lock screen (the remote's "Lock"): a calm clock, and the TV is locked until the phone unlocks it
+
+    private LockScreenWindow? _lock;
+    private volatile bool _locked;
+    public bool ScreenIsOff => _locked;
+
+    /// <summary>
+    /// Shows the clock screensaver and locks the TV: keys, clicks and remote buttons do nothing until Unlock on the
+    /// phone (volume, mute and power still work). Sound keeps playing.
+    /// </summary>
+    public void ScreenOff()
+    {
+        if (_lock is not null) return;
+        AppPaths.LogLine("screen: locked (clock)");
+        CloseDialog(); HideKeyboard();
+        _locked = true;
+        var l = new LockScreenWindow();
+        _lock = l;
+        l.Show();
+        l.Activate();
+        // The PC must not go to sleep behind the clock (the phone could not reach it to unlock), and the clock stays on screen.
+        Native.KeepAwake(true);
+    }
+
+    public void ScreenOn()
+    {
+        var l = _lock; _lock = null; _locked = false;
+        Native.KeepAwake(false);
+        Native.WakeScreen();
+        if (l is null) return;
+        try { l.Unlock(); } catch { }
+        AppPaths.LogLine("screen: unlocked");
+        // Give the keyboard back to what is on screen.
+        if (_player is { IsVisible: true } p) { p.Activate(); p.Focus(); }
+        else if (_web is { IsVisible: true } w) w.Activate();
+        else { Native.BringToFront(Handle); Activate(); }
+    }
+
     public void Finder(string cmd, string? arg)
     {
         ChannelFinder.TryParseToggle(arg, out var on, out var value);
@@ -583,6 +624,13 @@ public partial class MainWindow : Window, IShell
         if (e.Key is Key.Escape or Key.BrowserBack)
         {
             GoBack();
+            e.Handled = true;
+            return;
+        }
+        // Ctrl+L on a PC keyboard locks the TV with the clock (only the phone unlocks it).
+        if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control && Keyboard.FocusedElement is not TextBox)
+        {
+            ScreenOff();
             e.Handled = true;
             return;
         }

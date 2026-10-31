@@ -267,6 +267,18 @@ Check (($hl2.Count - $before) -ge 3) "Bilibili: arrow keys move the TV highlight
 Keys "{F1}"
 Start-Sleep -Seconds 2
 
+# Lock screen: Ctrl+L shows the clock and locks the TV; keys on the PC must not get past it (only the phone unlocks).
+Keys "^l"
+Start-Sleep -Seconds 3
+Shot "34-lock-screen-clock"
+Keys "{ESC}"; Keys "{F1}"; Keys "{ENTER}"
+Start-Sleep -Seconds 1
+Shot "35-lock-screen-after-keys"
+$lockLog = @(Get-Content (Join-Path $data "log.txt"))
+$lockAt = [array]::LastIndexOf($lockLog, ($lockLog | Where-Object { $_ -match "screen: locked" } | Select-Object -Last 1))
+Check ($lockAt -ge 0) "Ctrl+L locks the TV with the clock"
+Check (-not ($lockLog | Select-Object -Skip ($lockAt + 1) | Where-Object { $_ -match "page: |screen: unlocked" })) "keys on the PC do not get past the lock screen"
+
 $log = Join-Path $data "log.txt"
 if (Test-Path $log) { Write-Host "---- app log ----"; Get-Content $log; Check (-not (Select-String -Path $log -Pattern "UI error|Fatal|Task error" -Quiet)) "no errors in the app log" } else { Check $true "no errors in the app log (no log file)" }
 

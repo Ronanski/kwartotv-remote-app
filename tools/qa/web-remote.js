@@ -97,7 +97,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await page.click('#dlgNo'); await wait(300);
   check(!hostLog().slice(b5).includes('power.shutdown'), 'cancel does not shut down');
   await page.click('[data-cmd="power.screenoff"]'); await wait(300);
-  check(hostLog().slice(b5).includes('HOST power.screenoff'), 'screen off needs no confirmation');
+  check(hostLog().slice(b5).includes('HOST power.screenoff'), 'lock (clock) needs no confirmation');
 
   // reload keeps the pairing
   await page.reload(); await page.waitForFunction(() => document.querySelector('#status').textContent === 'connected');

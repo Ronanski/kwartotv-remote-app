@@ -897,6 +897,22 @@ Check(DohResolver.ParseAnswer("{}").Count == 0 && DohResolver.ParseAnswer("junk"
     Check(fAck.GetProperty("ok").GetBoolean() && fHost.Last == "catalog.choose:1:abc123", "ws catalog.choose reaches the TV");
 }
 
+// ---- lock screen: while locked only unlock, power and volume get through
+{
+    var lockHost = new FakeHost();
+    var lockLineup = new ChannelLineup(); lockLineup.Load(parsed); lockLineup.TuneNumber(1);
+    bool locked = true;
+    var lockRouter = new CommandRouter(lockLineup, lockHost) { IsLocked = () => locked };
+    var navLocked = lockRouter.Handle(new("1", "nav.up", null));
+    Check(!navLocked.Ok && navLocked.Error == CommandRouter.LockedMessage && lockHost.Last == "", "locked: arrows do nothing and say how to unlock");
+    Check(!lockRouter.Handle(new("2", "channel.next", null)).Ok && lockLineup.CurrentNumber == 1, "locked: channels do not change");
+    Check(!lockRouter.Handle(new("3", "catalog.choose", "1:abc")).Ok && !lockRouter.Handle(new("3b", "app.youtube", null)).Ok, "locked: apps and the finder wait too");
+    Check(lockRouter.Handle(new("4", "media.volup", null)).Ok && lockHost.Last == "media.volup:", "locked: volume still works");
+    Check(lockRouter.Handle(new("5", "power.screenon", null)).Ok && lockHost.Last == "power.screenon:", "locked: unlock gets through");
+    locked = false;
+    Check(lockRouter.Handle(new("6", "nav.up", null)).Ok, "unlocked: everything works again");
+}
+
 Console.WriteLine($"{pass} passed, {fail} failed");
 return fail == 0 ? 0 : 1;
 

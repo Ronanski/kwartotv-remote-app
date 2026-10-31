@@ -49,6 +49,7 @@ internal static class Native
     [DllImport("user32.dll")] private static extern void SwitchToThisWindow(IntPtr hWnd, bool altTab);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("powrprof.dll")] private static extern bool SetSuspendState(bool hibernate, bool forceCritical, bool disableWakeEvent);
+    [DllImport("kernel32.dll")] private static extern uint SetThreadExecutionState(uint flags);
 
     public static IntPtr Foreground => GetForegroundWindow();
     public static uint ForegroundProcessId() { GetWindowThreadProcessId(GetForegroundWindow(), out var pid); return pid; }
@@ -114,15 +115,28 @@ internal static class Native
         SendInput(1, new[] { w }, Marshal.SizeOf<Input>());
     }
 
-    /// <summary>A 1px mouse nudge wakes a monitor that was switched off.</summary>
+    private const uint WmSysCommand = 0x0112;
+    private static readonly IntPtr HwndBroadcast = (IntPtr)0xFFFF, ScMonitorPower = (IntPtr)0xF170;
+    private const uint EsSystemRequired = 0x1, EsDisplayRequired = 0x2, EsContinuous = 0x80000000;
+
+    /// <summary>
+    /// Turns the screens on: says the display is needed (that alone switches it on), asks every window to power the
+    /// monitor on, and nudges the mouse a few pixels (a 1 px move is often swallowed by pointer acceleration).
+    /// </summary>
     public static void WakeScreen()
     {
-        var move = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { dx = 1, dwFlags = MouseMove } } };
-        var back = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { dx = -1, dwFlags = MouseMove } } };
+        SetThreadExecutionState(EsDisplayRequired);
+        PostMessage(HwndBroadcast, WmSysCommand, ScMonitorPower, (IntPtr)(-1));
+        var move = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { dx = 8, dy = 8, dwFlags = MouseMove } } };
+        var back = new Input { type = InputMouse, u = new InputUnion { mi = new MouseInput { dx = -8, dy = -8, dwFlags = MouseMove } } };
         SendInput(2, new[] { move, back }, Marshal.SizeOf<Input>());
     }
 
-    public static void ScreenOff(IntPtr ownWindow) => PostMessage(ownWindow, 0x0112, (IntPtr)0xF170, (IntPtr)2);
+    /// <summary>
+    /// While the lock screen is up the PC must stay awake (asleep it drops off the Wi-Fi and the phone cannot unlock it),
+    /// and the display stays on to show the clock. Call on the UI thread (the request belongs to the thread).
+    /// </summary>
+    public static void KeepAwake(bool on) => SetThreadExecutionState(on ? EsContinuous | EsSystemRequired | EsDisplayRequired : EsContinuous);
 
     public static void Sleep() => SetSuspendState(false, true, false);
 
