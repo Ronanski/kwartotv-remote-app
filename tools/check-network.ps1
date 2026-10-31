@@ -1,5 +1,5 @@
 # KwartoTV network check. Run on the TV PC in PowerShell **as Administrator**:
-#   irm https://raw.githubusercontent.com/Ronanski/game-dev-era/ccr-a4b86001-rhkx9c/tools/check-network.ps1 | iex
+#   irm https://raw.githubusercontent.com/Ronanski/kwartotv-remote-app/main/tools/check-network.ps1 | iex
 # It finds why a phone cannot reach the TV, fixes what it can, and prints a verdict.
 $ErrorActionPreference = "SilentlyContinue"
 $port = 8765

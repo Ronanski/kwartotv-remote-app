@@ -1,5 +1,5 @@
 # Why do no channels load? Run on the TV PC (normal PowerShell is fine):
-#   irm https://raw.githubusercontent.com/Ronanski/game-dev-era/ccr-a4b86001-rhkx9c/tools/check-iptv.ps1 | iex
+#   irm https://raw.githubusercontent.com/Ronanski/kwartotv-remote-app/main/tools/check-iptv.ps1 | iex
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 function Say($c, $t) { Write-Host $t -ForegroundColor $c }

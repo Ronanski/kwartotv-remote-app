@@ -11,10 +11,10 @@ public sealed record UpdateInfo(int Build, string Version, UpdateFile Exe, Updat
 public static class Updates
 {
     /// <summary>Update manifest published with every build (see .github/workflows/build.yml).</summary>
-    public const string ManifestUrl = "https://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV-update.json";
+    public const string ManifestUrl = "https://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV-update.json";
 
     /// <summary>Files are only ever downloaded from this project's own releases.</summary>
-    public const string AllowedPrefix = "https://github.com/Ronanski/game-dev-era/releases/download/";
+    public const string AllowedPrefix = "https://github.com/Ronanski/kwartotv-remote-app/releases/download/";
 
     // Checked on the parsed address, the one actually downloaded: "../" in the text would otherwise lead out of this project.
     public static bool IsAllowedUrl(string? url) =>

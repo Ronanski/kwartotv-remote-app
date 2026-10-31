@@ -24,7 +24,7 @@ public static class ResilientHttp
             DefaultProxyCredentials = CredentialCache.DefaultCredentials,
         };
         var http = new HttpClient(handler) { Timeout = overall ?? TimeSpan.FromSeconds(120) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("KwartoTV/1.0 (+https://github.com/Ronanski/game-dev-era)");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("KwartoTV/1.0 (+https://github.com/Ronanski/kwartotv-remote-app)");
         return http;
     }
 

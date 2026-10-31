@@ -65,8 +65,8 @@ class ProtocolTest {
 
 class UpdateTest {
     private val h = "a".repeat(64)
-    private fun manifest(url: String = "https://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV-Remote.apk", sha: String = h) =
-        """{"build":42,"version":"1.0.42","exe":{"url":"https://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV.exe","sha256":"$h"},"apk":{"url":"$url","sha256":"$sha","versionCode":42},"notes":"x"}"""
+    private fun manifest(url: String = "https://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV-Remote.apk", sha: String = h) =
+        """{"build":42,"version":"1.0.42","exe":{"url":"https://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV.exe","sha256":"$h"},"apk":{"url":"$url","sha256":"$sha","versionCode":42},"notes":"x"}"""
 
     @org.junit.Test fun parsesTheManifestTheBuildProduces() {
         val i = Updates.parse(manifest())!!
@@ -80,7 +80,7 @@ class UpdateTest {
 
     @org.junit.Test fun refusesOtherHostsHttpAndBadChecksum() {
         org.junit.Assert.assertNull(Updates.parse(manifest(url = "https://evil.example/a.apk")))
-        org.junit.Assert.assertNull(Updates.parse(manifest(url = "http://github.com/Ronanski/game-dev-era/releases/download/latest/a.apk")))
+        org.junit.Assert.assertNull(Updates.parse(manifest(url = "http://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/a.apk")))
         org.junit.Assert.assertNull(Updates.parse(manifest(sha = "xyz")))
         org.junit.Assert.assertNull(Updates.parse("{}")); org.junit.Assert.assertNull(Updates.parse("junk")); org.junit.Assert.assertNull(Updates.parse(null))
     }

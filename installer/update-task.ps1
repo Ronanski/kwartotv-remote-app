@@ -38,8 +38,8 @@ try {
     Get-Process -Name KwartoTV -ErrorAction SilentlyContinue | Stop-Process -Force
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $manifestUrl = 'https://github.com/Ronanski/game-dev-era/releases/download/latest/KwartoTV-update.json'
-    $prefix = 'https://github.com/Ronanski/game-dev-era/releases/download/'
+    $manifestUrl = 'https://github.com/Ronanski/kwartotv-remote-app/releases/download/latest/KwartoTV-update.json'
+    $prefix = 'https://github.com/Ronanski/kwartotv-remote-app/releases/download/'
     $m = Invoke-RestMethod -Uri $manifestUrl -UseBasicParsing -TimeoutSec 60
     # Checked on the parsed address, the one actually downloaded ("../" cannot lead out of this project's releases).
     $url = ([Uri]$m.exe.url).AbsoluteUri
