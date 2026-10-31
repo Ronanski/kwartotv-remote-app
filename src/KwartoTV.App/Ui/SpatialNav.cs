@@ -48,6 +48,13 @@ public static class SpatialNav
             if (inDirection) scored.Add((el, primary, secondary));
         }
         if (scored.Count == 0) return null;
+        // Left/Right stays on the same row when anything is there (the top bar's Power button sits far right, past the
+        // cards below; it must be reachable with ▶ from the tabs, not lost to a nearer card one row down).
+        if (key is Key.Left or Key.Right)
+        {
+            var sameRow = scored.Where(s => RectOf(s.El, scope) is { } rr && rr.Top < c.Bottom - 2 && c.Top < rr.Bottom - 2).ToList();
+            if (sameRow.Count > 0) scored = sameRow;
+        }
         // The nearest row/column first (like a TV), then the control most in line with the current one.
         double nearest = scored.Min(s => s.Primary);
         return scored.Where(s => s.Primary <= nearest + 40).OrderBy(s => s.Secondary).ThenBy(s => s.Primary).First().El;
