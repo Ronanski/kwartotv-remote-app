@@ -60,7 +60,8 @@ for ($i = 0; $i -lt 20 -and -not $p; $i++) { Start-Sleep -Seconds 1; $p = Get-Pr
 Start-Sleep -Seconds 8
 Check ($null -ne $p -and -not $p.HasExited) "app is running as a normal (non-admin) user"
 $task = Get-ScheduledTask -TaskName "KwartoTV Update" -ErrorAction SilentlyContinue
-Check ($null -ne $task -and $task.Principal.RunLevel -eq "Highest" -and $task.Actions[0].Arguments -match "update-task\.ps1") "the installer made the 'KwartoTV Update' task (highest privileges, runs update-task.ps1)"
+# Per-user installs update with no permission prompt, so the old admin update task is not needed (and not made).
+Check ($null -eq $task) "no admin update task: updates of a per-user install need no permission"
 if (-not $p) { throw "KwartoTV did not start" }
 
 $base = $null
