@@ -43,7 +43,7 @@ public sealed class LockScreenWindow : Window
     private readonly KwartoTV.Core.AppSettings _settings;
     private readonly TextBlock _verse = new() { FontSize = 24, FontStyle = FontStyles.Italic, FontWeight = FontWeights.Light, Foreground = Soft, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, LineHeight = 34 };
     private readonly TextBlock _verseRef = new() { FontSize = 16, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Accent), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) };
-    private readonly StackPanel _verseBox = new() { MaxWidth = 1100, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(60, 0, 60, 92) };
+    private readonly StackPanel _verseBox = new() { MaxWidth = 1100, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(60, 18, 60, 0) };
     private string? _shownVerse;
     // Photo slideshow: two layers that cross-fade, under a dark veil so the clock stays easy to read.
     private readonly Image _photoA = new() { Stretch = Stretch.UniformToFill, Opacity = 0 }, _photoB = new() { Stretch = Stretch.UniformToFill, Opacity = 0 };
@@ -97,7 +97,15 @@ public sealed class LockScreenWindow : Window
         photos.Children.Add(_photoA); photos.Children.Add(_photoB);
         root.Children.Add(photos);
         root.Children.Add(new Border { Background = new LinearGradientBrush(Color.FromArgb(0x99, 0, 0, 0), Color.FromArgb(0xD9, 0, 0, 0), 90) });
-        root.Children.Add(row); root.Children.Add(_verseBox); root.Children.Add(hint);
+        // Clock and calendar on top (shrunk to fit a small window), the verse under them, the hint at the bottom: they
+        // never overlap, whatever the window size.
+        var stack = new Grid { Margin = new Thickness(0, 30, 0, 70) };
+        stack.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        stack.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var fit = new Viewbox { Child = row, StretchDirection = StretchDirection.DownOnly, Margin = new Thickness(40, 0, 40, 0) };
+        stack.Children.Add(fit);
+        Grid.SetRow(_verseBox, 1); stack.Children.Add(_verseBox);
+        root.Children.Add(stack); root.Children.Add(hint);
         Content = root;
 
         _tick.Tick += (_, _) => Draw();

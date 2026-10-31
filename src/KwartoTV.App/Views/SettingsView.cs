@@ -159,17 +159,28 @@ public sealed class SettingsView : PageBase
     private static FrameworkElement ItemRow(string title, string? sub, params (string Label, Action Do, bool Danger)[] actions)
     {
         var g = new Grid();
-        g.ColumnDefinitions.Add(new ColumnDefinition());
+        g.ColumnDefinitions.Add(new ColumnDefinition { MinWidth = 260 });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeights.SemiBold });
-        if (sub is not null) text.Children.Add(UiKit.Dimmed(sub, 16));
+        // One line each, cut with "…" (a long link wrapped into many lines next to the buttons).
+        if (sub is not null)
+            foreach (var part in SplitSource(sub))
+                text.Children.Add(new TextBlock { Text = part, FontSize = 16, Foreground = UiKit.B("Dim"), TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis });
         g.Children.Add(text);
         var btns = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (label, act, danger) in actions) btns.Children.Add(UiKit.ActionButton(label, act, danger));
         Grid.SetColumn(btns, 1);
         g.Children.Add(btns);
         return new Border { Background = UiKit.B("Surface"), BorderBrush = UiKit.B("Hairline"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(16), Padding = new Thickness(24, 14, 14, 2), Margin = new Thickness(0, 10, 0, 0), Child = g };
+    }
+
+    /// <summary>"info  ·  info  ·  https://… or C:\…": the link or file on a line of its own.</summary>
+    private static IEnumerable<string> SplitSource(string sub)
+    {
+        var i = sub.LastIndexOf("  ·  ", StringComparison.Ordinal);
+        if (i > 0 && sub[(i + 5)..] is var tail && (tail.Contains('/') || tail.Contains('\\'))) return new[] { sub[..i], tail };
+        return new[] { sub };
     }
 
     private void AddWebsite() => Dialogs.Form(Shell, "Add website tile",
