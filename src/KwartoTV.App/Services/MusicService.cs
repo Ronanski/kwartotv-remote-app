@@ -20,19 +20,22 @@ public sealed class MusicService
   function post(o) { try { window.chrome.webview.postMessage(JSON.stringify(o)); } catch (e) {} }
   function click(sel) { var b = document.querySelector(sel); if (b) { b.click(); return true; } return false; }
   function video() { return document.querySelector('video'); }
+  function textOf(sel) { var e = document.querySelector(sel); return e ? (e.innerText || e.textContent || '').trim() : ''; }
   var last = '';
   setInterval(function () {
     // 'Still listening?' must not stop the music behind the lock screen.
     click('ytmusic-you-there-renderer button, ytmusic-you-there-renderer tp-yt-paper-button');
     var v = video(), md = navigator.mediaSession && navigator.mediaSession.metadata;
     var art = md && md.artwork && md.artwork.length ? md.artwork[md.artwork.length - 1].src : '';
-    var s = { type: 'now', title: md ? md.title || '' : '', artist: md ? md.artist || '' : '', art: art, playing: !!(v && !v.paused && !v.ended) };
+    // The player bar shows the song even before the browser's media info is filled in.
+    var barTitle = textOf('ytmusic-player-bar .title'), barBy = textOf('ytmusic-player-bar .byline').split(' \u2022 ')[0];
+    var s = { type: 'now', title: (md && md.title) || barTitle, artist: (md && md.artist) || barBy, art: art, playing: !!(v && !v.paused && !v.ended && v.readyState > 2) };
     var k = JSON.stringify(s); if (k !== last) { last = k; post(s); }
     // A song page that does not start by itself is started (once per song; a pause from the phone is respected).
     if (v && v.paused && !v.ended && location.pathname === '/watch' && window.__kwStarted !== location.search && !window.__kwPaused) {
       window.__kwStarted = location.search; v.play().catch(function (e) { post({ type: 'diag', text: 'play() refused: ' + e }); });
     }
-    if (++ticks % 5 === 0 && ticks <= 40) post({ type: 'diag', text: location.pathname + location.search + ' video=' + (v ? (v.paused ? 'paused' : 'playing') + ' ready=' + v.readyState + (v.error ? ' error=' + v.error.code : '') : 'none') + ' meta=' + (md ? md.title : '-') + ' vis=' + document.visibilityState });
+    if (++ticks % 5 === 0 && ticks <= 40) post({ type: 'diag', text: location.pathname + location.search + ' video=' + (v ? (v.paused ? 'paused' : 'playing') + ' ready=' + v.readyState + (v.error ? ' error=' + v.error.code : '') : 'none') + ' meta=' + (md ? md.title : '-') + ' bar=' + barTitle + ' vis=' + document.visibilityState + ' err=' + (textOf('yt-playability-error-supported-renderers') || textOf('ytmusic-player .error') || textOf('tp-yt-paper-dialog') || '-').slice(0, 160) });
   }, 1000);
   var ticks = 0;
   function texts(col) { try { return col.musicResponsiveListItemFlexColumnRenderer.text.runs.map(function (r) { return r.text; }).join(''); } catch (e) { return ''; } }
