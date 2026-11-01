@@ -82,6 +82,10 @@ object Cmd {
     const val NETFLIX_SKIP = "netflix.skip"
     const val NETFLIX_NEXT = "netflix.next"
     const val NETFLIX_SEARCH = "netflix.search"
+    /** Asks for Netflix's Audio & Subtitles lists (the TV answers with "netflix.tracks"). */
+    const val NETFLIX_TRACKS = "netflix.tracks"
+    /** Picks one: "a:<i>" audio, "s:<i>" subtitles. */
+    const val NETFLIX_TRACK = "netflix.track"
     /** An app of the TV's catalog, by id (arg). */
     const val APP_OPEN = "app.open"
 
@@ -144,6 +148,8 @@ sealed interface TvMessage {
     /** The TV saw a phone app release with this build. */
     data class AppUpdate(val versionCode: Long) : TvMessage
     data class MusicFound(val results: MusicResults) : TvMessage
+    /** Netflix's Audio & Subtitles (empty lists: no video playing). */
+    data class NetflixTracksNow(val tracks: NetflixTracks) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -161,10 +167,24 @@ fun parseTvMessage(text: String): TvMessage = try {
         "appupdate" -> TvMessage.AppUpdate(o.optLong("versionCode"))
         "fg" -> TvMessage.Foreground(o.optString("app").take(40))
         "music.results" -> TvMessage.MusicFound(parseMusicResults(o))
+        "netflix.tracks" -> TvMessage.NetflixTracksNow(NetflixTracks(parseTracks(o, "audio"), parseTracks(o, "subs")))
         else -> TvMessage.Unknown
     }
 } catch (_: Exception) {
     TvMessage.Unknown
+}
+
+/** One audio or subtitle choice of the Netflix video on the TV. */
+data class NetflixTrack(val index: Int, val name: String, val on: Boolean)
+data class NetflixTracks(val audio: List<NetflixTrack>, val subs: List<NetflixTrack>)
+
+private fun parseTracks(o: JSONObject, key: String): List<NetflixTrack> {
+    val a = o.optJSONArray(key) ?: return emptyList()
+    return (0 until minOf(a.length(), 40)).mapNotNull { k ->
+        val t = a.optJSONObject(k) ?: return@mapNotNull null
+        val i = t.optInt("i", -1)
+        if (i !in 0..99) null else NetflixTrack(i, t.optString("n").take(60).ifBlank { "Track ${i + 1}" }, t.optBoolean("on"))
+    }
 }
 
 /** One row of the TV's channel list, as the phone shows it. [now] is "Programme  ·  8:00–9:00 PM" or null. */

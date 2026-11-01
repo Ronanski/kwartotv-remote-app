@@ -196,6 +196,12 @@ public static class TvWebScript
     if (!cur) return false;
     var row = cur.closest('.lolomoRow,.rowContainer,[data-list-context],.slider,.scroll-wrap');
     if (!row) return false;
+    // Already at the first (or last) title of the row: there is nothing to page to.
+    var all = Array.prototype.filter.call(row.querySelectorAll(SEL), function (el) { return meaningful(el) && !el.closest('.handle,.handleNext,.handlePrev'); });
+    all = all.filter(function (el) { return !all.some(function (o) { return o !== el && o.contains(el); }); });
+    var at = all.indexOf(cur);
+    if (at === 0 && dir === 'left') return false;
+    if (at === all.length - 1 && dir === 'right') return false;
     var h = row.querySelector(dir === 'right' ? '.handleNext,.handle.next,.scroll-wrap__btn.next,[aria-label*=""next"" i],[aria-label*=""more titles"" i]' : '.handlePrev,.handle.prev,.scroll-wrap__btn.prev,[aria-label*=""previous"" i]');
     if (!h || h.disabled || h.getAttribute('aria-disabled') === 'true' || /disabled/i.test(String(h.className))) return false;
     h.click();
@@ -210,6 +216,29 @@ public static class TvWebScript
       });
       if (best) focus(best);
     }, 750);
+    return true;
+  }
+  // In a sliding row (Netflix and the like) Left/Right go to the next title in the row's own order, like a TV app:
+  // when that title is off screen (or under the row's arrow), the row slides first and the highlight lands on it.
+  var ROWS = '.lolomoRow,.rowContainer,[data-list-context],.slider,.scroll-wrap';
+  function rowStep(dir) {
+    if (!cur) return false;
+    var row = cur.closest(ROWS);
+    if (!row) return false;
+    var cards = Array.prototype.filter.call(row.querySelectorAll(SEL), function (el) { return meaningful(el) && !el.closest('.handle,.handleNext,.handlePrev'); });
+    cards = cards.filter(function (el) { return !cards.some(function (o) { return o !== el && o.contains(el); }); });
+    var i = cards.indexOf(cur);
+    if (i < 0) for (var k = 0; k < cards.length; k++) if (cards[k].contains(cur) || cur.contains(cards[k])) { i = k; break; }
+    if (i < 0) return false;
+    var next = cards[i + (dir === 'right' ? 1 : -1)];
+    if (!next) return false;
+    var r = rectOf(next);
+    if (r.width > 0 && r.left >= 0 && r.right <= window.innerWidth && !covered(next)) { focus(next); return true; }
+    var h = row.querySelector(dir === 'right' ? '.handleNext,.handle.next,.scroll-wrap__btn.next,[aria-label*=""next"" i],[aria-label*=""more titles"" i]' : '.handlePrev,.handle.prev,.scroll-wrap__btn.prev,[aria-label*=""previous"" i]');
+    if (h && !h.disabled && h.getAttribute('aria-disabled') !== 'true') h.click();
+    else try { next.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (x) { }
+    cur = next;
+    setTimeout(function () { if (cur === next) focus(next); }, 650);
     return true;
   }
   function typing(el) { return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable); }
@@ -346,7 +375,8 @@ public static class TvWebScript
   }
 
   // Highlight something as soon as a screen or a pop-up appears, so the remote works right away.
-  var lastScope = null, lastPath = '', stash = null;
+  // Start from the page as it is: the first check must not mistake the start for a page change (it moved the highlight back).
+  var lastScope = document, lastPath = location.pathname, stash = null;
   setInterval(function () {
     try {
       addCss(); siteClasses();
@@ -419,6 +449,7 @@ public static class TvWebScript
     if (dir) {
       if (typing(t) && (dir === 'left' || dir === 'right')) return;
       e.preventDefault(); e.stopImmediatePropagation();
+      if ((dir === 'left' || dir === 'right') && rowStep(dir)) { edgeEl = null; return; }
       var n = pick(dir);
       if (n) { focus(n); edgeEl = null; }
       else if (dir === 'left') {

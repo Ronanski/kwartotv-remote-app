@@ -427,6 +427,19 @@ try {
     Phone "nav.down" $null $null 5 "arrows work on the YouTube Music screen" $null
     Phone "app.bilibili" $null "page: Bilibili" 10 "Bilibili opens its TV screen" "42-phone-bilibili"
     Start-Sleep -Seconds 8
+    # The phone's keyboard: Search, OK on the box (the TV keyboard opens), type on the phone, Enter, then Search.
+    Phone "nav.ok" $null $null 5 "OK on Bilibili's Search" $null
+    Start-Sleep -Seconds 1
+    Phone "nav.ok" $null "keyboard: box waiting" 8 "OK on the search box opens the TV keyboard" $null
+    Phone "key.text" "hello" "keyboard: typed 5 into the box" 5 "letters typed on the phone go into the TV's box" "42b-phone-typed"
+    Phone "key.backspace" $null $null 5 "phone backspace" $null
+    Phone "key.text" "o" "keyboard: typed 1 into the box" 5 "more letters after a backspace" $null
+    Phone "key.enter" $null "keyboard: enter into the box" 5 "phone Enter finishes the box" $null
+    Start-Sleep -Seconds 1
+    Phone "nav.ok" $null 'bilibili: search "hello"' 15 "the typed text is searched" "42c-phone-search"
+    Phone "nav.home" $null "home" 10 "Home after the search" $null
+    Phone "app.bilibili" $null "page: Bilibili" 10 "Bilibili again" $null
+    Start-Sleep -Seconds 3
     Phone "nav.down" $null $null 5 "arrow down to the Bilibili rows" $null
     Phone "nav.ok" $null "bilibili: play" 15 "OK on a Bilibili show plays it" "43-phone-bilibili-play"
     Phone "nav.back" $null "web: closed web-bilibili" 15 "Back from a Bilibili show returns to the rows" "44-phone-bilibili-back"
@@ -437,12 +450,18 @@ try {
     Phone "app.netflix" $null "web: open Netflix" 10 "Netflix opens" $null
     Start-Sleep -Seconds 6
     Phone "netflix.search" "stranger things" "netflix: search" 10 "Netflix search from the phone" "45b-phone-netflix-search"
+    Phone "netflix.tracks" $null "netflix: tracks" 10 "Audio & Subtitles asked from the phone (answers even with no video)" $null
+    Phone "netflix.track" "s:0" "netflix: subtitles 0" 10 "a subtitle pick from the phone reaches Netflix" $null
     Phone "nav.home" $null "web: closed netflix" 10 "Home button leaves Netflix" $null
     Phone "app.open" "primevideo" "app: Prime Video" 10 "More apps: Prime Video opens" $null
     Phone "nav.home" $null "home" 10 "Home button leaves Prime Video" $null
     Phone "app.settings" $null "page: Settings" 10 "Settings opens" "46-phone-settings"
     Phone "nav.down" $null $null 5 "arrows in Settings" $null
     Phone "nav.back" $null "page: Home|home" 10 "Back from Settings goes Home" $null
+    Phone "music.play" "dQw4w9WgXcQ" "page: Music" 10 "a song picked on the phone shows the TV's YouTube Music screen" "47b-phone-music-screen"
+    $fgMsg = WsReceiveUntil "fg" 5
+    Warn ($null -ne $fgMsg -and $fgMsg.app -eq "Music") "phone: the phone is told the TV shows YouTube Music ($(if ($fgMsg) { $fgMsg.app }))"
+    Phone "music.stop" $null "music: stopped" 10 "music stops from the phone" $null
     # CI machines have no sound card, so volume is reported, not required.
     $v = WsCmd "media.volup" $null; Warn ($null -ne $v -and $v.ok) "phone: volume up ($(if ($v) { $v.error }))"
     $v = WsCmd "media.voldown" $null; Warn ($null -ne $v -and $v.ok) "phone: volume down ($(if ($v) { $v.error }))"

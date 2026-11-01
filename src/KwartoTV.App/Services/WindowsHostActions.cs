@@ -45,7 +45,7 @@ public interface IShell
     void Music(string cmd, string? arg);
     /// <summary>Play/pause, next or previous for the music (locked TV, or nothing else playing). False: not for the music.</summary>
     bool MusicMediaKey(string cmd);
-    /// <summary>Netflix's own player: netflix.skip, netflix.next, netflix.search.</summary>
+    /// <summary>Netflix's own player: netflix.skip, netflix.next, netflix.search, netflix.tracks (Audio &amp; Subtitles), netflix.track.</summary>
     void Netflix(string cmd, string? arg);
     void ScreenOff();
     void ScreenOn();
@@ -78,6 +78,13 @@ public sealed class WindowsHostActions : IHostActions
         // The remote's keys are sent as key presses, and Windows gives key presses to the window in front. On a PC that
         // is also used for other things (a laptop with the TV as a second screen), that may be another program: put
         // KwartoTV in front first, so arrows, OK, Back, typing and play/pause always reach it.
+        // Typing from the phone goes straight into the box the TV waits on (its on-screen keyboard is up).
+        if (cmd is "key.text" or "key.backspace" or "key.enter" && ui.Invoke(() => KwartoTV.App.Ui.TextBridge.Key(cmd, arg)))
+        {
+            if (cmd != "key.backspace") AppPaths.LogLine(cmd == "key.enter" ? "keyboard: enter into the box" : $"keyboard: typed {arg!.Length} into the box");
+            return;
+        }
+
         if ((cmd.StartsWith("nav.", StringComparison.Ordinal) || cmd.StartsWith("key.", StringComparison.Ordinal) || cmd is "media.playpause" or "media.next" or "media.prev" or "media.stop" or "media.seek")
             && ui.Invoke(shell.EnsureInFront))
             Thread.Sleep(60);   // let the switch finish before the key goes out
@@ -123,6 +130,7 @@ public sealed class WindowsHostActions : IHostActions
             case "mouse.scroll":
                 Native.MouseScroll(-int.Parse(arg!, CultureInfo.InvariantCulture)); return;
             case "key.text":
+                AppPaths.LogLine($"keyboard: typed {arg!.Length} as keys");
                 Native.TypeText(arg!); return;
 
             case "web.signin": ui.Invoke(() => shell.SignInFromPhone(arg!)); return;
@@ -144,7 +152,7 @@ public sealed class WindowsHostActions : IHostActions
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.
             case "power.screenoff": ui.Invoke(shell.ScreenOff); return;
             case "power.screenon": ui.Invoke(shell.ScreenOn); return;
-            case "netflix.skip" or "netflix.next" or "netflix.search": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
+            case "netflix.skip" or "netflix.next" or "netflix.search" or "netflix.tracks" or "netflix.track": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
             case "power.timer": ui.Invoke(() => shell.SleepTimer(int.Parse(arg!, CultureInfo.InvariantCulture))); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;

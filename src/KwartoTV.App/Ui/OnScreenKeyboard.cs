@@ -169,7 +169,7 @@ public sealed class OnScreenKeyboard : Border
         Build();
         Refresh();
         // While this keyboard is up, the phones can type into the same box (see TextBridge).
-        Loaded += (_, _) => { _target.Changed -= Refresh; _target.Changed += Refresh; Refresh(); TextBridge.Begin(_target, purpose, title); };
+        Loaded += (_, _) => { _target.Changed -= Refresh; _target.Changed += Refresh; Refresh(); TextBridge.Begin(_target, purpose, title, () => Finish(submit: true)); };
         Unloaded += (_, _) => { _target.Changed -= Refresh; TextBridge.End(_target); };
     }
 

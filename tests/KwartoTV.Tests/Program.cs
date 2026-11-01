@@ -456,6 +456,15 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     var mh2 = new FakeHost(); var mr2 = new CommandRouter(new ChannelLineup(), mh2) { IsLocked = () => true };
     var nh = new FakeHost(); var nr = new CommandRouter(new ChannelLineup(), nh);
     Check(nr.Handle(new(null, "netflix.search", "stranger things")).Ok && nh.Last == "netflix.search:stranger things" && nr.Handle(new(null, "netflix.skip", null)).Ok && nr.Handle(new(null, "netflix.next", null)).Ok && !nr.Handle(new(null, "netflix.search", " ")).Ok, "netflix: skip, next and search from the phone");
+    Check(nr.Handle(new(null, "netflix.tracks", null)).Ok && nr.Handle(new(null, "netflix.track", "s:2")).Ok && nh.Last == "netflix.track:s:2" && nr.Handle(new(null, "netflix.track", "a:0")).Ok
+        && !nr.Handle(new(null, "netflix.track", "x:1")).Ok && !nr.Handle(new(null, "netflix.track", "s:-1")).Ok && !nr.Handle(new(null, "netflix.track", "s:100")).Ok && !nr.Handle(new(null, "netflix.track", null)).Ok,
+        "netflix: Audio & Subtitles lists and picks from the phone (bad picks refused)");
+    {
+        var tm = NetflixTracks.Message("{\"via\":\"menu\",\"audio\":[{\"i\":0,\"n\":\"English [Original]\",\"on\":true},{\"i\":1,\"n\":\"Japanese\\u0007\",\"on\":false}],\"subs\":[{\"i\":0,\"n\":\"\",\"on\":true},{\"i\":\"x\"}]}");
+        Check(tm is not null && tm.Contains("\"type\":\"netflix.tracks\"") && tm.Contains("\"n\":\"English [Original]\",\"on\":true") && tm.Contains("\"n\":\"Japanese\",\"on\":false") && tm.Contains("\"n\":\"Track 1\"") && !tm.Contains("via"),
+            "netflix: track lists are cleaned for the phone (" + tm + ")");
+        Check(NetflixTracks.Message("{\"audio\":[],\"subs\":[]}") is null && NetflixTracks.Message("nope") is null && NetflixTracks.Message(null) is null, "netflix: no lists, no message");
+    }
     Check(mr2.Handle(new(null, "power.timer", "30")).Ok && mh2.Last == "power.timer:30" && !mr2.Handle(new(null, "power.timer", "999")).Ok && !mr2.Handle(new(null, "power.timer", "x")).Ok, "sleep timer works while locked, bad values refused");
     Check(new AppSettings().ScreensaverMinutes == 10 && AppSettings.DescribeScreensaver(0) == "Off" && AppSettings.ScreensaverChoices.Contains(0), "screensaver after 10 idle minutes by default, can be turned off");
     Check(mr2.Handle(new(null, "music.search", "Ben&Ben")).Ok && mh2.Last == "music.search:Ben&Ben", "music: search works while the TV is locked");

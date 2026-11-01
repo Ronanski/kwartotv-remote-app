@@ -11,6 +11,7 @@ import com.kwartotv.remote.toggleArg
 import com.kwartotv.remote.Lineup
 import com.kwartotv.remote.MusicResults
 import com.kwartotv.remote.MusicState
+import com.kwartotv.remote.NetflixTracks
 import com.kwartotv.remote.SavedTv
 import com.kwartotv.remote.TvMessage
 import com.kwartotv.remote.commandJson
@@ -92,6 +93,12 @@ class RemoteClient {
     private val _tvApp = MutableStateFlow("")
     /** What the TV shows now ("netflix", "youtube", "live", "Home"…). */
     val tvApp: StateFlow<String> = _tvApp
+
+    private val _netflixTracks = MutableStateFlow<NetflixTracks?>(null)
+    /** Netflix's Audio & Subtitles, after the phone asked (null: not asked yet / waiting). */
+    val netflixTracks: StateFlow<NetflixTracks?> = _netflixTracks
+    /** Asks the TV for Netflix's Audio & Subtitles. */
+    fun askNetflixTracks(): Boolean { _netflixTracks.value = null; return send(Cmd.NETFLIX_TRACKS, null) }
 
     private val _tvSeesApk = MutableStateFlow(0L)
     /** The newest phone app build the TV knows of (0: none yet). The app looks for that update right away. */
@@ -198,6 +205,7 @@ class RemoteClient {
                         is TvMessage.MusicNow -> _music.value = m.music
                         is TvMessage.AppUpdate -> _tvSeesApk.value = m.versionCode
                         is TvMessage.Foreground -> _tvApp.value = m.app
+                        is TvMessage.NetflixTracksNow -> _netflixTracks.value = m.tracks
                         is TvMessage.MusicFound -> { _musicResults.value = m.results; _musicSearching.value = false }
                         is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
                             ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)

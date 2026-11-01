@@ -74,6 +74,18 @@ public sealed class WebAppWindow : Window
         catch { return "none"; }
     }
 
+    /// <summary>A Netflix call that answers with a JSON text (NetflixControl tracks()); null when there is none.</summary>
+    public async Task<string?> NetflixTextAsync(string call)
+    {
+        if (Kind != ForegroundKind.Netflix || _web.CoreWebView2 is not { } core) return null;
+        try
+        {
+            var r = await core.ExecuteScriptAsync("window.__kwNetflix ? window.__kwNetflix." + call + " : null");
+            return System.Text.Json.JsonSerializer.Deserialize<string?>(r);
+        }
+        catch { return null; }
+    }
+
     /// <summary>A page finished loading (its address).</summary>
     public event Action<string>? Navigated;
 

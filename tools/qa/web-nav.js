@@ -127,6 +127,42 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
   check(r3 === 'player' && calls.includes('seek 610000') && calls.includes('seek 580000'), `netflix: +10 s / -30 s seek the player, never the video element (${calls.filter(c => c.startsWith('seek'))})`);
   check(rs === 'clicked' && calls.includes('skip intro clicked'), 'netflix: Skip intro from the phone skips it');
   check(r5 === 'clicked' && calls.includes('next clicked'), 'netflix: next episode');
+  // Audio & Subtitles, like the Netflix TV app's menu: from the player when it has the lists, else from Netflix's own menu.
+  const t = await browser.newPage();
+  await t.route('https://www.netflix.com/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }));
+  await t.goto('https://www.netflix.com/watch/81234567');
+  await t.evaluate(() => {
+    const A = [{ trackId: 'a1', displayName: 'English [Original]' }, { trackId: 'a2', displayName: 'Japanese' }];
+    const T = [{ trackId: 'n', isNoneTrack: true, displayName: 'Off' }, { trackId: 't1', displayName: 'English' }, { trackId: 't2', displayName: 'Filipino' }];
+    const p = window.__tp = { a: A[0], t: T[0], getAudioTrackList: () => A, getTextTrackList: () => T, getAudioTrack() { return this.a; }, getTextTrack() { return this.t; },
+      setAudioTrack(x) { this.a = x; }, setTextTrack(x) { this.t = x; } };
+    window.netflix = { appContext: { state: { playerApp: { getAPI: () => ({ videoPlayer: { getAllPlayerSessionIds: () => ['watch-1'], getVideoPlayerBySessionId: () => p } }) } } } };
+  });
+  await t.evaluate(nscript);
+  const tr1 = JSON.parse(await t.evaluate(() => window.__kwNetflix.tracks()));
+  check(tr1.via === 'player' && tr1.audio.map(x => x.n).join() === 'English [Original],Japanese' && tr1.audio[0].on && tr1.subs.map(x => x.n).join() === 'Off,English,Filipino' && tr1.subs[0].on,
+    `netflix: audio and subtitle lists from the player (${JSON.stringify(tr1)})`);
+  await t.evaluate(() => { window.__kwNetflix.setTrack('s', 2); window.__kwNetflix.setTrack('a', 1); });
+  const tr2 = JSON.parse(await t.evaluate(() => window.__kwNetflix.tracks()));
+  check(tr2.subs[2].on && !tr2.subs[0].on && tr2.audio[1].on, `netflix: picking Filipino subtitles and Japanese audio sets them (${JSON.stringify(tr2)})`);
+  const m = await browser.newPage();
+  await m.route('https://www.netflix.com/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }));
+  await m.goto('https://www.netflix.com/watch/81234567');
+  await m.evaluate(() => {
+    window.__picked = [];
+    document.body.innerHTML = '<button data-uia="control-audio-subtitle" id="menu">AS</button><div id="panel"></div>';
+    document.getElementById('menu').onclick = () => { document.getElementById('panel').innerHTML =
+      '<li data-uia="audio-item-selected">English</li><li data-uia="audio-item">Spanish</li>' +
+      '<li data-uia="subtitle-item-selected">Off</li><li data-uia="subtitle-item">English (CC)</li>';
+      document.querySelectorAll('#panel li').forEach(li => li.onclick = () => window.__picked.push(li.textContent)); };
+  });
+  await m.evaluate(nscript);
+  const tm = JSON.parse(await m.evaluate(() => window.__kwNetflix.tracks()));
+  check(tm.via === 'menu' && tm.audio.map(x => x.n).join() === 'English,Spanish' && tm.audio[0].on && tm.subs.map(x => x.n).join() === 'Off,English (CC)' && tm.subs[0].on,
+    `netflix: without the player lists, Netflix's own Audio & Subtitles menu is read (${JSON.stringify(tm)})`);
+  await m.evaluate(() => window.__kwNetflix.setTrack('s', 1));
+  check((await m.evaluate(() => window.__picked)).join() === 'English (CC)', 'netflix: picking from the menu clicks Netflix\'s own item');
+
   await n.evaluate(() => window.__kwNetflix.search('stranger things'));
   await n.waitForTimeout(800);
   check(n.url() === 'https://www.netflix.com/search?q=stranger%20things', `netflix: search from the phone opens the results (${n.url()})`);

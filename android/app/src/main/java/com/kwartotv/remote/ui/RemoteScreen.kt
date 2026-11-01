@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.SettingsRemote
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -206,6 +207,17 @@ fun RemoteScreen(vm: AppViewModel) {
                         DropdownMenuItem(text = { Text("Forget ${tv.name}") }, onClick = { menu = false; vm.forget(tv) })
                     }
                 }
+                // Lock / screensaver, always in sight (the TV says when it is locked).
+                val tvNow by vm.client.tvApp.collectAsState()
+                val locked = tvNow == "locked"
+                Row(
+                    Modifier.clip(RoundedCornerShape(20.dp)).background(if (locked) Accent else Card).border(1.dp, Hairline, RoundedCornerShape(20.dp))
+                        .clickable { send(if (locked) Cmd.SCREEN_ON else Cmd.SCREEN_OFF, null) }.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, null, tint = if (locked) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                    Text(if (locked) "  Unlock" else "  Lock", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (locked) Color.White else MaterialTheme.colorScheme.onSurface)
+                }
                 Icon(Icons.Rounded.MoreVert, "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(40.dp).clip(CircleShape).clickable { menu = true }.padding(8.dp))
             }
@@ -284,6 +296,12 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
                 RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_SKIP, null) }
                 RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_NEXT, null) }
             }
+            // Audio & Subtitles, like the menu of the Netflix TV app.
+            var tracksOpen by remember { mutableStateOf(false) }
+            RemoteKey("Audio & Subtitles", "Choose the audio language and subtitles", Modifier.fillMaxWidth(), fontSize = 15, height = 48.dp, icon = Icons.Rounded.Subtitles) {
+                vm.client.askNetflixTracks(); tracksOpen = true
+            }
+            if (tracksOpen) NetflixTracksDialog(vm, send) { tracksOpen = false }
             var nq by rememberSaveable { mutableStateOf("") }
             OutlinedTextField(
                 value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -297,6 +315,43 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
             RemoteKey("", "Mute", Modifier.weight(1f), height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
             RemoteKey("", "Volume up", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
+    }
+}
+
+@Composable
+private fun NetflixTracksDialog(vm: AppViewModel, send: (String, String?) -> Unit, close: () -> Unit) {
+    val tracks by vm.client.netflixTracks.collectAsState()
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text("Audio & Subtitles") },
+        text = {
+            val t = tracks
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                when {
+                    t == null -> Text("Asking Netflix on the TV…")
+                    t.audio.isEmpty() && t.subs.isEmpty() -> Text("Play a video on Netflix first.")
+                    else -> {
+                        if (t.audio.isNotEmpty()) SectionLabel("Audio")
+                        t.audio.forEach { a -> TrackRow(a) { send(Cmd.NETFLIX_TRACK, "a:${a.index}") } }
+                        if (t.subs.isNotEmpty()) SectionLabel("Subtitles")
+                        t.subs.forEach { a -> TrackRow(a) { send(Cmd.NETFLIX_TRACK, "s:${a.index}") } }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = close) { Text("Done") } },
+    )
+}
+
+@Composable
+private fun TrackRow(t: com.kwartotv.remote.NetflixTrack, pick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = pick)
+            .background(if (t.on) Accent.copy(alpha = 0.16f) else Color.Transparent).padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (t.on) "✓" else "", Modifier.width(24.dp), color = Accent, fontWeight = FontWeight.Bold)
+        Text(t.name, fontSize = 16.sp, fontWeight = if (t.on) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 

@@ -19,20 +19,42 @@ public static class TextBridge
     /// <summary>The message for the box waiting now, or null.</summary>
     public static string? Pending { get; private set; }
 
-    public static void Begin(ITextTarget target, string? purpose, string? title)
+    private static Action? _finish;
+
+    /// <summary>[finish]: what the keyboard's Done / Go does (the phone's Enter does the same).</summary>
+    public static void Begin(ITextTarget target, string? purpose, string? title, Action? finish = null)
     {
-        _target = target;
+        _target = target; _finish = finish;
         _kind = TextRequest.KindFor(target.Secret, purpose);
         _title = title;
         Pending = TextRequest.Message(true, _kind, _title, target.Text);
+        KwartoTV.App.Services.AppPaths.LogLine($"keyboard: box waiting ({_kind})");
         Changed?.Invoke(Pending);
     }
 
     public static void End(ITextTarget target)
     {
         if (!ReferenceEquals(target, _target)) return;
-        _target = null; Pending = null;
+        _target = null; _finish = null; Pending = null;
         Changed?.Invoke(TextRequest.Message(false));
+    }
+
+    /// <summary>
+    /// The phone's keyboard tab, letter by letter: straight into the waiting box (not as key presses, which go to the
+    /// focused key of the on-screen keyboard). False when no box is waiting (then they go out as key presses).
+    /// </summary>
+    public static bool Key(string cmd, string? text)
+    {
+        var t = _target;
+        if (t is null) return false;
+        switch (cmd)
+        {
+            case "key.text": if (string.IsNullOrEmpty(text)) return false; t.Insert(text); break;
+            case "key.backspace": t.Backspace(); break;
+            case "key.enter": if (_finish is { } f) f(); else t.Submit(); break;
+            default: return false;
+        }
+        return true;
     }
 
     /// <summary>Puts [text] in the waiting box (replacing what was there) and presses Go when [submit]. False when no box is waiting.</summary>
@@ -42,7 +64,7 @@ public static class TextBridge
         if (t is null) return false;
         t.Clear();
         if (text.Length > 0) t.Insert(text);
-        if (submit) t.Submit();
+        if (submit) { if (_finish is { } f) f(); else t.Submit(); }
         return true;
     }
 }

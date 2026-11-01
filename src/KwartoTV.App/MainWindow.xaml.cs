@@ -614,7 +614,35 @@ public partial class MainWindow : Window, IShell
             return;
         }
         if (w is null) { ShowToast("Open Netflix first."); return; }
+        if (cmd == "netflix.tracks") { _ = SendNetflixTracksAsync(w, 0); return; }
+        if (cmd == "netflix.track")
+        {
+            if (!NetflixTracks.TryParsePick(arg, out var kind, out var i)) return;
+            _ = PickNetflixTrackAsync(w, kind, i);
+            return;
+        }
         _ = NetflixAsync(w, cmd == "netflix.next" ? "next()" : "skip()");
+    }
+
+    private async Task PickNetflixTrackAsync(WebAppWindow w, char kind, int i)
+    {
+        var r = await w.NetflixAsync($"setTrack('{kind}', {i})");
+        AppPaths.LogLine($"netflix: {(kind == 'a' ? "audio" : "subtitles")} {i} -> {r}");
+        await SendNetflixTracksAsync(w, 600);
+    }
+
+    /// <summary>Netflix's Audio &amp; Subtitles lists to the phones (Netflix's menu opens on its own: asked again after a moment).</summary>
+    private async Task SendNetflixTracksAsync(WebAppWindow w, int delayMs)
+    {
+        if (delayMs > 0) await Task.Delay(delayMs);
+        string? msg = null;
+        for (var attempt = 0; attempt < 3 && msg is null; attempt++)
+        {
+            if (attempt > 0) await Task.Delay(700);
+            msg = NetflixTracks.Message(await w.NetflixTextAsync("tracks()"));
+        }
+        AppPaths.LogLine("netflix: tracks " + (msg is null ? "none" : "sent"));
+        _tv.Server?.Broadcast(msg ?? "{\"type\":\"netflix.tracks\",\"audio\":[],\"subs\":[]}");
     }
     public bool PlayerSpeed(double speed) => _player is { IsVisible: true } p && p.SetSpeed(speed);
     public bool PlayerStop() { if (_player is not { IsVisible: true } p) return false; GoHome(); return true; }
@@ -697,7 +725,8 @@ public partial class MainWindow : Window, IShell
 
     /// <summary>What the TV shows now, for the phone (it shows the buttons that fit, e.g. Netflix's).</summary>
     private string ForegroundName() =>
-        _player is { IsVisible: true } ? "live"
+        _locked ? "locked"
+        : _player is { IsVisible: true } ? "live"
         : _web is { IsVisible: true } w ? (w.Kind == ForegroundKind.Netflix ? "netflix" : w.Kind == ForegroundKind.YouTube ? "youtube" : w.ProfileName)
         : _tv.Apps.IsRunning ? _tv.Apps.Kind.ToString().ToLowerInvariant() : _currentName;
 
@@ -838,7 +867,12 @@ public partial class MainWindow : Window, IShell
             case "music.prev": m.Previous(); break;
             case "music.stop": m.Stop(); break;
             case "music.search": m.Search(arg!.Trim()); break;
-            case "music.play": m.Play(arg!); break;
+            case "music.play":
+                m.Play(arg!);
+                // Like YouTube Music on a real TV: a song picked on the phone shows on the TV's YouTube Music screen
+                // (behind the lock screen it only plays; the lock screen shows the song).
+                if (!_locked) LaunchYouTubeMusic();
+                break;
             case "music.signin": OpenYouTubeMusic(signIn: true); break;
             case "music.home":
                 // The phone's Music tab opened with nothing searched yet: YouTube Music's Quick picks.

@@ -19,7 +19,38 @@ public static class NetflixControl
     } catch (e) { return null; }
   }
   function click(sel) { var b = document.querySelector(sel); if (b) { b.click(); return true; } return false; }
+  // Audio and subtitles: from the player when it offers them, otherwise from Netflix's own Audio & Subtitles menu.
+  var MENU = '[data-uia=""control-audio-subtitle""]', AUDIO = '[data-uia^=""audio-item""]', SUBS = '[data-uia^=""subtitle-item""]';
+  function name(x, i) { return (x && (x.displayName || x.language || x.bcp47)) || ('Track ' + (i + 1)); }
+  function lists() {
+    var p = player();
+    if (p && p.getAudioTrackList && p.getTextTrackList) {
+      try {
+        var a = p.getAudioTrackList() || [], t = p.getTextTrackList() || [], ca = p.getAudioTrack && p.getAudioTrack(), ct = p.getTextTrack && p.getTextTrack();
+        return { via: 'player',
+          audio: a.map(function (x, i) { return { i: i, n: name(x, i), on: !!ca && ca.trackId === x.trackId }; }),
+          subs: t.map(function (x, i) { return { i: i, n: x && x.isNoneTrack ? 'Off' : name(x, i), on: !!ct && ct.trackId === x.trackId }; }) };
+      } catch (e) { }
+    }
+    if (!document.querySelector(AUDIO)) click(MENU);
+    function rows(sel) { return Array.prototype.map.call(document.querySelectorAll(sel), function (el, i) {
+      return { i: i, n: (el.innerText || el.textContent || '').trim().slice(0, 60) || ('Track ' + (i + 1)), on: /selected/i.test((el.getAttribute('data-uia') || '') + ' ' + el.className) }; }); }
+    return { via: 'menu', audio: rows(AUDIO), subs: rows(SUBS) };
+  }
   window.__kwNetflix = {
+    tracks: function () { return JSON.stringify(lists()); },
+    setTrack: function (kind, i) {
+      var p = player();
+      if (p && p.getAudioTrackList && p.getTextTrackList) {
+        try { if (kind === 'a') p.setAudioTrack(p.getAudioTrackList()[i]); else p.setTextTrack(p.getTextTrackList()[i]); return 'player'; } catch (e) { }
+      }
+      var sel = kind === 'a' ? AUDIO : SUBS;
+      if (!document.querySelector(sel)) click(MENU);
+      var items = document.querySelectorAll(sel);
+      if (!items[i]) return 'none';
+      items[i].click();
+      return 'menu';
+    },
     toggle: function () {
       var p = player();
       if (p) { if (p.isPaused()) p.play(); else p.pause(); return 'player'; }
