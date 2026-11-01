@@ -89,6 +89,10 @@ class RemoteClient {
     /** Hands a sign-in made on the phone to the TV. False when not connected. */
     fun sendSignIn(service: String, cookies: String): Boolean = send(Cmd.SIGN_IN, "$service|${cookies.take(12000)}")
 
+    private val _tvSeesApk = MutableStateFlow(0L)
+    /** The newest phone app build the TV knows of (0: none yet). The app looks for that update right away. */
+    val tvSeesApk: StateFlow<Long> = _tvSeesApk
+
     private val _music = MutableStateFlow(MusicState(false, false, "", "", null))
     /** What YouTube Music on the TV is playing. */
     val music: StateFlow<MusicState> = _music
@@ -188,6 +192,7 @@ class RemoteClient {
                         is TvMessage.TextWanted -> _textRequest.value = m.request
                         is TvMessage.SignInWanted -> _signIn.value = m.request
                         is TvMessage.MusicNow -> _music.value = m.music
+                        is TvMessage.AppUpdate -> _tvSeesApk.value = m.versionCode
                         is TvMessage.MusicFound -> { _musicResults.value = m.results; _musicSearching.value = false }
                         is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
                             ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)

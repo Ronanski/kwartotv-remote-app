@@ -17,6 +17,8 @@ public sealed class Updater
     public static string CurrentVersion => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.0.0";
 
     public UpdateInfo? Available { get; private set; }
+    /// <summary>The newest release seen by the last check (newer or not): its APK build is told to the phones.</summary>
+    public UpdateInfo? Latest { get; private set; }
     public string? LastError { get; private set; }
 
     /// <summary>Returns the update when a newer build exists, otherwise null.</summary>
@@ -28,6 +30,7 @@ public sealed class Updater
             var json = await Http.GetStringAsync(Updates.ManifestUrl, cts.Token);
             var info = Updates.Parse(json);
             LastError = info is null ? "The update information could not be read." : null;
+            if (info is not null) Latest = info;
             Available = info is not null && Updates.IsNewer(info, CurrentBuild) ? info : null;
         }
         catch (Exception ex) { LastError = "Could not check for updates: " + ex.Message; Available = null; }

@@ -69,6 +69,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         checkForUpdate(manual = false)
+        // The TV tells the phone when a newer phone app is out: look for it right away.
+        viewModelScope.launch {
+            client.tvSeesApk.collect { code ->
+                if (code > updater.installedVersionCode() && update.value is UpdateState.None) checkForUpdate(manual = false)
+            }
+        }
         // While the app is on screen, look again every 5 minutes.
         viewModelScope.launch {
             while (true) {

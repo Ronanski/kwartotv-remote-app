@@ -112,6 +112,8 @@ public partial class MainWindow : Window, IShell
         {
             _lastUpdateCheck = DateTime.UtcNow;
             await _tv.Updater.CheckAsync();
+            // The phones update too: tell them the newest phone app build, so they look for it right away.
+            if (_tv.Updater.Latest is { Apk.VersionCode: > 0 } latest) _tv.Server?.Broadcast(RemoteServer.PhoneAppUpdateMessage(latest.Apk.VersionCode));
             _current?.Refresh();
         }
         var info = _tv.Updater.Available;

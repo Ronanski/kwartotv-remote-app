@@ -52,6 +52,12 @@ public sealed class RemoteServer : IAsyncDisposable
     /// <summary>The music player's state (Music.StateMessage), sent to a phone when it connects. Null: no music.</summary>
     public Func<string?>? MusicNow { get; set; }
 
+    /// <summary>{"type":"appupdate","versionCode":N}: the newest phone app build, sent when a phone connects. Null: unknown.</summary>
+    public Func<string?>? PhoneAppUpdate { get; set; }
+
+    /// <summary>{"type":"appupdate","versionCode":N}: tells the phones the build of the newest phone app.</summary>
+    public static string PhoneAppUpdateMessage(int versionCode) => JsonSerializer.Serialize(new { type = "appupdate", versionCode }, Json);
+
     /// <summary>A paired phone connected (the TV looks for an update right away). Any thread.</summary>
     public event Action? PhoneConnected;
 
@@ -346,6 +352,7 @@ public sealed class RemoteServer : IAsyncDisposable
         await Send(ws, StateMessage(_lineup.Current, _lineup.CurrentNumber));
         try { if (PendingText?.Invoke() is { } pending) await Send(ws, pending); } catch { }
         try { if (MusicNow?.Invoke() is { } music) await Send(ws, music); } catch { }
+        try { if (PhoneAppUpdate?.Invoke() is { } upd) await Send(ws, upd); } catch { }
 
         var buf = new byte[4096];
         try

@@ -514,7 +514,8 @@ public sealed class TvServices : IDisposable
         foreach (var port in RemoteServer.PortsToTry(Settings.Port))
         {
             var server = new RemoteServer($"http://+:{port}/", Pairing, Router, Lineup) { ServerName = name, OnAir = ch => OnAir(ch).Now, Catalog = CatalogJson, PendingText = () => OnUi(() => KwartoTV.App.Ui.TextBridge.Pending),
-                MusicNow = () => MusicPlayer.State.On ? Music.StateMessage(MusicPlayer.State) : null };
+                MusicNow = () => MusicPlayer.State.On ? Music.StateMessage(MusicPlayer.State) : null,
+                PhoneAppUpdate = () => Updater.Latest is { Apk.VersionCode: > 0 } u ? RemoteServer.PhoneAppUpdateMessage(u.Apk.VersionCode) : null };
             try
             {
                 server.Start();

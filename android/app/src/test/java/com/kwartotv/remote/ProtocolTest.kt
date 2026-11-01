@@ -192,4 +192,9 @@ class LineupTest {
         val r = parseTvMessage("""{"type":"music.results","q":"band","error":false,"items":[{"id":"abcdefghijk","title":"One","artist":"Band"},{"id":"bad","title":"X","artist":""},{"id":"abcdefghijl","title":"","artist":""}]}""")
         assertEquals(TvMessage.MusicFound(MusicResults("band", listOf(MusicTrack("abcdefghijk", "One", "Band")), false)), r)
     }
+
+    @Test
+    fun appUpdateMessage() {
+        assertEquals(TvMessage.AppUpdate(53), parseTvMessage("""{"type":"appupdate","versionCode":53}"""))
+    }
 }

@@ -461,6 +461,7 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
 
 // ---- app catalog
 {
+    Check(RemoteServer.PhoneAppUpdateMessage(53) == "{\"type\":\"appupdate\",\"versionCode\":53}", "the TV tells phones the newest phone app build");
     Check(AppCatalog.All.Select(a => a.Id).Distinct().Count() == AppCatalog.All.Count && AppCatalog.All.All(a => AppSettings.IsHttpsUrl(a.WebUrl)), "catalog: unique ids, https websites");
     var inst = AppCatalog.Installed("[{\"Name\":\"Prime Video for Windows\",\"AppID\":\"AmazonVideo.PrimeVideo_pwbj9vvecjh7j!App\"},{\"Name\":\"Spotify\",\"AppID\":\"SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify\"},{\"Name\":\"3ds Max\",\"AppID\":\"x!y\"},{\"Name\":\"Disney+\",\"AppID\":\"bad&id|calc\"}]");
     Check(inst.Count == 2 && inst["primevideo"] == "AmazonVideo.PrimeVideo_pwbj9vvecjh7j!App" && inst.ContainsKey("spotify"), "catalog: installed apps found by their exact Windows name");
