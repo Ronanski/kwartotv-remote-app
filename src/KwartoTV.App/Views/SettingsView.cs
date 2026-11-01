@@ -99,7 +99,9 @@ public sealed class SettingsView : PageBase
         Body.Children.Add(UiKit.Heading("System"));
         var startup = StartupEnabled();
         Body.Children.Add(Buttons(
-            UiKit.ActionButton(Tv.Settings.NetflixInApp ? "Netflix opens: inside KwartoTV" : "Netflix opens: Microsoft Store app", () => { Tv.Settings.NetflixInApp = !Tv.Settings.NetflixInApp; Tv.SaveSettings(); Refresh(); }),
+            UiKit.ActionButton(Tv.Settings.NetflixPreferApp
+                ? (Tv.InstalledApps.ContainsKey("netflix") ? "Netflix opens: the Netflix app (installed)" : "Netflix opens: the Netflix app when installed (not installed: website)")
+                : "Netflix opens: the website inside KwartoTV", () => { Tv.Settings.NetflixPreferApp = !Tv.Settings.NetflixPreferApp; Tv.Settings.NetflixInApp = true; Tv.SaveSettings(); Refresh(); }),
             UiKit.ActionButton($"YouTube picture: {AppSettings.YouTubeRenderModes[Math.Clamp(Tv.Settings.YouTubeRenderMode, 0, 2)]}", () =>
             {
                 Tv.Settings.YouTubeRenderMode = (Tv.Settings.YouTubeRenderMode + 1) % AppSettings.YouTubeRenderModes.Length;

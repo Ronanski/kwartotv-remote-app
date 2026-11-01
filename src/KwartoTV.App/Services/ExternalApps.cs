@@ -54,7 +54,10 @@ public sealed class ExternalApps
             if (p is null) return new Dictionary<string, string>();
             var output = p.StandardOutput.ReadToEnd();
             if (!p.WaitForExit(20000)) { try { p.Kill(); } catch { } }
-            return AppCatalog.Installed(output);
+            var found = new Dictionary<string, string>(AppCatalog.Installed(output));
+            // The official Netflix app (its id differs between installs).
+            if (NetflixLocator.Find(output) is { } netflix) found["netflix"] = netflix;
+            return found;
         }
         catch { return new Dictionary<string, string>(); }
     }

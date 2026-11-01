@@ -26,6 +26,9 @@ public sealed class AppSettings
     public string? NetflixAppId { get; set; }
     /// <summary>Netflix opens inside KwartoTV (website). Turn off to use the Microsoft Store app instead.</summary>
     public bool NetflixInApp { get; set; } = true;
+
+    /// <summary>Netflix opens the official Windows app (Microsoft Store) when it is installed; otherwise the website inside KwartoTV.</summary>
+    public bool NetflixPreferApp { get; set; } = true;
     /// <summary>Channels that were checked and do not work here (blocked, gone, no video) stay out of the lineup.</summary>
     public bool HideUnavailable { get; set; } = true;
     /// <summary>The lineup holds at most this many channels (0 = all); the first playlists come first.</summary>

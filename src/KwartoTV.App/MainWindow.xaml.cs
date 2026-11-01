@@ -320,6 +320,17 @@ public partial class MainWindow : Window, IShell
 
     public async void LaunchNetflix()
     {
+        // The official Netflix app (Microsoft Store) when it is on this PC: it is made for Netflix and stays signed in.
+        // The phone controls it like a TV remote: arrows/OK, Touchpad or Mouse, Keys for typing, volume.
+        var appId = _tv.InstalledApps.GetValueOrDefault("netflix") ?? _tv.Settings.NetflixAppId;
+        if (_tv.Settings.NetflixPreferApp && appId is not null && NetflixLocatorIsSafe(appId))
+        {
+            AppPaths.LogLine("app: Netflix (official app)");
+            _tv.Apps.Close(); CloseWeb(); PrepareExternal(); _tv.MusicPlayer.Pause();
+            ShowToast("Opening the Netflix app… On the phone: arrows and OK, or the Touchpad. Keys tab to type.");
+            if (!_tv.Apps.LaunchNetflix(appId)) ShowToast(_tv.Apps.LastError ?? "Could not open Netflix.");
+            return;
+        }
         if (_tv.Settings.NetflixInApp)
         {
             // Inside KwartoTV, like YouTube, with TV-style remote navigation (TvWebScript). The phone's Mouse pad still works too.
@@ -410,6 +421,8 @@ public partial class MainWindow : Window, IShell
     {
         if (AppCatalog.Find(id) is { } app) OpenCatalogApp(app);
     }
+
+    private static bool NetflixLocatorIsSafe(string id) => AppCatalog.IsSafeAppId(id);
 
     public void LaunchWeb(WebTile tile)
     {
