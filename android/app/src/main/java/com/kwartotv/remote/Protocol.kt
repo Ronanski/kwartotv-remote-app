@@ -214,7 +214,9 @@ data class SignInRequest(val service: String, val name: String, val page: String
 data class SignInService(val id: String, val name: String, val page: String, val domain: String, val sessionCookie: String, val signedInPaths: List<String>)
 
 val SIGN_IN_SERVICES = mapOf(
-    "netflix" to SignInService("netflix", "Netflix", "https://www.netflix.com/login", "netflix.com", "NetflixId", listOf("/browse", "/profiles", "/youraccount", "/title", "/watch")),
+    // Netflix keeps NetflixId for visitors too, so it counts only once the page is past the sign-in. On a phone Netflix
+    // often goes to its "get the app" or account pages instead of /browse: anything that is not a sign-in/sign-up page.
+    "netflix" to SignInService("netflix", "Netflix", "https://www.netflix.com/login", "netflix.com", "NetflixId", listOf("/browse", "/profiles", "/youraccount", "/account", "/title", "/watch", "/mobile", "/latest", "/search", "/settings")),
     "bilibili" to SignInService("bilibili", "Bilibili", "https://www.bilibili.tv/en/login", "bilibili.tv", "SESSDATA", emptyList()),
 )
 
@@ -228,9 +230,11 @@ fun parseSignIn(o: JSONObject): SignInRequest? {
  * Signed in, from the phone's cookies for the service and the page it is on: the session cookie is set and (for a
  * service that keeps a cookie for visitors too) the page is past the sign-in.
  */
+fun hasSessionCookie(service: SignInService, cookies: String?): Boolean =
+    cookies.orEmpty().split(';').any { it.trim().startsWith(service.sessionCookie + "=") && it.trim().length > service.sessionCookie.length + 1 }
+
 fun isSignedIn(service: SignInService, cookies: String?, url: String?): Boolean {
-    val has = cookies.orEmpty().split(';').any { it.trim().startsWith(service.sessionCookie + "=") && it.trim().length > service.sessionCookie.length + 1 }
-    if (!has) return false
+    if (!hasSessionCookie(service, cookies)) return false
     if (service.signedInPaths.isEmpty()) return true
     val path = runCatching { java.net.URI(url ?: "").path.orEmpty().lowercase() }.getOrDefault("")
     return service.signedInPaths.any { path.contains(it) }

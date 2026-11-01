@@ -180,6 +180,10 @@ class LineupTest {
         assertFalse(isSignedIn(nf, "nfvdid=1; NetflixId=abc", "https://www.netflix.com/login"))
         assertTrue(isSignedIn(nf, "nfvdid=1; NetflixId=abc", "https://www.netflix.com/browse"))
         assertFalse(isSignedIn(nf, "nfvdid=1", "https://www.netflix.com/browse"))
+        // On a phone Netflix often lands on its app or account pages after signing in.
+        assertTrue(isSignedIn(nf, "NetflixId=abc", "https://www.netflix.com/mobile"))
+        assertTrue(isSignedIn(nf, "NetflixId=abc", "https://www.netflix.com/account"))
+        assertTrue(hasSessionCookie(nf, "a=1; NetflixId=abc") && !hasSessionCookie(nf, "NetflixId="))
         val bb = SIGN_IN_SERVICES.getValue("bilibili")
         assertTrue(isSignedIn(bb, "SESSDATA=x; bili_jct=y", "https://www.bilibili.tv/en/"))
         assertFalse(isSignedIn(bb, "buvid3=z", "https://www.bilibili.tv/en/"))

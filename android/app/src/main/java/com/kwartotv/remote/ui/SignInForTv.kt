@@ -34,6 +34,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.kwartotv.remote.AppViewModel
 import com.kwartotv.remote.SIGN_IN_SERVICES
 import com.kwartotv.remote.SignInService
+import com.kwartotv.remote.hasSessionCookie
 import com.kwartotv.remote.isSignedIn
 
 /**
@@ -80,15 +81,25 @@ fun SignInForTv(vm: AppViewModel, manual: String?, onManualDone: () -> Unit) {
                     }
                     TextButton(onClick = { close() }) { Text("Close") }
                 }
-                SignInPage(service) { cookies ->
+                fun send(cookies: String) {
                     if (client.sendSignIn(service.id, cookies)) {
                         Toast.makeText(context, "Signed in. Look at the TV.", Toast.LENGTH_LONG).show()
                         close()
                     } else {
-                        Toast.makeText(context, "Signed in, but the TV is not connected. Reconnecting… then try again.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Signed in, but the TV is not connected. Reconnecting… then press Send to TV again.", Toast.LENGTH_LONG).show()
                         vm.reconnect()
                     }
                 }
+                // Signed in but the TV did not pick it up by itself (the service went to a page we do not know): send it by hand.
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Already signed in?", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        val text = CookieManager.getInstance().getCookie("https://www.${service.domain}")
+                        if (hasSessionCookie(service, text)) send(text.orEmpty())
+                        else Toast.makeText(context, "Not signed in yet. Finish signing in on the page first.", Toast.LENGTH_LONG).show()
+                    }) { Text("Send to TV") }
+                }
+                SignInPage(service) { cookies -> send(cookies) }
             }
         }
     }
@@ -107,17 +118,19 @@ private fun SignInPage(service: SignInService, onSignedIn: (String) -> Unit) {
                 val cookies = CookieManager.getInstance()
                 cookies.setAcceptCookie(true)
                 cookies.setAcceptThirdPartyCookies(this, true)
-                webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView, url: String?) {
-                        super.onPageFinished(view, url)
-                        if (sent) return
-                        val text = cookies.getCookie("https://www.${service.domain}")
-                        if (isSignedIn(service, text, url)) {
-                            sent = true
-                            cookies.flush()
-                            onSignedIn(text.orEmpty())
-                        }
+                fun check(url: String?) {
+                    if (sent) return
+                    val text = cookies.getCookie("https://www.${service.domain}")
+                    if (isSignedIn(service, text, url)) {
+                        sent = true
+                        cookies.flush()
+                        onSignedIn(text.orEmpty())
                     }
+                }
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String?) { super.onPageFinished(view, url); check(url) }
+                    // The sites change pages without loading a new one (single-page apps): look at those too.
+                    override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) { super.doUpdateVisitedHistory(view, url, isReload); check(url) }
                 }
                 loadUrl(service.page)
             }
