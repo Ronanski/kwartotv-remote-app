@@ -383,6 +383,70 @@ try {
     WsSend "music.stop" $null
     WsSend "power.screenon" $null
     Start-Sleep -Seconds 1
+
+    # ---- Full control from the phone: every screen opened, used and left with phone buttons only (no PC keys).
+    function WsCmd($cmd, $arg) {
+        $id = [guid]::NewGuid().ToString("N").Substring(0, 8)
+        $json = @{ id = $id; cmd = $cmd; arg = $arg } | ConvertTo-Json -Compress
+        $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+        $ws.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).Wait(5000) | Out-Null
+        $deadline = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $deadline) {
+            $o = WsReceiveUntil "ack" ([Math]::Max(1, ($deadline - (Get-Date)).TotalSeconds))
+            if ($null -eq $o) { break }
+            if ($o.id -eq $id) { return $o }
+        }
+        return $null
+    }
+    $logPath = Join-Path $data "log.txt"
+    function LogCount { @(Get-Content $logPath -ErrorAction SilentlyContinue).Count }
+    function WaitLog($from, $pattern, $seconds) {
+        $deadline = (Get-Date).AddSeconds($seconds)
+        while ((Get-Date) -lt $deadline) {
+            $hit = @(Get-Content $logPath -ErrorAction SilentlyContinue) | Select-Object -Skip $from | Where-Object { $_ -match $pattern } | Select-Object -First 1
+            if ($hit) { return $hit }
+            Start-Sleep -Milliseconds 500
+        }
+        return $null
+    }
+    function Phone($cmd, $arg, $expect, $seconds, $name, $shot) {
+        $from = LogCount
+        $ack = WsCmd $cmd $arg
+        $hit = if ($expect) { WaitLog $from $expect $seconds } else { "ok" }
+        if ($shot) { Start-Sleep -Seconds 2; Shot $shot }
+        Check ($null -ne $ack -and $ack.ok -and $null -ne $hit) "phone: $name (ack=$(if ($ack) { $ack.ok } else { 'none' }) $(if ($ack -and $ack.error) { $ack.error }) log=$hit)"
+    }
+    Phone "nav.home" $null "home" 10 "Home button goes to Home" $null
+    Phone "app.livetv" $null "player: opening" 25 "Live TV plays a channel" "40-phone-live-tv"
+    Phone "channel.next" $null "player: opening" 25 "channel up changes the channel" $null
+    Phone "nav.home" $null "home" 10 "Home button leaves the player" $null
+    Phone "app.ytmusic" $null "page: Music" 10 "YouTube Music opens its TV screen" "41-phone-youtube-music"
+    Phone "nav.down" $null $null 5 "arrows work on the YouTube Music screen" $null
+    Phone "app.bilibili" $null "page: Bilibili" 10 "Bilibili opens its TV screen" "42-phone-bilibili"
+    Start-Sleep -Seconds 8
+    Phone "nav.down" $null $null 5 "arrow down to the Bilibili rows" $null
+    Phone "nav.ok" $null "bilibili: play" 15 "OK on a Bilibili show plays it" "43-phone-bilibili-play"
+    Phone "nav.back" $null "web: closed web-bilibili" 15 "Back from a Bilibili show returns to the rows" "44-phone-bilibili-back"
+    Phone "app.youtube" $null "web: open YouTube" 10 "YouTube opens" "45-phone-youtube"
+    Start-Sleep -Seconds 10
+    Phone "nav.down" $null $null 5 "arrows inside YouTube" $null
+    Phone "nav.home" $null "web: closed youtube" 10 "Home button leaves YouTube" $null
+    Phone "app.netflix" $null "web: open Netflix" 10 "Netflix opens" $null
+    Phone "nav.home" $null "web: closed netflix" 10 "Home button leaves Netflix" $null
+    Phone "app.open" "primevideo" "app: Prime Video" 10 "More apps: Prime Video opens" $null
+    Phone "nav.home" $null "home" 10 "Home button leaves Prime Video" $null
+    Phone "app.settings" $null "page: Settings" 10 "Settings opens" "46-phone-settings"
+    Phone "nav.down" $null $null 5 "arrows in Settings" $null
+    Phone "nav.back" $null "page: Home|home" 10 "Back from Settings goes Home" $null
+    # CI machines have no sound card, so volume is reported, not required.
+    $v = WsCmd "media.volup" $null; Warn ($null -ne $v -and $v.ok) "phone: volume up ($(if ($v) { $v.error }))"
+    $v = WsCmd "media.voldown" $null; Warn ($null -ne $v -and $v.ok) "phone: volume down ($(if ($v) { $v.error }))"
+    Phone "power.timer" "30" "sleep timer: 30 min" 5 "sleep timer on" $null
+    Phone "power.timer" "0" "sleep timer: off" 5 "sleep timer off" $null
+    Phone "power.screenoff" $null "screen: locked" 10 "Lock shows the clock" $null
+    $locked = WsCmd "nav.ok" $null
+    Check ($null -ne $locked -and -not $locked.ok) "phone: other buttons do nothing while locked ($(if ($locked) { $locked.error }))"
+    Phone "power.screenon" $null "screen: unlocked" 10 "Unlock returns to the TV" "47-phone-unlocked"
 }
 catch { Write-Host "music check error: $_"; Check $false "music check ran" }
 @(Get-Content (Join-Path $data "log.txt") -ErrorAction SilentlyContinue) | Select-Object -Skip $logBefore | Where-Object { $_ -match "music|screen:" } | ForEach-Object { Write-Host "music log: $_" }

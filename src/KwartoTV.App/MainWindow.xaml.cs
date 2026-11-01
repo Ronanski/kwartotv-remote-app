@@ -193,6 +193,7 @@ public partial class MainWindow : Window, IShell
 
     public void GoHome()
     {
+        AppPaths.LogLine("home");
         CloseDialog();
         _player?.Hide();
         CloseWeb();
@@ -466,6 +467,7 @@ public partial class MainWindow : Window, IShell
         // Netflix and Bilibili can be signed in from the phone (PhoneSignIn).
         var signIn = profile == "netflix" ? "netflix" : profile == "web-bilibili" ? "bilibili" : null;
         WebAppWindow.YouTubeRenderMode = _tv.Settings.YouTubeRenderMode;
+        AppPaths.LogLine($"web: open {name} ({profile})");
         var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this, SignInService = playerOnly ? null : signIn, PlayerOnly = playerOnly };
         w.SignedOut += id =>
         {
@@ -492,6 +494,7 @@ public partial class MainWindow : Window, IShell
     {
         var w = _web; _web = null;
         if (w is null) return;
+        AppPaths.LogLine("web: closed " + w.ProfileName);
         try { w.Close(); } catch { }
     }
 
