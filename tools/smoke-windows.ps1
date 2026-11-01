@@ -101,8 +101,8 @@ Check ((Get-Content (Join-Path $data "log.txt") -Raw) -match "page: Settings") "
 Keys "{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}"
 Shot "01c-settings-bottom-by-dpad"
 Keys "{ESC}"
-# down from the top of Home into the channel rows, OK plays the channel
-Keys "{DOWN}{DOWN}"
+# down from the top of Home (apps, then the scan row) into the channel rows, OK plays the channel
+Keys "{DOWN}{DOWN}{DOWN}"
 Shot "01d-channel-row-by-dpad"
 Keys "{ENTER}"
 Start-Sleep -Seconds 6
