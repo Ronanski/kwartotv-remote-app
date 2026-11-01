@@ -47,6 +47,10 @@ public interface IShell
     bool MusicMediaKey(string cmd);
     void ScreenOff();
     void ScreenOn();
+    /// <summary>Closes the screensaver; true when it was up (the button that woke the TV does nothing else).</summary>
+    bool CloseScreensaver();
+    /// <summary>Sleep timer in minutes (0 = off).</summary>
+    void SleepTimer(int minutes);
 }
 
 /// <summary>Windows implementation of IHostActions: navigation keys, media keys, volume, text, apps and power.</summary>
@@ -59,6 +63,11 @@ public sealed class WindowsHostActions : IHostActions
     {
         var shell = _shell ?? throw new InvalidOperationException("shell not ready");
         var ui = Application.Current.Dispatcher;
+
+        // Any button wakes the TV from the screensaver; arrows and OK only wake it (they do not also move or press).
+        if (cmd is not ("power.screenoff" or "power.timer") && !cmd.StartsWith("media.vol", StringComparison.Ordinal) && cmd != "media.mute"
+            && ui.Invoke(shell.CloseScreensaver) && (cmd.StartsWith("nav.", StringComparison.Ordinal) || cmd.StartsWith("key.", StringComparison.Ordinal)))
+            return;
 
         // Play/pause, next and previous are the music's while the TV is locked (the lock screen shows the song) or when
         // nothing else plays on the TV.
@@ -133,6 +142,7 @@ public sealed class WindowsHostActions : IHostActions
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.
             case "power.screenoff": ui.Invoke(shell.ScreenOff); return;
             case "power.screenon": ui.Invoke(shell.ScreenOn); return;
+            case "power.timer": ui.Invoke(() => shell.SleepTimer(int.Parse(arg!, CultureInfo.InvariantCulture))); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;
         }

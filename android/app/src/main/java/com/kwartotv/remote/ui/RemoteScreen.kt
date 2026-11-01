@@ -628,6 +628,15 @@ private fun PowerTab(send: (String, String?) -> Unit) {
             confirm = Cmd.SHUTDOWN to "Shut down the whole TV PC (laptop/computer)? You will need to switch it on by hand."
         }
         Text("These control the whole PC, not only the KwartoTV app.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        // Sleep timer: the TV stops the video and music and shows the clock (locked) when the time is up.
+        SectionLabel("Sleep timer")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val ctx = LocalContext.current
+            listOf(15, 30, 60, 90).forEach { m ->
+                RemoteKey("$m min", "Sleep in $m minutes", Modifier.weight(1f), fontSize = 15, height = 52.dp) { Haptics.click(ctx); send(Cmd.SLEEP_TIMER, m.toString()) }
+            }
+            RemoteKey("Off", "Cancel the sleep timer", Modifier.weight(1f), fontSize = 15, height = 52.dp) { Haptics.click(ctx); send(Cmd.SLEEP_TIMER, "0") }
+        }
     }
     confirm?.let { (cmd, question) ->
         AlertDialog(

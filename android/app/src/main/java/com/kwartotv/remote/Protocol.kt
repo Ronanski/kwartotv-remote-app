@@ -76,6 +76,8 @@ object Cmd {
     const val APP_NETFLIX = "app.netflix"
     const val APP_BILIBILI = "app.bilibili"
     const val APP_YTMUSIC = "app.ytmusic"
+    /** Sleep timer: minutes (0 = off). At the end the TV stops what plays and locks. */
+    const val SLEEP_TIMER = "power.timer"
     /** An app of the TV's catalog, by id (arg). */
     const val APP_OPEN = "app.open"
 

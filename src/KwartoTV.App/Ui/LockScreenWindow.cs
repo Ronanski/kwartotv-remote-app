@@ -79,9 +79,16 @@ public sealed class LockScreenWindow : Window
         _song.Visibility = Visibility.Visible;
     }
 
-    public LockScreenWindow(Window app, KwartoTV.Core.AppSettings settings)
+    /// <summary>Screensaver (not locked): any key, click or remote button closes it.</summary>
+    public bool IsScreensaver { get; }
+
+    /// <summary>The screensaver was closed by a key or a click.</summary>
+    public event Action? Dismissed;
+
+    public LockScreenWindow(Window app, KwartoTV.Core.AppSettings settings, bool screensaver = false)
     {
         _settings = settings;
+        IsScreensaver = screensaver;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; Owner = app;
         Background = Brushes.Black; Cursor = Cursors.None; Title = "KwartoTV locked";
         // Exactly over the KwartoTV window (in screen pixels, as Windows reports it), and again whenever it moves or resizes.
@@ -112,7 +119,7 @@ public sealed class LockScreenWindow : Window
 
         var hint = new TextBlock
         {
-            Text = "🔒  Locked  ·  unlock from KwartoTV Remote on your phone (Power → Unlock)  ·  music: Music tab on the phone",
+            Text = screensaver ? "Press any button to go back" : "🔒  Locked  ·  unlock from KwartoTV Remote on your phone (Power → Unlock)  ·  music: Music tab on the phone",
             FontSize = 17, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, 36), RenderTransform = _drift,
         };
@@ -164,13 +171,23 @@ public sealed class LockScreenWindow : Window
         PreviewKeyDown += (_, e) =>
         {
             e.Handled = true;
+            if (IsScreensaver && e.Key is not (Key.MediaPlayPause or Key.MediaNextTrack or Key.MediaPreviousTrack)) { Dismiss(); return; }
             // Only the PC's media keys get through, to the music.
             var cmd = e.Key switch { Key.MediaPlayPause => "music.playpause", Key.MediaNextTrack => "music.next", Key.MediaPreviousTrack => "music.prev", _ => null };
             if (cmd is not null) MusicKey?.Invoke(cmd);
         };
-        PreviewMouseDown += (_, e) => e.Handled = true;
+        PreviewMouseDown += (_, e) => { e.Handled = true; if (IsScreensaver) Dismiss(); };
         PreviewMouseWheel += (_, e) => e.Handled = true;
         Closing += (_, e) => { if (!_allowClose) e.Cancel = true; };
+    }
+
+    /// <summary>Closes the screensaver (a key, a click or a remote button).</summary>
+    public void Dismiss()
+    {
+        if (!IsScreensaver || _allowClose) return;
+        _allowClose = true;
+        Close();
+        Dismissed?.Invoke();
     }
 
     /// <summary>Closes the lock screen (only the phone's Unlock calls this).</summary>

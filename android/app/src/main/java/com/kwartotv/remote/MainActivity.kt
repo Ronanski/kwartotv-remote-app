@@ -26,6 +26,23 @@ class MainActivity : ComponentActivity() {
     // The "connected to the TV" notification (with play/pause and volume) needs this on Android 13 and later.
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    /**
+     * The phone's own volume buttons turn the TV's volume while the remote is on screen (connected to a TV).
+     * Not connected: they work as usual.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        val cmd = when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_VOLUME_UP -> Cmd.VOL_UP
+            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> Cmd.VOL_DOWN
+            else -> null
+        }
+        if (cmd != null && vm.client.isConnected()) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) vm.client.send(cmd, null)
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

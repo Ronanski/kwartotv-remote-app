@@ -55,6 +55,8 @@ public partial class MainWindow : Window, IShell
             else if (_web is { IsVisible: true } w) Dispatcher.BeginInvoke(() => w.Activate());
         };
         _clock.Tick += (_, _) => UpdateClock(); UpdateClock(); _clock.Start();
+        _idleTimer.Tick += (_, _) => IdleTick(); _idleTimer.Start();
+        PreviewMouseMove += (_, _) => { _lastMouseMove = DateTime.UtcNow; if (Mouse.OverrideCursor is not null) Mouse.OverrideCursor = null; };
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); Toast.Visibility = Visibility.Collapsed; };
         _digits.Tick += (_, _) => _tv.Lineup.Tick(DateTimeOffset.UtcNow);
         _digits.Start();
@@ -611,6 +613,76 @@ public partial class MainWindow : Window, IShell
         return true;
     }
 
+    // ---------- screensaver, sleep timer, mouse pointer (QoL)
+
+    private LockScreenWindow? _saver;
+    private DateTime? _sleepAt;
+    private bool _sleepWarned;
+    private DateTime _lastMouseMove = DateTime.UtcNow, _lastRemote = DateTime.UtcNow;
+    private readonly DispatcherTimer _idleTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+
+    /// <summary>Every second: hide the mouse pointer when it rests, the sleep timer, the screensaver when idle.</summary>
+    private void IdleTick()
+    {
+        if (Mouse.OverrideCursor is null && DateTime.UtcNow - _lastMouseMove > TimeSpan.FromSeconds(3)) Mouse.OverrideCursor = Cursors.None;
+
+        if (_sleepAt is { } at)
+        {
+            var left = at - DateTime.UtcNow;
+            if (left <= TimeSpan.Zero) { _sleepAt = null; SleepNow(); }
+            else if (left <= TimeSpan.FromMinutes(1) && !_sleepWarned) { _sleepWarned = true; ShowToast("Sleep timer: the TV goes to sleep in 1 minute. Set the timer again on the phone to keep watching."); }
+        }
+
+        var minutes = _tv.Settings.ScreensaverMinutes;
+        if (minutes > 0 && _saver is null && _lock is null && !DialogOpen && IsActive
+            && _player is not { IsVisible: true } && _web is not { IsVisible: true } && !_tv.Apps.IsRunning
+            && Native.IdleTime > TimeSpan.FromMinutes(minutes) && DateTime.UtcNow - _lastRemote > TimeSpan.FromMinutes(minutes))
+            ShowScreensaver();
+    }
+
+    private void ShowScreensaver()
+    {
+        AppPaths.LogLine("screen: screensaver");
+        var s = new LockScreenWindow(this, _tv.Settings, screensaver: true);
+        _saver = s;
+        s.SetMusic(_tv.MusicPlayer.State);
+        s.MusicKey += cmd => Music(cmd, null);
+        s.Dismissed += () => { if (ReferenceEquals(_saver, s)) { _saver = null; Activate(); _current?.FocusFirstOrLast(); } };
+        s.Show(); s.Activate();
+    }
+
+    /// <summary>Closes the screensaver if it is up. True when it was (the key that woke it does nothing else).</summary>
+    public bool CloseScreensaver()
+    {
+        // Called for every remote button: the phone counts as someone using the TV (Windows does not see it as input).
+        _lastRemote = DateTime.UtcNow;
+        var s = _saver;
+        if (s is null) return false;
+        _saver = null;
+        try { s.Dismiss(); } catch { }
+        AppPaths.LogLine("screen: screensaver closed");
+        return true;
+    }
+
+    /// <summary>The sleep timer from the phone or the Power menu: in [minutes] the TV stops what plays and locks (0 = off).</summary>
+    public void SleepTimer(int minutes)
+    {
+        _sleepWarned = false;
+        _sleepAt = minutes > 0 ? DateTime.UtcNow.AddMinutes(minutes) : null;
+        AppPaths.LogLine(minutes > 0 ? $"sleep timer: {minutes} min" : "sleep timer: off");
+        ShowToast(minutes > 0 ? $"Sleep timer: {minutes} minutes. Then the TV stops and shows the clock." : "Sleep timer off.");
+    }
+
+    public int SleepMinutesLeft => _sleepAt is { } at ? Math.Max(1, (int)Math.Ceiling((at - DateTime.UtcNow).TotalMinutes)) : 0;
+
+    private void SleepNow()
+    {
+        AppPaths.LogLine("sleep timer: time is up");
+        _tv.MusicPlayer.Stop();
+        GoHome();
+        ScreenOff();
+    }
+
     // ---------- lock screen (the remote's "Lock"): a calm clock, and the TV is locked until the phone unlocks it
 
     private LockScreenWindow? _lock;
@@ -623,6 +695,7 @@ public partial class MainWindow : Window, IShell
     /// </summary>
     public void ScreenOff()
     {
+        CloseScreensaver();
         if (_lock is not null) return;
         AppPaths.LogLine("screen: locked (clock)");
         CloseDialog(); HideKeyboard();
@@ -641,6 +714,7 @@ public partial class MainWindow : Window, IShell
 
     public void ScreenOn()
     {
+        CloseScreensaver();
         var l = _lock; _lock = null; _locked = false;
         Native.KeepAwake(false);
         Native.WakeScreen();

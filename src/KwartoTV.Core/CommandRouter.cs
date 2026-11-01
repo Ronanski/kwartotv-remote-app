@@ -28,7 +28,7 @@ public sealed class CommandRouter
         "key.text", "key.backspace", "key.enter",
         "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
         "app.youtube", "app.netflix", "app.bilibili", "app.ytmusic", "app.open", "app.livetv", "app.library", "app.settings",
-        "power.sleep", "power.screenoff", "power.screenon", "power.shutdown", "power.restart",
+        "power.sleep", "power.screenoff", "power.screenon", "power.shutdown", "power.restart", "power.timer",
         // the phone's channel finder: check every channel, then pick working ones and favorites
         "scan.start", "scan.stop", "catalog.choose", "catalog.favorite", "catalog.choosegroup",
         // text typed on the phone for the text box waiting on the TV ("1:" also presses Go)
@@ -42,7 +42,7 @@ public sealed class CommandRouter
     // While the TV is locked (clock screen) only these work: unlock, power, and volume.
     private static readonly HashSet<string> AllowedWhileLocked = new()
     {
-        "power.screenon", "power.screenoff", "power.sleep", "power.shutdown", "power.restart",
+        "power.screenon", "power.screenoff", "power.sleep", "power.shutdown", "power.restart", "power.timer",
         "media.volup", "media.voldown", "media.volume", "media.mute",
         // play/pause, next, previous: for the music on the lock screen
         "media.playpause", "media.next", "media.prev",
@@ -124,6 +124,9 @@ public sealed class CommandRouter
                 break;
             case "catalog.choosegroup":
                 if (!ChannelFinder.TryParseToggle(c.Arg, out _, out var grp) || grp.Length > 60) return new(false, "bad category");
+                break;
+            case "power.timer":
+                if (!int.TryParse(c.Arg, out var tm) || tm < 0 || tm > 240) return new(false, "bad timer");
                 break;
             case "app.open":
                 if (AppCatalog.Find(c.Arg) is null) return new(false, "unknown app");

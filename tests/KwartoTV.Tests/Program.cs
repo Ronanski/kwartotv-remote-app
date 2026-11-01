@@ -454,6 +454,8 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(msg.Contains("\"type\":\"music.results\"") && msg.Contains("\"id\":\"abcdefghijk\"") && Music.StateMessage(MusicState.Off).Contains("\"on\":false"), "music: messages for the phones");
 
     var mh2 = new FakeHost(); var mr2 = new CommandRouter(new ChannelLineup(), mh2) { IsLocked = () => true };
+    Check(mr2.Handle(new(null, "power.timer", "30")).Ok && mh2.Last == "power.timer:30" && !mr2.Handle(new(null, "power.timer", "999")).Ok && !mr2.Handle(new(null, "power.timer", "x")).Ok, "sleep timer works while locked, bad values refused");
+    Check(new AppSettings().ScreensaverMinutes == 10 && AppSettings.DescribeScreensaver(0) == "Off" && AppSettings.ScreensaverChoices.Contains(0), "screensaver after 10 idle minutes by default, can be turned off");
     Check(mr2.Handle(new(null, "music.search", "Ben&Ben")).Ok && mh2.Last == "music.search:Ben&Ben", "music: search works while the TV is locked");
     Check(mr2.Handle(new(null, "music.play", "abcdefghijk")).Ok && mr2.Handle(new(null, "music.playpause", null)).Ok && mr2.Handle(new(null, "music.next", null)).Ok, "music: play, pause and next work while locked");
     Check(!mr2.Handle(new(null, "music.play", "../../etc")).Ok && !mr2.Handle(new(null, "music.search", "  ")).Ok && !mr2.Handle(new(null, "nav.ok", null)).Ok, "music: bad song ids and empty searches refused; other keys still locked");

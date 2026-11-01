@@ -117,6 +117,13 @@ public sealed class SettingsView : PageBase
         var st = Tv.Settings;
         Body.Children.Add(Buttons(
             UiKit.ActionButton($"Bible verse: {Verses.Describe(st.VerseEveryMinutes)}", () => { st.VerseEveryMinutes = Verses.Next(st.VerseEveryMinutes); Tv.SaveSettings(); Refresh(); }),
+            UiKit.ActionButton($"Screensaver: {AppSettings.DescribeScreensaver(st.ScreensaverMinutes)}", () =>
+            {
+                var c = AppSettings.ScreensaverChoices;
+                var i = Array.IndexOf(c, st.ScreensaverMinutes);
+                st.ScreensaverMinutes = c[(i + 1) % c.Length];
+                Tv.SaveSettings(); Refresh();
+            }),
             UiKit.ActionButton(st.SlideshowOn ? "Photo slideshow: On" : "Photo slideshow: Off", () =>
             {
                 if (!st.SlideshowOn && string.IsNullOrWhiteSpace(st.SlideshowFolder))

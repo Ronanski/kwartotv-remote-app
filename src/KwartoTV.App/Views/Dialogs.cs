@@ -217,6 +217,17 @@ public static class Dialogs
         Option("🌙  Sleep the PC", "Put the PC to sleep? You will need to wake it with its power button.", "Sleep", PowerActions.Sleep, false);
         Option("↻  Restart the PC", "Restart the whole PC? KwartoTV will start again if it is set to start with Windows.", "Restart PC", PowerActions.Restart, true);
         Option("⏻  Shut down the PC", "Shut down the whole PC? You will need to switch it on by hand.", "Shut down PC", PowerActions.Shutdown, true);
+        // Sleep timer: stops what plays and shows the clock when the time is up (also on the phone: Power tab).
+        var left = w.SleepMinutesLeft;
+        var timer = UiKit.ActionButton(left > 0 ? $"⏲  Sleep timer: {left} min left (press for more)" : "⏲  Sleep timer: off", () =>
+        {
+            int[] steps = { 15, 30, 60, 90, 0 };
+            var next = steps.FirstOrDefault(m => m > w.SleepMinutesLeft + 1);
+            w.SleepTimer(next);
+            w.CloseDialog();
+        });
+        timer.HorizontalContentAlignment = HorizontalAlignment.Left; timer.Margin = new Thickness(0, 10, 0, 0);
+        panel.Children.Add(timer);
         Option("✕  Exit KwartoTV only", "Close the KwartoTV app? The PC stays on.", "Exit app", () => Application.Current.Shutdown(), false);
         panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 22, 0, 0), Children = { UiKit.ActionButton("Cancel", w.CloseDialog) } });
         w.ShowDialog(panel);

@@ -51,6 +51,11 @@ public sealed class AppSettings
     // ---- the lock screen (Lock · clock)
     /// <summary>A Bible verse under the clock, changing every this many minutes (0 = no verse). See Verses.Choices.</summary>
     public int VerseEveryMinutes { get; set; } = 60;
+
+    /// <summary>The clock screensaver comes by itself after this many idle minutes with nothing playing (0 = never). Any key closes it.</summary>
+    public int ScreensaverMinutes { get; set; } = 10;
+    public static readonly int[] ScreensaverChoices = { 10, 15, 30, 60, 5, 0 };
+    public static string DescribeScreensaver(int m) => m <= 0 ? "Off" : $"after {m} min";
     /// <summary>Photos from a folder fade in behind the clock.</summary>
     public bool SlideshowOn { get; set; }
     public string? SlideshowFolder { get; set; }

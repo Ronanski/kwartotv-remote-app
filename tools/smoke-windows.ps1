@@ -27,7 +27,7 @@ Set-Content -Path $m3u -Value $lines -Encoding UTF8
 $settings = @{ playlists = @(
     @{ id = "demo"; name = "Test streams"; source = $m3u },
     @{ id = "yt"; name = "YouTube live test"; source = "https://www.youtube.com/@NASA/live"; isStream = $true },
-    @{ id = "phspace"; name = "PH TV"; source = "https://raw.githubusercontent.com/IPTV-Philippines/IPTV-Philippines/main/ph.m3u"; showAsSpace = $true }); webTiles = @(@{ id = "ex"; name = "Example"; url = "https://example.com" }); libraryFolders = @(); port = 8765 } | ConvertTo-Json -Depth 5
+    @{ id = "phspace"; name = "PH TV"; source = "https://raw.githubusercontent.com/IPTV-Philippines/IPTV-Philippines/main/ph.m3u"; showAsSpace = $true }); webTiles = @(@{ id = "ex"; name = "Example"; url = "https://example.com" }); libraryFolders = @(); port = 8765; screensaverMinutes = 0 } | ConvertTo-Json -Depth 5
 Set-Content -Path (Join-Path $data "settings.json") -Value $settings -Encoding UTF8
 Remove-Item (Join-Path $data "log.txt") -ErrorAction SilentlyContinue
 
