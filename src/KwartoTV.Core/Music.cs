@@ -3,7 +3,10 @@ using System.Text.Json;
 namespace KwartoTV.Core;
 
 /// <summary>One song found by a search on the phone.</summary>
-public sealed record MusicTrack(string Id, string Title, string Artist);
+public sealed record MusicTrack(string Id, string Title, string Artist, string? Art = null);
+
+/// <summary>A row of songs on the TV's YouTube Music screen ("Quick picks", charts ...).</summary>
+public sealed record MusicRow(string Title, IReadOnlyList<MusicTrack> Tracks);
 
 /// <summary>What the music player on the TV is doing (shown on the lock screen and on the phone).</summary>
 public sealed record MusicState(bool On, bool Playing, string Title, string Artist, string? Art)

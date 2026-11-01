@@ -258,6 +258,7 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             AppTile(QuickApp.LiveTv, Modifier.weight(1f)) { send(Cmd.APP_LIVE, null) }
             AppTile(QuickApp.YouTube, Modifier.weight(1f)) { send(Cmd.APP_YOUTUBE, null) }
+            AppTile(QuickApp.YtMusic, Modifier.weight(1f)) { send(Cmd.APP_YTMUSIC, null) }
             AppTile(QuickApp.Netflix, Modifier.weight(1f)) { send(Cmd.APP_NETFLIX, null) }
             AppTile(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
         }

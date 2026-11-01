@@ -27,7 +27,7 @@ public sealed class CommandRouter
         "channel.list", "playlist.add",
         "key.text", "key.backspace", "key.enter",
         "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
-        "app.youtube", "app.netflix", "app.bilibili", "app.open", "app.livetv", "app.library", "app.settings",
+        "app.youtube", "app.netflix", "app.bilibili", "app.ytmusic", "app.open", "app.livetv", "app.library", "app.settings",
         "power.sleep", "power.screenoff", "power.screenon", "power.shutdown", "power.restart",
         // the phone's channel finder: check every channel, then pick working ones and favorites
         "scan.start", "scan.stop", "catalog.choose", "catalog.favorite", "catalog.choosegroup",
@@ -36,7 +36,7 @@ public sealed class CommandRouter
         // a sign-in made on the phone (Netflix, Bilibili) handed to the TV: "netflix|cookie=value; ..."
         "web.signin",
         // YouTube Music on the TV (it plays on behind the lock screen)
-        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play", "music.signin",
+        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play", "music.signin", "music.home",
     };
 
     // While the TV is locked (clock screen) only these work: unlock, power, and volume.
@@ -47,7 +47,7 @@ public sealed class CommandRouter
         // play/pause, next, previous: for the music on the lock screen
         "media.playpause", "media.next", "media.prev",
         // music is what the lock screen is for: it can be changed without unlocking
-        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play",
+        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play", "music.home",
     };
 
     /// <summary>The message a phone gets for a button pressed while the TV is locked.</summary>

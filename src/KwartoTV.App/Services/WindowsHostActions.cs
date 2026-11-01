@@ -21,6 +21,7 @@ public interface IShell
     void LaunchYouTube();
     void LaunchNetflix();
     void LaunchBilibili();
+    void LaunchYouTubeMusic();
     /// <summary>An app of the catalog (AppCatalog id).</summary>
     void OpenApp(string id);
     /// <summary>Handled by the built-in player? Returns false when nothing is playing in KwartoTV.</summary>
@@ -81,6 +82,7 @@ public sealed class WindowsHostActions : IHostActions
             case "app.youtube": ui.Invoke(shell.LaunchYouTube); return;
             case "app.netflix": ui.Invoke(shell.LaunchNetflix); return;
             case "app.bilibili": ui.Invoke(shell.LaunchBilibili); return;
+            case "app.ytmusic": ui.Invoke(shell.LaunchYouTubeMusic); return;
             case "app.open": ui.Invoke(() => shell.OpenApp(arg!)); return;
 
             case "media.playpause":
@@ -124,7 +126,7 @@ public sealed class WindowsHostActions : IHostActions
             case "scan.start" or "scan.stop" or "catalog.choose" or "catalog.choosegroup" or "catalog.favorite":
                 ui.Invoke(() => shell.Finder(cmd, arg)); return;
 
-            case "music.open" or "music.playpause" or "music.next" or "music.prev" or "music.stop" or "music.search" or "music.play" or "music.signin":
+            case "music.open" or "music.playpause" or "music.next" or "music.prev" or "music.stop" or "music.search" or "music.play" or "music.signin" or "music.home":
                 ui.Invoke(() => shell.Music(cmd, arg)); return;
 
             case "power.sleep": PowerActions.Sleep(); return;

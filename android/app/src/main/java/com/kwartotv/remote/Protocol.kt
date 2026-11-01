@@ -59,6 +59,8 @@ object Cmd {
     const val MUSIC_PLAY = "music.play"
     /** Opens YouTube Music's sign-in on the TV (for Premium: no ads). */
     const val MUSIC_SIGNIN = "music.signin"
+    /** Ask the TV for YouTube Music's Quick picks (shown before anything is searched). */
+    const val MUSIC_HOME = "music.home"
 
     const val MOUSE_MOVE = "mouse.move"
     const val MOUSE_CLICK = "mouse.click"
@@ -73,6 +75,7 @@ object Cmd {
     const val APP_YOUTUBE = "app.youtube"
     const val APP_NETFLIX = "app.netflix"
     const val APP_BILIBILI = "app.bilibili"
+    const val APP_YTMUSIC = "app.ytmusic"
     /** An app of the TV's catalog, by id (arg). */
     const val APP_OPEN = "app.open"
 
@@ -353,6 +356,6 @@ fun parseMusicResults(o: JSONObject): MusicResults {
 
 /** The TV's app catalog (same ids as AppCatalog on the TV). */
 val MORE_APPS = listOf(
-    "ytmusic" to "YouTube Music", "primevideo" to "Prime Video", "disneyplus" to "Disney+", "hbomax" to "HBO Max", "viu" to "Viu", "iwanttfc" to "iWantTFC",
+    "primevideo" to "Prime Video", "disneyplus" to "Disney+", "hbomax" to "HBO Max", "viu" to "Viu", "iwanttfc" to "iWantTFC",
     "crunchyroll" to "Crunchyroll", "spotify" to "Spotify", "twitch" to "Twitch", "appletv" to "Apple TV", "plex" to "Plex",
 )

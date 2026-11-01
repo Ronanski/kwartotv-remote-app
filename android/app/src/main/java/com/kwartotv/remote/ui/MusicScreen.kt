@@ -63,6 +63,9 @@ fun MusicTab(vm: AppViewModel) {
     val searching by client.musicSearching.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     val colors = MaterialTheme.colorScheme
+    val conn by client.conn.collectAsState()
+    // Nothing searched yet: show YouTube Music's Quick picks.
+    androidx.compose.runtime.LaunchedEffect(conn) { if (conn == com.kwartotv.remote.net.Conn.Connected && results == null) client.send(Cmd.MUSIC_HOME) }
 
     fun send(cmd: String, arg: String? = null) {
         Haptics.click(context)
@@ -114,7 +117,7 @@ fun MusicTab(vm: AppViewModel) {
 
         // The music plays through YouTube on the TV: its sign-in counts (Premium has no ads).
         androidx.compose.material3.TextButton(onClick = { send(Cmd.MUSIC_SIGNIN) }) {
-            Text("Ads? Sign in to YouTube on the TV — same account as the music (Premium = no ads)", fontSize = 13.sp)
+            Text("Ads? Sign in to YouTube Music on the TV once (Premium = no ads)", fontSize = 13.sp)
         }
 
         OutlinedTextField(
@@ -132,6 +135,7 @@ fun MusicTab(vm: AppViewModel) {
             r == null -> null
             r.error -> "The search did not work. Check the TV's internet and try again."
             r.tracks.isEmpty() -> "No songs found for \"${r.query}\"."
+            query.isBlank() && r.query.isNotBlank() -> r.query
             else -> null
         }
         if (message != null) Text(message, fontSize = 14.sp, color = colors.onSurfaceVariant)

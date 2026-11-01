@@ -19,6 +19,11 @@ public static class YouTubeMusicApi
     /// <summary>The radio that starts with this song.</summary>
     public static string NextBody(string videoId) => JsonSerializer.Serialize(new { context = Context, videoId, playlistId = "RDAMVM" + videoId, isAudioOnly = true });
 
+    public const string BrowseUrl = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false";
+
+    /// <summary>YouTube Music's home (Quick picks, charts, moods) as a visitor.</summary>
+    public static string HomeBody() => JsonSerializer.Serialize(new { context = Context, browseId = "FEmusic_home" });
+
     /// <summary>The page of YouTube on the TV (its TV app) that plays one song.</summary>
     public static string TvWatchUrl(string videoId) => "https://www.youtube.com/tv#/watch?v=" + videoId;
 
@@ -63,6 +68,58 @@ public static class YouTubeMusicApi
         return s.Length <= 120 ? s : s[..120];
     }
 
+    /// <summary>The biggest https picture of a thumbnail list (album art).</summary>
+    private static string? Art(JsonElement thumbs)
+    {
+        if (thumbs.ValueKind != JsonValueKind.Array) return null;
+        var url = thumbs.EnumerateArray().Select(t => t.TryGetProperty("url", out var u) ? u.GetString() : null).LastOrDefault(u => u is not null && u.StartsWith("https://"));
+        return url;
+    }
+
+    private static MusicTrack? FromListItem(JsonElement r)
+    {
+        var id = Path(r, "playlistItemData", "videoId").ValueKind == JsonValueKind.String ? Path(r, "playlistItemData", "videoId").GetString()
+            : Path(r, "overlay", "musicItemThumbnailOverlayRenderer", "content", "musicPlayButtonRenderer", "playNavigationEndpoint", "watchEndpoint", "videoId") is { ValueKind: JsonValueKind.String } v ? v.GetString() : null;
+        var cols = r.TryGetProperty("flexColumns", out var c) && c.ValueKind == JsonValueKind.Array ? c.EnumerateArray().ToList() : new();
+        string Col(int i) => i < cols.Count ? Runs(Path(cols[i], "musicResponsiveListItemFlexColumnRenderer", "text")) : "";
+        var t = Track(id, Col(0), Col(1).Split(" • ")[0]);
+        return t is null ? null : t with { Art = Art(Path(r, "thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails")) };
+    }
+
+    private static MusicTrack? FromTwoRow(JsonElement r)
+    {
+        var id = Path(r, "navigationEndpoint", "watchEndpoint", "videoId") is { ValueKind: JsonValueKind.String } a ? a.GetString()
+            : Path(r, "thumbnailOverlay", "musicItemThumbnailOverlayRenderer", "content", "musicPlayButtonRenderer", "playNavigationEndpoint", "watchEndpoint", "videoId") is { ValueKind: JsonValueKind.String } b ? b.GetString() : null;
+        var t = Track(id, Runs(Path(r, "title")), FirstRun(Path(r, "subtitle")));
+        return t is null ? null : t with { Art = Art(Path(r, "thumbnailRenderer", "musicThumbnailRenderer", "thumbnail", "thumbnails")) };
+    }
+
+    /// <summary>The home rows: each carousel with its title and its playable songs (albums and playlists left out).</summary>
+    public static IReadOnlyList<MusicRow> ParseHome(string json)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(json);
+            var shelves = new List<JsonElement>(); Walk(d.RootElement, "musicCarouselShelfRenderer", shelves, 20);
+            var rows = new List<MusicRow>();
+            foreach (var s in shelves)
+            {
+                var title = Clean(Runs(Path(s, "header", "musicCarouselShelfBasicHeaderRenderer", "title")));
+                if (!s.TryGetProperty("contents", out var items) || items.ValueKind != JsonValueKind.Array) continue;
+                var tracks = new List<MusicTrack>();
+                foreach (var i in items.EnumerateArray())
+                {
+                    MusicTrack? t = i.TryGetProperty("musicResponsiveListItemRenderer", out var li) ? FromListItem(li)
+                        : i.TryGetProperty("musicTwoRowItemRenderer", out var tr) ? FromTwoRow(tr) : null;
+                    if (t is not null && tracks.All(x => x.Id != t.Id)) tracks.Add(t);
+                }
+                if (tracks.Count > 0) rows.Add(new MusicRow(title.Length > 0 ? title : "Music", tracks.Take(30).ToList()));
+            }
+            return rows;
+        }
+        catch (JsonException) { return Array.Empty<MusicRow>(); }
+    }
+
     /// <summary>The songs of a search answer (musicResponsiveListItemRenderer rows), unique, at most 20.</summary>
     public static IReadOnlyList<MusicTrack> ParseSearch(string json)
     {
@@ -73,12 +130,7 @@ public static class YouTubeMusicApi
             var list = new List<MusicTrack>();
             foreach (var r in rows)
             {
-                var id = Path(r, "playlistItemData", "videoId").ValueKind == JsonValueKind.String ? Path(r, "playlistItemData", "videoId").GetString()
-                    : Path(r, "overlay", "musicItemThumbnailOverlayRenderer", "content", "musicPlayButtonRenderer", "playNavigationEndpoint", "watchEndpoint", "videoId") is { ValueKind: JsonValueKind.String } v ? v.GetString() : null;
-                var cols = r.TryGetProperty("flexColumns", out var c) && c.ValueKind == JsonValueKind.Array ? c.EnumerateArray().ToList() : new();
-                string Col(int i) => i < cols.Count ? Runs(Path(cols[i], "musicResponsiveListItemFlexColumnRenderer", "text")) : "";
-                var artist = Col(1).Split(" • ")[0];
-                if (Track(id, Col(0), artist) is { } t && list.All(x => x.Id != t.Id)) list.Add(t);
+                if (FromListItem(r) is { } t && list.All(x => x.Id != t.Id)) list.Add(t);
                 if (list.Count >= Music.MaxResults) break;
             }
             return list;

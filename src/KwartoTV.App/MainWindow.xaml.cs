@@ -177,6 +177,7 @@ public partial class MainWindow : Window, IShell
             "Library" => new LibraryView(this),
             "Settings" => new SettingsView(this),
             "Bilibili" => _bilibili ??= new BilibiliView(this),
+            "Music" => _musicView ??= new MusicView(this),
             _ => new HomeView(this),
         };
         Page.Content = _current;
@@ -347,7 +348,7 @@ public partial class MainWindow : Window, IShell
     /// </summary>
     public void OpenCatalogApp(CatalogApp app)
     {
-        if (app.Id == "ytmusic") { OpenYouTubeMusic(signIn: false); return; }
+        if (app.Id == "ytmusic") { LaunchYouTubeMusic(); return; }
         if (_tv.InstalledApps.TryGetValue(app.Id, out var appId))
         {
             _tv.Apps.Close(); CloseWeb(); PrepareExternal(); _tv.MusicPlayer.Pause();
@@ -361,26 +362,20 @@ public partial class MainWindow : Window, IShell
     }
 
     /// <summary>
-    /// YouTube Music. Signing in: the music the phone plays goes through YouTube on the TV, so the YouTube app's own
-    /// sign-in (the code on the phone) is the one that counts (Premium: no ads). The tile opens the YouTube Music
-    /// website with the same saved profile.
+    /// YouTube Music's website on the TV screen, in the same saved profile as the music the phone plays: signing in here
+    /// once (Google's sign-in; type with the phone) signs that music in too (Premium: no ads).
     /// </summary>
     public void OpenYouTubeMusic(bool signIn)
     {
-        if (signIn)
-        {
-            AppPaths.LogLine("music: sign in through YouTube");
-            LaunchYouTube();
-            ShowToast("Sign in to YouTube here (Settings → Sign in, the code goes on your phone). The music uses the same account: Premium = no ads.");
-            return;
-        }
         _tv.MusicPlayer.Stop();
-        AppPaths.LogLine("music: open YouTube Music");
-        OpenWeb(KwartoTV.Core.Music.Home, "youtube", ForegroundKind.Web, null, "YouTube Music", () =>
+        var url = signIn ? "https://accounts.google.com/ServiceLogin?service=youtube&continue=" + Uri.EscapeDataString("https://music.youtube.com/") : KwartoTV.Core.Music.Home;
+        AppPaths.LogLine("music: open YouTube Music" + (signIn ? " (sign in)" : ""));
+        OpenWeb(url, "music", ForegroundKind.Web, null, "YouTube Music", () =>
         {
             ShowToast("Could not open YouTube Music: Microsoft Edge WebView2 is missing.");
             return true;
         });
+        if (signIn) ShowToast("Sign in to YouTube Music once (the phone opens its keyboard for each box). After that the music has no ads with Premium.");
     }
 
     /// <summary>Redraws the page on screen (after a setting changed).</summary>
@@ -406,6 +401,15 @@ public partial class MainWindow : Window, IShell
     /// The page is kept, so Back from an episode returns to the same place in the rows.
     /// </summary>
     private BilibiliView? _bilibili;
+    private MusicView? _musicView;
+
+    /// <summary>YouTube Music as KwartoTV's own screen (rows of songs, now playing, search).</summary>
+    public void LaunchYouTubeMusic()
+    {
+        CloseDialog(); _player?.Hide(); CloseWeb(); _tv.Apps.Close();
+        if (_currentName != "Music") Navigate("Music");
+        Native.BringToFront(Handle); Activate();
+    }
     public void LaunchBilibili()
     {
         CloseDialog(); _player?.Hide(); CloseWeb(); _tv.Apps.Close();
@@ -680,6 +684,14 @@ public partial class MainWindow : Window, IShell
             case "music.search": m.Search(arg!.Trim()); break;
             case "music.play": m.Play(arg!); break;
             case "music.signin": OpenYouTubeMusic(signIn: true); break;
+            case "music.home":
+                // The phone's Music tab opened with nothing searched yet: YouTube Music's Quick picks.
+                _ = Task.Run(async () =>
+                {
+                    var rows = await MusicService.HomeAsync();
+                    if (rows.FirstOrDefault() is { } first) _tv.Server?.Broadcast(KwartoTV.Core.Music.ResultsMessage(first.Title, first.Tracks));
+                });
+                break;
         }
     }
 

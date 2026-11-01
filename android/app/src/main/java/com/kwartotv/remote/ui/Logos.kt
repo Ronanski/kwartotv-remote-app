@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** The quick apps on the remote, each with its logo (drawn here, for personal use). */
-enum class QuickApp(val title: String) { LiveTv("Live TV"), YouTube("YouTube"), Netflix("Netflix"), Bilibili("Bilibili") }
+enum class QuickApp(val title: String) { LiveTv("Live TV"), YouTube("YouTube"), YtMusic("YT Music"), Netflix("Netflix"), Bilibili("Bilibili") }
 
 /** A logo tile: the app's logo on its own colour, its name under it. */
 @Composable
@@ -54,6 +54,14 @@ fun AppLogo(app: QuickApp, size: Dp) {
             val bh = h * 0.7f
             drawRoundRect(Color(0xFFFF0033), Offset(0f, (h - bh) / 2), Size(w, bh), CornerRadius(bh * 0.28f))
             val p = Path().apply { moveTo(w * 0.41f, h * 0.35f); lineTo(w * 0.66f, h * 0.5f); lineTo(w * 0.41f, h * 0.65f); close() }
+            drawPath(p, Color.White)
+        }
+        QuickApp.YtMusic -> Canvas(Modifier.size(size)) {
+            // red disc, a white ring and a white play triangle
+            val w = this.size.width; val h = this.size.height
+            drawCircle(Color(0xFFFF0033), w / 2, Offset(w / 2, h / 2))
+            drawCircle(Color.White, w * 0.3f, Offset(w / 2, h / 2), style = androidx.compose.ui.graphics.drawscope.Stroke(w * 0.05f))
+            val p = Path().apply { moveTo(w * 0.43f, h * 0.36f); lineTo(w * 0.64f, h * 0.5f); lineTo(w * 0.43f, h * 0.64f); close() }
             drawPath(p, Color.White)
         }
         QuickApp.Netflix -> Box(Modifier.size(size).clip(shape).background(Color.Black), contentAlignment = Alignment.Center) {
