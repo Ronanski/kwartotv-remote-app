@@ -26,9 +26,6 @@ public sealed class WebAppWindow : Window
     /// <summary>The saved-login profile this window uses ("netflix", "web-bilibili", ...).</summary>
     public string ProfileName => _profile;
 
-    /// <summary>Netflix skips intros by itself (Settings / the phone's switch), set by the shell.</summary>
-    public static bool NetflixAutoSkip { get; set; }
-
     /// <summary>Settings → YouTube picture (see AppSettings.YouTubeRenderMode), set by the shell.</summary>
     public static int YouTubeRenderMode { get; set; } = 1;
 
@@ -229,11 +226,7 @@ public sealed class WebAppWindow : Window
             await core.AddScriptToExecuteOnDocumentCreatedAsync(NoForcedColorsScript);
             if (_videoOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(VideoOnlyScript);
             // Netflix and other websites are made for a mouse: add TV-style remote navigation and make them bigger for the couch.
-            if (Kind == ForegroundKind.Netflix)
-            {
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(NetflixAutoSkip ? "window.__kwAutoSkip = true;" : "window.__kwAutoSkip = false;");
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(NetflixControl.Script);
-            }
+            if (Kind == ForegroundKind.Netflix) await core.AddScriptToExecuteOnDocumentCreatedAsync(NetflixControl.Script);
             if (PlayerOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(PlayerOnlyScript);
             else if (Kind is ForegroundKind.Netflix or ForegroundKind.Web)
             {

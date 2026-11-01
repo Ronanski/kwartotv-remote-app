@@ -456,7 +456,6 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     var mh2 = new FakeHost(); var mr2 = new CommandRouter(new ChannelLineup(), mh2) { IsLocked = () => true };
     var nh = new FakeHost(); var nr = new CommandRouter(new ChannelLineup(), nh);
     Check(nr.Handle(new(null, "netflix.search", "stranger things")).Ok && nh.Last == "netflix.search:stranger things" && nr.Handle(new(null, "netflix.skip", null)).Ok && nr.Handle(new(null, "netflix.next", null)).Ok && !nr.Handle(new(null, "netflix.search", " ")).Ok, "netflix: skip, next and search from the phone");
-    Check(!new AppSettings().NetflixAutoSkip && nr.Handle(new(null, "netflix.autoskip", "1")).Ok && !nr.Handle(new(null, "netflix.autoskip", "yes")).Ok, "netflix: auto-skip is off at first and can be switched from the phone");
     Check(mr2.Handle(new(null, "power.timer", "30")).Ok && mh2.Last == "power.timer:30" && !mr2.Handle(new(null, "power.timer", "999")).Ok && !mr2.Handle(new(null, "power.timer", "x")).Ok, "sleep timer works while locked, bad values refused");
     Check(new AppSettings().ScreensaverMinutes == 10 && AppSettings.DescribeScreensaver(0) == "Off" && AppSettings.ScreensaverChoices.Contains(0), "screensaver after 10 idle minutes by default, can be turned off");
     Check(mr2.Handle(new(null, "music.search", "Ben&Ben")).Ok && mh2.Last == "music.search:Ben&Ben", "music: search works while the TV is locked");

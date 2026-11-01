@@ -393,17 +393,11 @@ private fun MediaTab(send: (String, String?) -> Unit) {
             RemoteKey("Stop", "Stop", Modifier.weight(1f), icon = Icons.Rounded.Stop) { send(Cmd.STOP, null) }
             RemoteKey("+10 s", "Forward 10 seconds", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.Forward10) { send(Cmd.SEEK, "10") }
         }
-        // Netflix: its own player's buttons (the intro is skipped by itself), and search with the phone's keyboard.
+        // Netflix: its own player's buttons, and search with the phone's keyboard.
         SectionLabel("Netflix")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_SKIP, null) }
             RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_NEXT, null) }
-        }
-        // Off at first: the intro plays unless Skip intro is pressed. On: the TV skips intros and recaps by itself.
-        var autoSkip by rememberSaveable { mutableStateOf(false) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Auto-skip intros", fontSize = 15.sp, modifier = Modifier.weight(1f))
-            androidx.compose.material3.Switch(checked = autoSkip, onCheckedChange = { autoSkip = it; send(Cmd.NETFLIX_AUTOSKIP, if (it) "1" else "0") })
         }
         var nq by rememberSaveable { mutableStateOf("") }
         OutlinedTextField(

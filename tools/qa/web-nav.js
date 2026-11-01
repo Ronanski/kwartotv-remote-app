@@ -113,8 +113,8 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
   });
   await n.evaluate(nscript);
   await n.waitForTimeout(1500);
-  check(!(await n.evaluate(() => window.__calls)).includes('skip intro clicked'), 'netflix: the intro is NOT skipped by itself unless turned on');
-  await n.evaluate(() => window.__kwNetflix.autoSkip(true));
+  check(!(await n.evaluate(() => window.__calls)).includes('skip intro clicked'), 'netflix: the intro is never skipped by itself');
+  const rs = await n.evaluate(() => window.__kwNetflix.skip());
   const r1 = await n.evaluate(() => window.__kwNetflix.toggle());
   const r2 = await n.evaluate(() => window.__kwNetflix.toggle());
   const r3 = await n.evaluate(() => window.__kwNetflix.seek(10));
@@ -123,9 +123,9 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
   const r5 = await n.evaluate(() => window.__kwNetflix.next());
   const calls = await n.evaluate(() => window.__calls);
   const nmsgs = await n.evaluate(() => window.__msgs);
-  check(r1 === 'player' && r2 === 'player' && calls[0] === 'pause' && calls[1] === 'play', `netflix: play/pause goes to Netflix's own player (${calls.slice(0, 2)})`);
+  check(r1 === 'player' && r2 === 'player' && calls.filter(c => c === 'pause' || c === 'play').join() === 'pause,play', `netflix: play/pause goes to Netflix's own player (${calls.filter(c => c === 'pause' || c === 'play')})`);
   check(r3 === 'player' && calls.includes('seek 610000') && calls.includes('seek 580000'), `netflix: +10 s / -30 s seek the player, never the video element (${calls.filter(c => c.startsWith('seek'))})`);
-  check(calls.includes('skip intro clicked') && nmsgs.includes("netflix:skipped intro"), `netflix: with auto-skip on, the intro is skipped by itself (${nmsgs})`);
+  check(rs === 'clicked' && calls.includes('skip intro clicked'), 'netflix: Skip intro from the phone skips it');
   check(r5 === 'clicked' && calls.includes('next clicked'), 'netflix: next episode');
   await n.evaluate(() => window.__kwNetflix.search('stranger things'));
   await n.waitForTimeout(800);

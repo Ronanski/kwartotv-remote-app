@@ -32,9 +32,6 @@ public sealed class AppSettings
     /// phone controls Netflix's own player (play/pause, seek, skip intro, next episode, search); the Store app it cannot.
     /// </summary>
     public bool NetflixPreferApp { get; set; }
-
-    /// <summary>Netflix skips the intro and the recap by itself (off: only the phone's Skip intro button does).</summary>
-    public bool NetflixAutoSkip { get; set; }
     /// <summary>Channels that were checked and do not work here (blocked, gone, no video) stay out of the lineup.</summary>
     public bool HideUnavailable { get; set; } = true;
     /// <summary>The lineup holds at most this many channels (0 = all); the first playlists come first.</summary>
