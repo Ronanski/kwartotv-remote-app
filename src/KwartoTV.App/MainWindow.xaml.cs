@@ -37,6 +37,7 @@ public partial class MainWindow : Window, IShell
         _tv.Router.IsLocked = () => _locked;
         // YouTube and the music share one browser profile, which must start with the same switches.
         WebAppWindow.YouTubeRenderMode = _tv.Settings.YouTubeRenderMode;
+        WebAppWindow.NetflixAutoSkip = _tv.Settings.NetflixAutoSkip;
 
         foreach (var (label, action) in new (string, Action)[] { ("Home", GoHome), ("Live TV", ShowLiveTv), ("Library", ShowLibrary), ("Settings", ShowSettings) })
         {
@@ -604,6 +605,14 @@ public partial class MainWindow : Window, IShell
     public void Netflix(string cmd, string? arg)
     {
         var w = _web is { Kind: ForegroundKind.Netflix } nw ? nw : null;
+        if (cmd == "netflix.autoskip")
+        {
+            var on = arg == "1";
+            _tv.Settings.NetflixAutoSkip = on; WebAppWindow.NetflixAutoSkip = on; _tv.SaveSettings();
+            if (w is not null) _ = NetflixAsync(w, on ? "autoSkip(true)" : "autoSkip(false)");
+            ShowToast(on ? "Netflix: intros and recaps are skipped by themselves." : "Netflix: intros play; press Skip intro on the phone to skip.");
+            return;
+        }
         if (cmd == "netflix.search")
         {
             var q = (arg ?? "").Trim();

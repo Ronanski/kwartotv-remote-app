@@ -399,6 +399,12 @@ private fun MediaTab(send: (String, String?) -> Unit) {
             RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_SKIP, null) }
             RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_NEXT, null) }
         }
+        // Off at first: the intro plays unless Skip intro is pressed. On: the TV skips intros and recaps by itself.
+        var autoSkip by rememberSaveable { mutableStateOf(false) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Auto-skip intros", fontSize = 15.sp, modifier = Modifier.weight(1f))
+            androidx.compose.material3.Switch(checked = autoSkip, onCheckedChange = { autoSkip = it; send(Cmd.NETFLIX_AUTOSKIP, if (it) "1" else "0") })
+        }
         var nq by rememberSaveable { mutableStateOf("") }
         OutlinedTextField(
             value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),

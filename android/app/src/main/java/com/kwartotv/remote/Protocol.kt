@@ -82,6 +82,8 @@ object Cmd {
     const val NETFLIX_SKIP = "netflix.skip"
     const val NETFLIX_NEXT = "netflix.next"
     const val NETFLIX_SEARCH = "netflix.search"
+    /** "1" skip intros by themselves, "0" only with Skip intro. */
+    const val NETFLIX_AUTOSKIP = "netflix.autoskip"
     /** An app of the TV's catalog, by id (arg). */
     const val APP_OPEN = "app.open"
 

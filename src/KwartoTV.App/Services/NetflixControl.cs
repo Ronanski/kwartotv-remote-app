@@ -2,7 +2,7 @@ namespace KwartoTV.App.Services;
 
 /// <summary>
 /// Netflix controlled through its own player (not by guessing on the page): play/pause, seek, skip intro/recap,
-/// next episode and search, from the phone. The intro and the recap are skipped by themselves (like Netclicker).
+/// next episode and search, from the phone. Skipping the intro and the recap by themselves is a choice (off at first).
 /// </summary>
 public static class NetflixControl
 {
@@ -19,7 +19,7 @@ public static class NetflixControl
     } catch (e) { return null; }
   }
   function click(sel) { var b = document.querySelector(sel); if (b) { b.click(); return true; } return false; }
-  var autoSkip = true;
+  var autoSkip = window.__kwAutoSkip === true;
   setInterval(function () {
     if (!autoSkip) return;
     if (click('[data-uia=""player-skip-intro""]')) post('skipped intro');

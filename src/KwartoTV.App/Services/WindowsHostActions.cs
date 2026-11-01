@@ -144,7 +144,7 @@ public sealed class WindowsHostActions : IHostActions
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.
             case "power.screenoff": ui.Invoke(shell.ScreenOff); return;
             case "power.screenon": ui.Invoke(shell.ScreenOn); return;
-            case "netflix.skip" or "netflix.next" or "netflix.search": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
+            case "netflix.skip" or "netflix.next" or "netflix.search" or "netflix.autoskip": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
             case "power.timer": ui.Invoke(() => shell.SleepTimer(int.Parse(arg!, CultureInfo.InvariantCulture))); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;

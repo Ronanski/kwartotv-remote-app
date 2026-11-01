@@ -112,6 +112,9 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
       '<button data-uia="next-episode-seamless-button" onclick="window.__calls.push(\'next clicked\')">Next Episode</button>';
   });
   await n.evaluate(nscript);
+  await n.waitForTimeout(1500);
+  check(!(await n.evaluate(() => window.__calls)).includes('skip intro clicked'), 'netflix: the intro is NOT skipped by itself unless turned on');
+  await n.evaluate(() => window.__kwNetflix.autoSkip(true));
   const r1 = await n.evaluate(() => window.__kwNetflix.toggle());
   const r2 = await n.evaluate(() => window.__kwNetflix.toggle());
   const r3 = await n.evaluate(() => window.__kwNetflix.seek(10));
@@ -122,7 +125,7 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
   const nmsgs = await n.evaluate(() => window.__msgs);
   check(r1 === 'player' && r2 === 'player' && calls[0] === 'pause' && calls[1] === 'play', `netflix: play/pause goes to Netflix's own player (${calls.slice(0, 2)})`);
   check(r3 === 'player' && calls.includes('seek 610000') && calls.includes('seek 580000'), `netflix: +10 s / -30 s seek the player, never the video element (${calls.filter(c => c.startsWith('seek'))})`);
-  check(calls.includes('skip intro clicked') && nmsgs.includes("netflix:skipped intro"), `netflix: the intro is skipped by itself (${nmsgs})`);
+  check(calls.includes('skip intro clicked') && nmsgs.includes("netflix:skipped intro"), `netflix: with auto-skip on, the intro is skipped by itself (${nmsgs})`);
   check(r5 === 'clicked' && calls.includes('next clicked'), 'netflix: next episode');
   await n.evaluate(() => window.__kwNetflix.search('stranger things'));
   await n.waitForTimeout(800);
