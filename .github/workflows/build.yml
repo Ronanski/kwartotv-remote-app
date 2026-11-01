@@ -1,9 +1,10 @@
 name: Test and Build
 
+# Only main is built (a build that does not pass every test publishes nothing), plus a manual run:
+# one run per release instead of one for the work branch and another for main.
 on:
   push:
-    branches: [main, "ccr-*", "claude/**"]
-  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -1,8 +1,7 @@
 name: Research probe
 
+# Research only: run by hand (Actions → Research probe → Run workflow).
 on:
-  push:
-    paths: ["tools/probe/**", "src/KwartoTV.App/Services/TvWebScript.cs"]
   workflow_dispatch:
 
 jobs:
