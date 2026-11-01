@@ -337,16 +337,19 @@ try {
         $bytes = [Text.Encoding]::UTF8.GetBytes($json)
         $ws.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).Wait(5000) | Out-Null
     }
+    # One receive at a time: a receive that timed out stays pending and is picked up by the next call
+    # (starting a second one would fail and lose every answer after it).
+    $script:recvTask = $null; $script:recvBuf = New-Object byte[] 65536; $script:recvMs = New-Object IO.MemoryStream
     function WsReceiveUntil($type, $seconds) {
         $deadline = (Get-Date).AddSeconds($seconds)
         while ((Get-Date) -lt $deadline -and $ws.State -eq "Open") {
-            $buf = New-Object byte[] 65536; $ms = New-Object IO.MemoryStream
-            do {
-                $t = $ws.ReceiveAsync([ArraySegment[byte]]::new($buf), [Threading.CancellationToken]::None)
-                if (-not $t.Wait([int][Math]::Max(1000, ($deadline - (Get-Date)).TotalMilliseconds))) { return $null }
-                $ms.Write($buf, 0, $t.Result.Count)
-            } while (-not $t.Result.EndOfMessage)
-            $text = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+            if ($null -eq $script:recvTask) { $script:recvTask = $ws.ReceiveAsync([ArraySegment[byte]]::new($script:recvBuf), [Threading.CancellationToken]::None) }
+            $left = [int][Math]::Max(100, ($deadline - (Get-Date)).TotalMilliseconds)
+            if (-not $script:recvTask.Wait($left)) { return $null }
+            $r = $script:recvTask.Result; $script:recvTask = $null
+            $script:recvMs.Write($script:recvBuf, 0, $r.Count)
+            if (-not $r.EndOfMessage) { continue }
+            $text = [Text.Encoding]::UTF8.GetString($script:recvMs.ToArray()); $script:recvMs.SetLength(0)
             try { $o = $text | ConvertFrom-Json } catch { continue }
             if ($o.type -eq $type) { return $o }
         }
