@@ -51,6 +51,8 @@ public interface IShell
     void ScreenOn();
     /// <summary>Closes the screensaver; true when it was up (the button that woke the TV does nothing else).</summary>
     bool CloseScreensaver();
+    /// <summary>Back while a video plays alone (a Bilibili episode): back to the rows, even while the page still loads. False: not that.</summary>
+    bool BackFromVideoPage();
     /// <summary>Sleep timer in minutes (0 = off).</summary>
     void SleepTimer(int minutes);
 }
@@ -88,6 +90,9 @@ public sealed class WindowsHostActions : IHostActions
         if ((cmd.StartsWith("nav.", StringComparison.Ordinal) || cmd.StartsWith("key.", StringComparison.Ordinal) || cmd is "media.playpause" or "media.next" or "media.prev" or "media.stop" or "media.seek")
             && ui.Invoke(shell.EnsureInFront))
             Thread.Sleep(60);   // let the switch finish before the key goes out
+
+        // A video page shown alone answers Back only once it has loaded: the phone's Back leaves it at any time.
+        if (cmd == "nav.back" && ui.Invoke(shell.BackFromVideoPage)) return;
 
         switch (cmd)
         {

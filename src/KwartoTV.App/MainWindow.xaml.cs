@@ -460,6 +460,13 @@ public partial class MainWindow : Window, IShell
     public void LaunchBilibiliWebsite() => LaunchWeb(new WebTile("bilibili", "Bilibili", AppLaunchPlans.BilibiliUrl));
 
     /// <summary>Plays a show or video picked on the Bilibili screen: only its video, fullscreen; Back returns to the rows.</summary>
+    public bool BackFromVideoPage()
+    {
+        if (_web is not { IsVisible: true, PlayerOnly: true } w) return false;
+        w.RequestHome();
+        return true;
+    }
+
     public void PlayBilibili(BiliItem item)
     {
         AppPaths.LogLine($"bilibili: play {item.Title} {item.PlayUrl}");

@@ -94,6 +94,8 @@ public sealed class WebAppWindow : Window
 
     /// <summary>User pressed F1 inside the page.</summary>
     public event Action? HomeRequested;
+    /// <summary>Back from the phone: leaves the page as Back on the page would (also while it still loads).</summary>
+    public void RequestHome() => HomeRequested?.Invoke();
     /// <summary>▲ / ▼ while a YouTube channel from the lineup is showing (video-only mode).</summary>
     public event Action? ChannelUp, ChannelDown;
     private readonly bool _videoOnly;
