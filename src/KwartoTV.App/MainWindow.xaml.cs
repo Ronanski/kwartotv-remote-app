@@ -345,6 +345,7 @@ public partial class MainWindow : Window, IShell
     /// </summary>
     public void OpenCatalogApp(CatalogApp app)
     {
+        if (app.Id == "ytmusic") { OpenYouTubeMusic(signIn: false); return; }
         if (_tv.InstalledApps.TryGetValue(app.Id, out var appId))
         {
             _tv.Apps.Close(); CloseWeb(); PrepareExternal(); _tv.MusicPlayer.Pause();
@@ -355,6 +356,23 @@ public partial class MainWindow : Window, IShell
         }
         AppPaths.LogLine($"app: {app.Name} (in KwartoTV)");
         LaunchWeb(new WebTile("app-" + app.Id, app.Name, app.WebUrl));
+    }
+
+    /// <summary>
+    /// YouTube Music on the TV screen, with the same saved profile as the music the phone plays in the background: sign in
+    /// here once (type with the phone) and that music is signed in too (Premium: no ads).
+    /// </summary>
+    public void OpenYouTubeMusic(bool signIn)
+    {
+        _tv.MusicPlayer.Stop();
+        var url = signIn ? "https://accounts.google.com/ServiceLogin?service=youtube&continue=" + Uri.EscapeDataString("https://music.youtube.com/") : KwartoTV.Core.Music.Home;
+        AppPaths.LogLine("music: open YouTube Music" + (signIn ? " (sign in)" : ""));
+        OpenWeb(url, "music", ForegroundKind.Web, null, "YouTube Music", () =>
+        {
+            ShowToast("Could not open YouTube Music: Microsoft Edge WebView2 is missing.");
+            return true;
+        });
+        if (signIn) ShowToast("Sign in to YouTube Music. Type on your phone: the KwartoTV Remote opens its keyboard for each box.");
     }
 
     /// <summary>Redraws the page on screen (after a setting changed).</summary>
@@ -634,6 +652,7 @@ public partial class MainWindow : Window, IShell
             case "music.stop": m.Stop(); break;
             case "music.search": m.Search(arg!.Trim()); break;
             case "music.play": m.Play(arg!); break;
+            case "music.signin": OpenYouTubeMusic(signIn: true); break;
         }
     }
 

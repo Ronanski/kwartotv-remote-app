@@ -252,6 +252,7 @@ fun RemoteScreen(vm: AppViewModel) {
 @Composable
 private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: (String) -> Unit) {
     var kind by remember { mutableIntStateOf(vm.padKind) }
+    val signedIn by vm.signedIn.collectAsState()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // The apps first, with their logos: one tap opens them on the TV.
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -260,17 +261,11 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
             AppTile(QuickApp.Netflix, Modifier.weight(1f)) { send(Cmd.APP_NETFLIX, null) }
             AppTile(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
         }
-        // Signing in with the TV's arrows is slow: sign in here on the phone, the TV picks it up by itself.
+        // Volume always in view, without scrolling.
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Sign in to Netflix", "Sign in to Netflix on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("netflix") }
-            RemoteKey("Sign in to Bilibili", "Sign in to Bilibili on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("bilibili") }
-        }
-        // More apps on the TV: the real app when it is installed on the PC, otherwise inside KwartoTV.
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(com.kwartotv.remote.MORE_APPS, key = { it.first }) { (id, name) ->
-                val ctx = LocalContext.current
-                FilterChip(selected = false, onClick = { Haptics.click(ctx); send(Cmd.APP_OPEN, id) }, label = { Text(name) })
-            }
+            RemoteKey("", "Volume down", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
+            RemoteKey("", "Mute", Modifier.weight(1f), height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
+            RemoteKey("", "Volume up", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val ctx = LocalContext.current
@@ -286,11 +281,21 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("Back", "Back", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.ArrowBack) { send(Cmd.BACK, null) }
             RemoteKey("Home", "Home", Modifier.weight(1f), icon = Icons.Rounded.Home) { send(Cmd.HOME, null) }
-            RemoteKey("Mute", "Mute", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Vol −", "Volume down", Modifier.weight(1f), repeat = true, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
-            RemoteKey("Vol +", "Volume up", Modifier.weight(1f), repeat = true, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
+        // Signing in with the TV's arrows is slow: sign in here on the phone, the TV picks it up by itself.
+        // Gone once the TV confirmed the sign-in (it comes back if the TV says it is signed out).
+        val needNetflix = "netflix" !in signedIn
+        val needBilibili = "bilibili" !in signedIn
+        if (needNetflix || needBilibili) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (needNetflix) RemoteKey("Sign in to Netflix", "Sign in to Netflix on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("netflix") }
+            if (needBilibili) RemoteKey("Sign in to Bilibili", "Sign in to Bilibili on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("bilibili") }
+        }
+        // More apps on the TV: the real app when it is installed on the PC, otherwise inside KwartoTV.
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(com.kwartotv.remote.MORE_APPS, key = { it.first }) { (id, name) ->
+                val ctx = LocalContext.current
+                FilterChip(selected = false, onClick = { Haptics.click(ctx); send(Cmd.APP_OPEN, id) }, label = { Text(name) })
+            }
         }
     }
 }

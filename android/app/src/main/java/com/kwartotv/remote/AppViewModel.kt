@@ -40,6 +40,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val found: StateFlow<List<FoundTv>> = Discovery.discover(app)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Netflix / Bilibili signed in on the TV (confirmed by the TV): their sign-in buttons are hidden. */
+    val signedIn = MutableStateFlow(store.signedIn)
+    fun markSignedIn(service: String, on: Boolean) {
+        val next = if (on) signedIn.value + service else signedIn.value - service
+        if (next != signedIn.value) { signedIn.value = next; store.signedIn = next }
+    }
+
     var padKind: Int
         get() = store.padKind
         set(v) { store.padKind = v }

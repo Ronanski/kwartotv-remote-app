@@ -50,6 +50,11 @@ class Store(context: Context) {
     var padKind: Int
         get() = prefs.getInt("padKind", 0)
         set(v) { prefs.edit().putInt("padKind", v).apply() }
+
+    /** Services the TV confirmed as signed in (their sign-in buttons are hidden). */
+    var signedIn: Set<String>
+        get() = prefs.getStringSet("signedIn", emptySet()) ?: emptySet()
+        set(v) { prefs.edit().putStringSet("signedIn", v.toSet()).apply() }
 }
 
 /** AES-GCM with a Keystore key. Sealed text looks like "k1:<iv base64>:<ciphertext base64>". */

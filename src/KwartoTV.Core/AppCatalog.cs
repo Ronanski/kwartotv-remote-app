@@ -13,6 +13,8 @@ public static class AppCatalog
 {
     public static readonly IReadOnlyList<CatalogApp> All = new CatalogApp[]
     {
+        // Opens inside KwartoTV with the same saved sign-in as the music the phone plays (Premium: no ads).
+        new("ytmusic", "YouTube Music", "♪", "music · sign in for no ads", Array.Empty<string>(), "https://music.youtube.com/", 0x2A0505, 0xE01E1E),
         new("primevideo", "Prime Video", "▶", "movies · series", new[] { "Prime Video for Windows", "Amazon Prime Video for Windows", "Prime Video" }, "https://www.primevideo.com", 0x0F171E, 0x1A98FF),
         new("disneyplus", "Disney+", "✦", "Disney · Marvel · Star Wars", new[] { "Disney+" }, "https://www.disneyplus.com", 0x0B1640, 0x1F80E0),
         new("hbomax", "HBO Max", "◆", "HBO · Warner", new[] { "HBO Max", "Max" }, "https://play.hbomax.com", 0x1A0B3D, 0x5822B4),

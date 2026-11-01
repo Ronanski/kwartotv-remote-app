@@ -54,6 +54,7 @@ fun SignInForTv(vm: AppViewModel, manual: String?, onManualDone: () -> Unit) {
     // The TV says it worked.
     LaunchedEffect(request) {
         val r = request ?: return@LaunchedEffect
+        vm.markSignedIn(r.service, r.done)
         if (r.done) { Toast.makeText(context, "${r.name} is signed in on the TV.", Toast.LENGTH_SHORT).show(); client.clearSignIn() }
     }
     LaunchedEffect(manual) { if (manual != null) open = SIGN_IN_SERVICES[manual] }

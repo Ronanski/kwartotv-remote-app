@@ -77,8 +77,8 @@ class RemoteService : Service() {
             (tvs.firstOrNull { it.deviceId == store.selectedId } ?: tvs.firstOrNull())?.let { client.ensureConnected(it) }
         }
         scope.launch {
-            combine(client.conn, client.now) { c, n -> c to n }.collect { (c, n) ->
-                try { nm.notify(ID, build(c, n)) } catch (_: SecurityException) { }
+            combine(client.conn, client.now, client.music) { c, n, m -> Triple(c, n, m) }.collect { (c, n, m) ->
+                try { nm.notify(ID, build(c, n, m)) } catch (_: SecurityException) { }
             }
         }
     }
@@ -95,7 +95,7 @@ class RemoteService : Service() {
             ACTION_CMD -> intent.getStringExtra(EXTRA_CMD)?.let { if (!client.send(it)) client.reconnect() }
         }
         val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
-        try { ServiceCompat.startForeground(this, ID, build(client.conn.value, client.now.value), type) } catch (_: Exception) { stopSelf() }
+        try { ServiceCompat.startForeground(this, ID, build(client.conn.value, client.now.value, client.music.value), type) } catch (_: Exception) { stopSelf() }
         return START_STICKY
     }
 
@@ -110,7 +110,7 @@ class RemoteService : Service() {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun build(conn: Conn, now: Now): Notification {
+    private fun build(conn: Conn, now: Now, music: com.kwartotv.remote.MusicState): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 9, Intent(this, RemoteService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
         val text = when (conn) {
@@ -119,20 +119,25 @@ class RemoteService : Service() {
             is Conn.Rejected -> conn.reason
             Conn.Idle -> "Not connected. Tap to open the remote."
         }
-        return NotificationCompat.Builder(this, CHANNEL)
+        // Music playing on the TV: the song and the music buttons instead of the channel.
+        val song = conn == Conn.Connected && music.on && music.title.isNotBlank()
+        val b = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_remote)
-            .setContentTitle("KwartoTV Remote")
-            .setContentText(text)
+            .setContentTitle(if (song) "${if (music.playing) "♪" else "❚❚"} ${music.title}" else "KwartoTV Remote")
+            .setContentText(if (song) music.artist.ifBlank { "YouTube Music on the TV" } else text)
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(0, "⏯ Play/Pause", command(Cmd.PLAY_PAUSE, 1))
+        if (song) b.addAction(0, "⏮", command(Cmd.MUSIC_PREV, 4))
+            .addAction(0, if (music.playing) "⏸ Pause" else "▶ Play", command(Cmd.MUSIC_PLAY_PAUSE, 5))
+            .addAction(0, "⏭", command(Cmd.MUSIC_NEXT, 6))
+        else b.addAction(0, "⏯ Play/Pause", command(Cmd.PLAY_PAUSE, 1))
             .addAction(0, "Vol −", command(Cmd.VOL_DOWN, 2))
             .addAction(0, "Vol +", command(Cmd.VOL_UP, 3))
             .addAction(0, "Disconnect", stop)
-            .build()
+        return b.build()
     }
 }

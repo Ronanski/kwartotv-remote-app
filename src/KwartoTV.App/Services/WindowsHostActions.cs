@@ -118,7 +118,7 @@ public sealed class WindowsHostActions : IHostActions
             case "scan.start" or "scan.stop" or "catalog.choose" or "catalog.choosegroup" or "catalog.favorite":
                 ui.Invoke(() => shell.Finder(cmd, arg)); return;
 
-            case "music.open" or "music.playpause" or "music.next" or "music.prev" or "music.stop" or "music.search" or "music.play":
+            case "music.open" or "music.playpause" or "music.next" or "music.prev" or "music.stop" or "music.search" or "music.play" or "music.signin":
                 ui.Invoke(() => shell.Music(cmd, arg)); return;
 
             case "power.sleep": PowerActions.Sleep(); return;

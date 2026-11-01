@@ -73,6 +73,13 @@ public sealed class MusicService
   };
 })();";
 
+    /// <summary>
+    /// The browser switches of the music profile. The window is kept off screen: the browser must not treat it as hidden
+    /// (it would hold the music back). The visible YouTube Music app uses the same ones (same profile, same sign-in).
+    /// </summary>
+    public const string BrowserArgs = "--autoplay-policy=no-user-gesture-required --disable-background-media-suspend --disable-backgrounding-occluded-windows " +
+        "--disable-renderer-backgrounding --disable-background-timer-throttling --disable-features=CalculateNativeWinOcclusion";
+
     private Window? _window;
     private WebView2? _web;
     private Task? _starting;
@@ -102,10 +109,7 @@ public sealed class MusicService
         _window.Show();
         try
         {
-            var options = new CoreWebView2EnvironmentOptions(
-                // The window is kept off screen: the browser must not treat it as hidden (it would hold the music back).
-                "--autoplay-policy=no-user-gesture-required --disable-background-media-suspend --disable-backgrounding-occluded-windows " +
-                "--disable-renderer-backgrounding --disable-background-timer-throttling --disable-features=CalculateNativeWinOcclusion");
+            var options = new CoreWebView2EnvironmentOptions(BrowserArgs);
             var env = await CoreWebView2Environment.CreateAsync(null, AppPaths.Profile("webview-music"), options);
             await _web.EnsureCoreWebView2Async(env);
             var core = _web.CoreWebView2;

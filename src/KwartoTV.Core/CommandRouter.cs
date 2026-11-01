@@ -36,7 +36,7 @@ public sealed class CommandRouter
         // a sign-in made on the phone (Netflix, Bilibili) handed to the TV: "netflix|cookie=value; ..."
         "web.signin",
         // YouTube Music on the TV (it plays on behind the lock screen)
-        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play",
+        "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play", "music.signin",
     };
 
     // While the TV is locked (clock screen) only these work: unlock, power, and volume.
