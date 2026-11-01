@@ -636,9 +636,10 @@ public partial class MainWindow : Window, IShell
     {
         if (delayMs > 0) await Task.Delay(delayMs);
         string? msg = null;
-        for (var attempt = 0; attempt < 3 && msg is null; attempt++)
+        for (var attempt = 0; attempt < 3 && msg is null && _web == w; attempt++)
         {
             if (attempt > 0) await Task.Delay(700);
+            if (_web != w) break;   // Netflix was closed meanwhile
             msg = NetflixTracks.Message(await w.NetflixTextAsync("tracks()"));
         }
         AppPaths.LogLine("netflix: tracks " + (msg is null ? "none" : "sent"));

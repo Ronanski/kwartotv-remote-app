@@ -65,9 +65,11 @@ public sealed class WebAppWindow : Window
     /// <summary>Runs a Netflix player command (NetflixControl) in the page; its answer ("player", "clicked", "none"...).</summary>
     public async Task<string> NetflixAsync(string call)
     {
-        if (Kind != ForegroundKind.Netflix || _web.CoreWebView2 is not { } core) return "none";
+        if (Kind != ForegroundKind.Netflix) return "none";
         try
         {
+            // The window may have closed meanwhile (Back, Home): its browser is gone then.
+            if (_web.CoreWebView2 is not { } core) return "none";
             var r = await core.ExecuteScriptAsync("window.__kwNetflix ? window.__kwNetflix." + call + " : 'none'");
             return r.Trim('"');
         }
@@ -77,9 +79,10 @@ public sealed class WebAppWindow : Window
     /// <summary>A Netflix call that answers with a JSON text (NetflixControl tracks()); null when there is none.</summary>
     public async Task<string?> NetflixTextAsync(string call)
     {
-        if (Kind != ForegroundKind.Netflix || _web.CoreWebView2 is not { } core) return null;
+        if (Kind != ForegroundKind.Netflix) return null;
         try
         {
+            if (_web.CoreWebView2 is not { } core) return null;
             var r = await core.ExecuteScriptAsync("window.__kwNetflix ? window.__kwNetflix." + call + " : null");
             return System.Text.Json.JsonSerializer.Deserialize<string?>(r);
         }
