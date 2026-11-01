@@ -73,7 +73,7 @@ public sealed class MusicView : PageBase
         var title = new TextBlock { Text = "YouTube Music", FontSize = 40, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center };
         var top = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         top.Children.Add(UiKit.ActionButton("🔍  Search", Search));
-        top.Children.Add(UiKit.ActionButton("Sign in (no ads)", () => Shell.OpenYouTubeMusic(signIn: true)));
+        if (!Shell.Tv.Settings.YouTubeMusicSignedIn) top.Children.Add(UiKit.ActionButton("Sign in (no ads)", () => Shell.OpenYouTubeMusic(signIn: true)));
         DockPanel.SetDock(top, Dock.Right);
         head.Children.Add(top); head.Children.Add(title);
         Body.Children.Add(head);

@@ -225,6 +225,8 @@ val SIGN_IN_SERVICES = mapOf(
     // often goes to its "get the app" or account pages instead of /browse: anything that is not a sign-in/sign-up page.
     "netflix" to SignInService("netflix", "Netflix", "https://www.netflix.com/login", "netflix.com", "NetflixId", listOf("/browse", "/profiles", "/youraccount", "/account", "/title", "/watch", "/mobile", "/latest", "/search", "/settings")),
     "bilibili" to SignInService("bilibili", "Bilibili", "https://www.bilibili.tv/en/login", "bilibili.tv", "SESSDATA", emptyList()),
+    // Signed in on the TV itself (Google's sign-in); the TV only tells the phone when it is done.
+    "ytmusic" to SignInService("ytmusic", "YouTube Music", "https://music.youtube.com/", "youtube.com", "SAPISID", emptyList()),
 )
 
 fun parseSignIn(o: JSONObject): SignInRequest? {

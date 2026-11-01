@@ -54,6 +54,9 @@ public sealed class AppSettings
 
     /// <summary>The clock screensaver comes by itself after this many idle minutes with nothing playing (0 = never). Any key closes it.</summary>
     public int ScreensaverMinutes { get; set; } = 10;
+
+    /// <summary>Signed in to YouTube Music on this TV (its sign-in button is hidden).</summary>
+    public bool YouTubeMusicSignedIn { get; set; }
     public static readonly int[] ScreensaverChoices = { 10, 15, 30, 60, 5, 0 };
     public static string DescribeScreensaver(int m) => m <= 0 ? "Off" : $"after {m} min";
     /// <summary>Photos from a folder fade in behind the clock.</summary>

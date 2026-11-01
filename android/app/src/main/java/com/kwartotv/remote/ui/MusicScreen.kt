@@ -115,8 +115,9 @@ fun MusicTab(vm: AppViewModel) {
             if (music.on) RemoteKey("", "Stop the music", Modifier.weight(0.8f), height = 64.dp, icon = Icons.Rounded.Stop) { send(Cmd.MUSIC_STOP) }
         }
 
-        // The music plays through YouTube on the TV: its sign-in counts (Premium has no ads).
-        androidx.compose.material3.TextButton(onClick = { send(Cmd.MUSIC_SIGNIN) }) {
+        // Signed in to YouTube Music on the TV once (Premium has no ads); gone once the TV confirmed it.
+        val signedIn by vm.signedIn.collectAsState()
+        if ("ytmusic" !in signedIn) androidx.compose.material3.TextButton(onClick = { send(Cmd.MUSIC_SIGNIN) }) {
             Text("Ads? Sign in to YouTube Music on the TV once (Premium = no ads)", fontSize = 13.sp)
         }
 

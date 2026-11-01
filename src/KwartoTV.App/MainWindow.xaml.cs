@@ -377,7 +377,29 @@ public partial class MainWindow : Window, IShell
             ShowToast("Could not open YouTube Music: Microsoft Edge WebView2 is missing.");
             return true;
         });
-        if (signIn) ShowToast("Sign in to YouTube Music once (the phone opens its keyboard for each box). After that the music has no ads with Premium.");
+        if (!signIn) return;
+        ShowToast("Sign in to YouTube Music once (the phone opens its keyboard for each box). After that the music has no ads with Premium.");
+        // Signed in: Google sends the page on to YouTube Music. Close the sign-in by itself and go back to the music screen.
+        if (_web is { } win)
+        {
+            var done = false;
+            win.Navigated += url =>
+            {
+                if (done || !url.StartsWith("https://music.youtube.com", StringComparison.OrdinalIgnoreCase)) return;
+                done = true;
+                AppPaths.LogLine("music: signed in to YouTube Music");
+                _tv.Settings.YouTubeMusicSignedIn = true; _tv.SaveSettings();
+                Dispatcher.BeginInvoke(async () =>
+                {
+                    await Task.Delay(1500);
+                    if (!ReferenceEquals(_web, win)) return;
+                    CloseWeb();
+                    LaunchYouTubeMusic();
+                    ShowToast("Signed in to YouTube Music. Pick a song: no ads with Premium.");
+                    _tv.Server?.Broadcast(System.Text.Json.JsonSerializer.Serialize(new { type = "signin", service = "ytmusic", name = "YouTube Music", done = true }));
+                });
+            };
+        }
     }
 
     /// <summary>Redraws the page on screen (after a setting changed).</summary>

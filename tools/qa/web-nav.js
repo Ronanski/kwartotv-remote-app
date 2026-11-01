@@ -73,6 +73,25 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
   await key('ArrowUp');
   check((await last()).includes('Row 1 item 2'), `up keeps the column (${await last()})`);
 
+  // Back never returns to a sign-in page: after signing in (Google → YouTube Music), Back goes to KwartoTV.
+  const ctx = await browser.newContext();
+  await ctx.route('https://accounts.google.com/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body><h1>Sign in</h1></body></html>' }));
+  await ctx.route('https://music.youtube.com/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body><a href="#x">Song</a><a href="#y">Song 2</a></body></html>' }));
+  const s = await ctx.newPage();
+  const arm = async () => { await s.evaluate(() => { window.__moves = []; window.chrome = { webview: { postMessage: m => window.__moves.push(String(m)) } }; }); await s.evaluate(script); };
+  await s.goto('https://accounts.google.com/ServiceLogin?continue=https://music.youtube.com/');
+  await s.goto('https://music.youtube.com/explore', { referer: 'https://accounts.google.com/ServiceLogin?continue=https://music.youtube.com/' });
+  await arm();
+  await s.keyboard.press('Escape'); await s.waitForTimeout(400);
+  const msgs = await s.evaluate(() => window.__moves).catch(() => []);
+  check(s.url().startsWith('https://music.youtube.com/') && msgs.includes('home'), `after signing in, Back goes to KwartoTV, not back to the sign-in (${s.url()}, ${msgs.filter(m => m === 'home').length} home)`);
+  // Control: an ordinary deeper page still goes back one page.
+  await s.goto('https://music.youtube.com/');
+  await s.goto('https://music.youtube.com/explore', { referer: 'https://music.youtube.com/' });
+  await arm();
+  await s.keyboard.press('Escape'); await s.waitForTimeout(600);
+  check(s.url() === 'https://music.youtube.com/', `on an ordinary page Back still goes back one page (${s.url()})`);
+
   await browser.close();
   console.log(fail ? `${fail} FAILED` : 'ALL PASSED');
   process.exit(fail ? 1 : 0);

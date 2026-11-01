@@ -234,7 +234,10 @@ public static class TvWebScript
       if (close) { close.click(); cur = null; return; }
     }
     if (fullVideo()) { document.exitFullscreen().catch(function () { }); return; }
-    if (netflixWatch() || (history.length > 1 && !atRoot())) { history.back(); cur = null; return; }
+    // Never back into a sign-in page (after signing in, Back would ask to sign in again): back to KwartoTV instead.
+    var ref = document.referrer || '';
+    var fromSignIn = /accounts\.google\.|\/(login|signin|ServiceLogin|passport)/i.test(ref);
+    if (!fromSignIn && (netflixWatch() || (history.length > 1 && !atRoot()))) { history.back(); cur = null; return; }
     window.chrome.webview.postMessage('home');
   }
 

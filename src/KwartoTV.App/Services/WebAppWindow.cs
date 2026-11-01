@@ -62,6 +62,9 @@ public sealed class WebAppWindow : Window
 
     /// <summary>The embedded browser could not start (runtime missing). The caller falls back to an external browser.</summary>
     public event Action<string>? Failed;
+    /// <summary>A page finished loading (its address).</summary>
+    public event Action<string>? Navigated;
+
     /// <summary>User pressed F1 inside the page.</summary>
     public event Action? HomeRequested;
     /// <summary>▲ / ▼ while a YouTube channel from the lineup is showing (video-only mode).</summary>
@@ -217,6 +220,7 @@ public sealed class WebAppWindow : Window
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(TvWebScript.Script);
                 _web.ZoomFactor = 1.25;
             }
+            core.NavigationCompleted += (_, _) => { try { Navigated?.Invoke(core.Source); } catch { } };
             core.WebMessageReceived += (_, e) =>
             {
                 var msg = e.TryGetWebMessageAsString();
