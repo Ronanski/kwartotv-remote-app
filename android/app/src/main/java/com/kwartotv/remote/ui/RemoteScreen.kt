@@ -393,6 +393,19 @@ private fun MediaTab(send: (String, String?) -> Unit) {
             RemoteKey("Stop", "Stop", Modifier.weight(1f), icon = Icons.Rounded.Stop) { send(Cmd.STOP, null) }
             RemoteKey("+10 s", "Forward 10 seconds", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.Forward10) { send(Cmd.SEEK, "10") }
         }
+        // Netflix: its own player's buttons (the intro is skipped by itself), and search with the phone's keyboard.
+        SectionLabel("Netflix")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_SKIP, null) }
+            RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_NEXT, null) }
+        }
+        var nq by rememberSaveable { mutableStateOf("") }
+        OutlinedTextField(
+            value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            label = { Text("Search Netflix") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { if (nq.isNotBlank()) send(Cmd.NETFLIX_SEARCH, nq.trim()) }),
+        )
         Text("Volume", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("Vol −", "Volume down", Modifier.weight(1f), repeat = true, height = 80.dp, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }

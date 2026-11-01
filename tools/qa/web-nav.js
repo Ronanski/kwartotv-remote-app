@@ -92,6 +92,44 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
   await s.keyboard.press('Escape'); await s.waitForTimeout(600);
   check(s.url() === 'https://music.youtube.com/', `on an ordinary page Back still goes back one page (${s.url()})`);
 
+  // Netflix through its own player (NetflixControl): play/pause, seek, skip intro by itself, next episode, search.
+  const ncs = fs.readFileSync(path.join(__dirname, '../../src/KwartoTV.App/Services/NetflixControl.cs'), 'utf8');
+  const nm = ncs.match(/public const string Script = @"([\s\S]*?)";\s*\n/);
+  check(!!nm, 'netflix: control script found');
+  const nscript = nm[1].replace(/""/g, '"');
+  const n = await browser.newPage();
+  await n.route('https://www.netflix.com/**', r => r.fulfill({ contentType: 'text/html', body: '<html><body>search page</body></html>' }));
+  await n.goto('https://www.netflix.com/watch/81234567');
+  await n.evaluate(() => {
+    window.__msgs = []; window.chrome = { webview: { postMessage: m => window.__msgs.push(String(m)) } };
+    const calls = window.__calls = [];
+    const p = { paused: false, t: 600000,
+      isPaused() { return this.paused; }, play() { this.paused = false; calls.push('play'); }, pause() { this.paused = true; calls.push('pause'); },
+      getCurrentTime() { return this.t; }, seek(ms) { this.t = ms; calls.push('seek ' + ms); } };
+    window.netflix = { appContext: { state: { playerApp: { getAPI: () => ({ videoPlayer: {
+      getAllPlayerSessionIds: () => ['motion-billboard-1', 'watch-81234567'], getVideoPlayerBySessionId: id => id.indexOf('watch') >= 0 ? p : null } }) } } } };
+    document.body.innerHTML = '<button data-uia="player-skip-intro" onclick="window.__calls.push(\'skip intro clicked\'); this.remove()">Skip Intro</button>' +
+      '<button data-uia="next-episode-seamless-button" onclick="window.__calls.push(\'next clicked\')">Next Episode</button>';
+  });
+  await n.evaluate(nscript);
+  const r1 = await n.evaluate(() => window.__kwNetflix.toggle());
+  const r2 = await n.evaluate(() => window.__kwNetflix.toggle());
+  const r3 = await n.evaluate(() => window.__kwNetflix.seek(10));
+  const r4 = await n.evaluate(() => window.__kwNetflix.seek(-30));
+  await n.waitForTimeout(1500);
+  const r5 = await n.evaluate(() => window.__kwNetflix.next());
+  const calls = await n.evaluate(() => window.__calls);
+  const nmsgs = await n.evaluate(() => window.__msgs);
+  check(r1 === 'player' && r2 === 'player' && calls[0] === 'pause' && calls[1] === 'play', `netflix: play/pause goes to Netflix's own player (${calls.slice(0, 2)})`);
+  check(r3 === 'player' && calls.includes('seek 610000') && calls.includes('seek 580000'), `netflix: +10 s / -30 s seek the player, never the video element (${calls.filter(c => c.startsWith('seek'))})`);
+  check(calls.includes('skip intro clicked') && nmsgs.includes("netflix:skipped intro"), `netflix: the intro is skipped by itself (${nmsgs})`);
+  check(r5 === 'clicked' && calls.includes('next clicked'), 'netflix: next episode');
+  await n.evaluate(() => window.__kwNetflix.search('stranger things'));
+  await n.waitForTimeout(800);
+  check(n.url() === 'https://www.netflix.com/search?q=stranger%20things', `netflix: search from the phone opens the results (${n.url()})`);
+  const none = await (await browser.newPage()).evaluate(nscript + '; window.__kwNetflix.seek(10)');
+  check(none === 'none', 'netflix: without a Netflix player nothing is seeked');
+
   await browser.close();
   console.log(fail ? `${fail} FAILED` : 'ALL PASSED');
   process.exit(fail ? 1 : 0);

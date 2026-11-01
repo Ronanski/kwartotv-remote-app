@@ -580,8 +580,41 @@ public partial class MainWindow : Window, IShell
 
     // ---------- in-app player controls used by the remote
 
-    public bool PlayerTogglePause() => _player is { IsVisible: true } p && p.TogglePause();
-    public bool PlayerSeek(int seconds) => _player is { IsVisible: true } p && p.Seek(seconds);
+    public bool PlayerTogglePause()
+    {
+        if (_player is { IsVisible: true } p) return p.TogglePause();
+        if (_web is { IsVisible: true, Kind: ForegroundKind.Netflix } w) { _ = NetflixAsync(w, "toggle()"); return true; }
+        return false;
+    }
+
+    public bool PlayerSeek(int seconds)
+    {
+        if (_player is { IsVisible: true } p) return p.Seek(seconds);
+        if (_web is { IsVisible: true, Kind: ForegroundKind.Netflix } w) { _ = NetflixAsync(w, $"seek({seconds})"); return true; }
+        return false;
+    }
+
+    private static async Task NetflixAsync(WebAppWindow w, string call)
+    {
+        var r = await w.NetflixAsync(call);
+        AppPaths.LogLine($"netflix: {call} -> {r}");
+    }
+
+    /// <summary>The phone's Netflix buttons: skip intro, next episode, search (opens Netflix on the results).</summary>
+    public void Netflix(string cmd, string? arg)
+    {
+        var w = _web is { Kind: ForegroundKind.Netflix } nw ? nw : null;
+        if (cmd == "netflix.search")
+        {
+            var q = (arg ?? "").Trim();
+            if (w is not null) { _ = NetflixAsync(w, "search(" + System.Text.Json.JsonSerializer.Serialize(q) + ")"); return; }
+            var url = "https://www.netflix.com/search?q=" + Uri.EscapeDataString(q);
+            OpenWeb(url, "netflix", ForegroundKind.Netflix, null, "Netflix", () => _tv.Apps.LaunchWeb(new WebTile("netflix", "Netflix", url)));
+            return;
+        }
+        if (w is null) { ShowToast("Open Netflix first."); return; }
+        _ = NetflixAsync(w, cmd == "netflix.next" ? "next()" : "skip()");
+    }
     public bool PlayerSpeed(double speed) => _player is { IsVisible: true } p && p.SetSpeed(speed);
     public bool PlayerStop() { if (_player is not { IsVisible: true } p) return false; GoHome(); return true; }
 

@@ -62,6 +62,18 @@ public sealed class WebAppWindow : Window
 
     /// <summary>The embedded browser could not start (runtime missing). The caller falls back to an external browser.</summary>
     public event Action<string>? Failed;
+    /// <summary>Runs a Netflix player command (NetflixControl) in the page; its answer ("player", "clicked", "none"...).</summary>
+    public async Task<string> NetflixAsync(string call)
+    {
+        if (Kind != ForegroundKind.Netflix || _web.CoreWebView2 is not { } core) return "none";
+        try
+        {
+            var r = await core.ExecuteScriptAsync("window.__kwNetflix ? window.__kwNetflix." + call + " : 'none'");
+            return r.Trim('"');
+        }
+        catch { return "none"; }
+    }
+
     /// <summary>A page finished loading (its address).</summary>
     public event Action<string>? Navigated;
 
@@ -214,6 +226,7 @@ public sealed class WebAppWindow : Window
             await core.AddScriptToExecuteOnDocumentCreatedAsync(NoForcedColorsScript);
             if (_videoOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(VideoOnlyScript);
             // Netflix and other websites are made for a mouse: add TV-style remote navigation and make them bigger for the couch.
+            if (Kind == ForegroundKind.Netflix) await core.AddScriptToExecuteOnDocumentCreatedAsync(NetflixControl.Script);
             if (PlayerOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(PlayerOnlyScript);
             else if (Kind is ForegroundKind.Netflix or ForegroundKind.Web)
             {
@@ -229,6 +242,7 @@ public sealed class WebAppWindow : Window
                 else if (msg == "chdown") Dispatcher.BeginInvoke(() => ChannelDown?.Invoke());
                 else if (msg?.StartsWith("tvfocus:") == true && _focusLogs++ < 40) AppPaths.LogLine("web highlight: " + msg[8..]);
                 else if (msg?.StartsWith("player:") == true && _focusLogs++ < 40) AppPaths.LogLine("web player: " + msg[7..]);
+                else if (msg?.StartsWith("netflix:") == true) AppPaths.LogLine("netflix: " + msg[8..]);
                 else if (msg?.StartsWith("textfocus") == true && Kind != ForegroundKind.YouTube)
                 {
                     var kind = msg.Length > 10 ? msg[10..] : "";

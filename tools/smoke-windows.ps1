@@ -432,6 +432,8 @@ try {
     Phone "nav.down" $null $null 5 "arrows inside YouTube" $null
     Phone "nav.home" $null "web: closed youtube" 10 "Home button leaves YouTube" $null
     Phone "app.netflix" $null "web: open Netflix" 10 "Netflix opens" $null
+    Start-Sleep -Seconds 6
+    Phone "netflix.search" "stranger things" "netflix: search" 10 "Netflix search from the phone" "45b-phone-netflix-search"
     Phone "nav.home" $null "web: closed netflix" 10 "Home button leaves Netflix" $null
     Phone "app.open" "primevideo" "app: Prime Video" 10 "More apps: Prime Video opens" $null
     Phone "nav.home" $null "home" 10 "Home button leaves Prime Video" $null

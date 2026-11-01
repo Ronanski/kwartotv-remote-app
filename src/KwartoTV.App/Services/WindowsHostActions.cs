@@ -45,6 +45,8 @@ public interface IShell
     void Music(string cmd, string? arg);
     /// <summary>Play/pause, next or previous for the music (locked TV, or nothing else playing). False: not for the music.</summary>
     bool MusicMediaKey(string cmd);
+    /// <summary>Netflix's own player: netflix.skip, netflix.next, netflix.search.</summary>
+    void Netflix(string cmd, string? arg);
     void ScreenOff();
     void ScreenOn();
     /// <summary>Closes the screensaver; true when it was up (the button that woke the TV does nothing else).</summary>
@@ -142,6 +144,7 @@ public sealed class WindowsHostActions : IHostActions
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.
             case "power.screenoff": ui.Invoke(shell.ScreenOff); return;
             case "power.screenon": ui.Invoke(shell.ScreenOn); return;
+            case "netflix.skip" or "netflix.next" or "netflix.search": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
             case "power.timer": ui.Invoke(() => shell.SleepTimer(int.Parse(arg!, CultureInfo.InvariantCulture))); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;
