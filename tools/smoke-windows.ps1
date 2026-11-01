@@ -452,6 +452,9 @@ try {
     $locked = WsCmd "nav.ok" $null
     Check ($null -ne $locked -and -not $locked.ok) "phone: other buttons do nothing while locked ($(if ($locked) { $locked.error }))"
     Phone "power.screenon" $null "screen: unlocked" 10 "Unlock returns to the TV" "47-phone-unlocked"
+    $phoneErrors = @(Get-Content $logPath -ErrorAction SilentlyContinue) | Select-Object -Skip $logBefore | Where-Object { $_ -match "UI error|Fatal|Task error" }
+    $phoneErrors | Select-Object -First 5 | ForEach-Object { Write-Host "phone error: $_" }
+    Check ($phoneErrors.Count -eq 0) "phone: no app errors while the phone drove every screen ($($phoneErrors.Count))"
 }
 catch { Write-Host "music check error: $_"; Check $false "music check ran" }
 @(Get-Content (Join-Path $data "log.txt") -ErrorAction SilentlyContinue) | Select-Object -Skip $logBefore | Where-Object { $_ -match "music|screen:" } | ForEach-Object { Write-Host "music log: $_" }

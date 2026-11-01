@@ -19,8 +19,8 @@ public sealed class MusicView : PageBase
     private IReadOnlyList<MusicTrack>? _found;
     private string? _query;
     private bool _loading;
-    private readonly TextBlock _nowTitle = new() { FontSize = 30, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-    private readonly TextBlock _nowArtist = UiKit.Dimmed("", 18);
+    // Made again on every redraw: a WPF element can sit in only one panel at a time.
+    private TextBlock _nowTitle = new(), _nowArtist = new();
     private Button? _playButton;
 
     public MusicView(MainWindow shell) : base(shell)
@@ -79,6 +79,8 @@ public sealed class MusicView : PageBase
         Body.Children.Add(head);
 
         // Now playing, with its buttons.
+        _nowTitle = new TextBlock { FontSize = 30, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
+        _nowArtist = UiKit.Dimmed("", 18);
         var card = new Border { CornerRadius = new CornerRadius(20), Padding = new Thickness(24, 18, 24, 18), Margin = new Thickness(0, 10, 0, 4), Background = new SolidColorBrush(Color.FromArgb(0x1F, 0xFF, 0xFF, 0xFF)) };
         var info = new StackPanel();
         info.Children.Add(_nowTitle); info.Children.Add(_nowArtist);
