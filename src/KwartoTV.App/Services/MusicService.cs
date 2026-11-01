@@ -1,3 +1,4 @@
+using System.Text;
 using System.Windows;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
@@ -7,84 +8,62 @@ using KwartoTV.Core;
 namespace KwartoTV.App.Services;
 
 /// <summary>
-/// YouTube Music, playing in the background (a browser window kept off screen), controlled from the phone:
-/// play/pause, next, previous, search and pick a song. It keeps playing behind the lock screen, which shows the song.
-/// Uses its own saved profile ("music"), so a YouTube Premium sign-in there means no ads.
+/// Music from the phone, played on the TV through its YouTube app (a browser kept off screen with the same saved
+/// profile as YouTube on the TV): signed in to YouTube there means signed in here (Premium: no ads). Songs are found
+/// with YouTube Music's own search; KwartoTV keeps the queue (YouTube Music's "up next" radio) for next / previous and
+/// goes on by itself at the end of a song. It plays on behind the lock screen, which shows the song.
 /// </summary>
 public sealed class MusicService
 {
-    /// <summary>Injected into music.youtube.com: reports what is playing, presses the player's buttons, searches.</summary>
+    /// <summary>The window is kept off screen: the browser must not treat it as hidden (it would hold the music back).</summary>
+    public const string BackgroundArgs = "--disable-background-media-suspend --disable-backgrounding-occluded-windows " +
+        "--disable-renderer-backgrounding --disable-background-timer-throttling --disable-features=CalculateNativeWinOcclusion";
+
+    /// <summary>The switches of the YouTube profile (shared with YouTube on the TV, so both must use the same ones).</summary>
+    public static string YouTubeArgs(int renderMode) =>
+        ("--autoplay-policy=no-user-gesture-required " + BackgroundArgs + " " + AppSettings.YouTubeBrowserArgs(renderMode)).Trim();
+
+    /// <summary>Injected into YouTube's TV page: reports play state and the end of a song, and plays/pauses.</summary>
     private const string PageScript = @"
 (function () {
   if (window.__kwMusic) return; window.__kwMusic = true;
   function post(o) { try { window.chrome.webview.postMessage(JSON.stringify(o)); } catch (e) {} }
-  function click(sel) { var b = document.querySelector(sel); if (b) { b.click(); return true; } return false; }
   function video() { return document.querySelector('video'); }
-  function textOf(sel) { var e = document.querySelector(sel); return e ? (e.innerText || e.textContent || '').trim() : ''; }
-  var last = '';
+  var last = '', endedFor = '';
   setInterval(function () {
-    // 'Still listening?' must not stop the music behind the lock screen.
-    click('ytmusic-you-there-renderer button, ytmusic-you-there-renderer tp-yt-paper-button');
-    var v = video(), md = navigator.mediaSession && navigator.mediaSession.metadata;
-    var art = md && md.artwork && md.artwork.length ? md.artwork[md.artwork.length - 1].src : '';
-    // The player bar shows the song even before the browser's media info is filled in.
-    var barTitle = textOf('ytmusic-player-bar .title'), barBy = textOf('ytmusic-player-bar .byline').split(' \u2022 ')[0];
-    var s = { type: 'now', title: (md && md.title) || barTitle, artist: (md && md.artist) || barBy, art: art, playing: !!(v && !v.paused && !v.ended && v.readyState > 2) };
+    var v = video();
+    var s = { type: 'state', playing: !!(v && !v.paused && !v.ended && v.readyState > 2), ready: v ? v.readyState : -1 };
     var k = JSON.stringify(s); if (k !== last) { last = k; post(s); }
-    // A song page that does not start by itself is started (once per song; a pause from the phone is respected).
-    if (v && v.paused && !v.ended && location.pathname === '/watch' && window.__kwStarted !== location.search && !window.__kwPaused) {
-      window.__kwStarted = location.search; v.play().catch(function (e) { post({ type: 'diag', text: 'play() refused: ' + e }); });
-    }
-    if (++ticks % 5 === 0 && ticks <= 40) post({ type: 'diag', text: location.pathname + location.search + ' video=' + (v ? (v.paused ? 'paused' : 'playing') + ' ready=' + v.readyState + (v.error ? ' error=' + v.error.code : '') : 'none') + ' meta=' + (md ? md.title : '-') + ' bar=' + barTitle + ' vis=' + document.visibilityState + ' err=' + (textOf('yt-playability-error-supported-renderers') || textOf('ytmusic-player .error') || textOf('tp-yt-paper-dialog') || '-').slice(0, 160) });
+    // A song page that does not start by itself is started (a pause from the phone is respected).
+    if (v && v.paused && !v.ended && !window.__kwPaused && v.readyState > 1) v.play().catch(function () {});
+    // The end of the song: KwartoTV plays the next one of its queue.
+    if (v && v.duration > 0 && (v.ended || v.currentTime >= v.duration - 0.6) && endedFor !== location.hash) { endedFor = location.hash; post({ type: 'ended' }); }
   }, 1000);
-  var ticks = 0;
-  function texts(col) { try { return col.musicResponsiveListItemFlexColumnRenderer.text.runs.map(function (r) { return r.text; }).join(''); } catch (e) { return ''; } }
-  function walk(o, out) {
-    if (!o || typeof o !== 'object' || out.length >= 20) return;
-    if (Array.isArray(o)) { for (var i = 0; i < o.length; i++) walk(o[i], out); return; }
-    var r = o.musicResponsiveListItemRenderer;
-    if (r) {
-      var id = r.playlistItemData && r.playlistItemData.videoId;
-      if (!id) { try { id = r.overlay.musicItemThumbnailOverlayRenderer.content.musicPlayButtonRenderer.playNavigationEndpoint.watchEndpoint.videoId; } catch (e) {} }
-      var cols = r.flexColumns || [];
-      var artist = cols.length > 1 ? texts(cols[1]).split(' • ')[0] : '';
-      if (id) out.push({ id: id, t: cols.length ? texts(cols[0]) : '', a: artist });
-      return;
-    }
-    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) walk(o[k], out);
-  }
   window.__kw = {
-    toggle: function () { var v = video(); window.__kwPaused = !!(v && !v.paused); if (!click('ytmusic-player-bar #play-pause-button')) { if (v) { if (v.paused) v.play(); else v.pause(); } } },
-    pause: function () { var v = video(); if (v && !v.paused) { window.__kwPaused = true; if (!click('ytmusic-player-bar #play-pause-button')) v.pause(); } },
-    next: function () { click('ytmusic-player-bar .next-button'); },
-    prev: function () { click('ytmusic-player-bar .previous-button'); },
-    search: function (q) {
-      try {
-        var cfg = window.ytcfg, key = cfg && cfg.get('INNERTUBE_API_KEY'), ctx = cfg && cfg.get('INNERTUBE_CONTEXT');
-        // Songs only (the 'Songs' filter of the search page).
-        fetch('/youtubei/v1/search?prettyPrint=false' + (key ? '&key=' + encodeURIComponent(key) : ''), {
-          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ context: ctx, query: q, params: 'EgWKAQIIAWoKEAkQBRAKEAMQBA==' })
-        }).then(function (r) { return r.json(); })
-          .then(function (j) { var out = []; walk(j, out); post({ type: 'results', q: q, items: out }); })
-          .catch(function () { post({ type: 'results', q: q, items: [], error: true }); });
-      } catch (e) { post({ type: 'results', q: q, items: [], error: true }); }
-    }
+    toggle: function () { var v = video(); if (!v) return; if (v.paused) { window.__kwPaused = false; v.play(); } else { window.__kwPaused = true; v.pause(); } },
+    pause: function () { var v = video(); if (v && !v.paused) { window.__kwPaused = true; v.pause(); } },
+    restart: function () { var v = video(); if (v) v.currentTime = 0; }
   };
 })();";
 
-    /// <summary>
-    /// The browser switches of the music profile. The window is kept off screen: the browser must not treat it as hidden
-    /// (it would hold the music back). The visible YouTube Music app uses the same ones (same profile, same sign-in).
-    /// </summary>
-    public const string BrowserArgs = "--autoplay-policy=no-user-gesture-required --disable-background-media-suspend --disable-backgrounding-occluded-windows " +
-        "--disable-renderer-backgrounding --disable-background-timer-throttling --disable-features=CalculateNativeWinOcclusion";
+    private static readonly HttpClient Http = MakeHttp();
+    private static HttpClient MakeHttp()
+    {
+        var h = ResilientHttp.Create(TimeSpan.FromSeconds(20));
+        h.DefaultRequestHeaders.UserAgent.Clear();
+        h.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        h.DefaultRequestHeaders.TryAddWithoutValidation("Origin", "https://music.youtube.com");
+        h.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://music.youtube.com/");
+        return h;
+    }
 
     private Window? _window;
     private WebView2? _web;
     private Task? _starting;
-    private string? _pendingSearch;
     private MusicState _state = MusicState.Off;
+    private readonly List<MusicTrack> _queue = new();
+    private int _index = -1;
+    private bool _playing;
 
     public MusicState State => _state;
     public bool IsOn => _window is not null;
@@ -94,12 +73,13 @@ public sealed class MusicService
     /// <summary>Search results for the phones (query, songs, failed).</summary>
     public event Action<string, IReadOnlyList<MusicTrack>, bool>? Results;
 
-    /// <summary>Starts the music player (the YouTube Music home page; nothing plays until a song is picked).</summary>
-    public Task OpenAsync(string? url = null) => _starting ??= StartAsync(url ?? Music.Home);
+    private MusicTrack? Current => _index >= 0 && _index < _queue.Count ? _queue[_index] : null;
 
-    private async Task StartAsync(string url)
+    /// <summary>Starts the player (nothing plays until a song is picked).</summary>
+    public Task OpenAsync() => _starting ??= StartAsync();
+
+    private async Task StartAsync()
     {
-        // A real window (the browser needs one) kept off screen, never in the taskbar, never taking the keyboard.
         _web = new WebView2 { DefaultBackgroundColor = System.Drawing.Color.Black };
         _window = new Window
         {
@@ -109,27 +89,18 @@ public sealed class MusicService
         _window.Show();
         try
         {
-            var options = new CoreWebView2EnvironmentOptions(BrowserArgs);
-            var env = await CoreWebView2Environment.CreateAsync(null, AppPaths.Profile("webview-music"), options);
+            var env = await CoreWebView2Environment.CreateAsync(null, AppPaths.Profile("webview-youtube"), new CoreWebView2EnvironmentOptions(YouTubeArgs(WebAppWindow.YouTubeRenderMode)));
             await _web.EnsureCoreWebView2Async(env);
             var core = _web.CoreWebView2;
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.UserAgent = WebAppWindow.TvUserAgent;   // YouTube's TV app, with its sign-in
             core.NewWindowRequested += (_, e) => e.Handled = true;
-            core.NavigationStarting += (_, e) =>
-            {
-                if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && u.Scheme != Uri.UriSchemeHttps && u.Scheme != "about") e.Cancel = true;
-            };
             await core.AddScriptToExecuteOnDocumentCreatedAsync(WebAppWindow.NoForcedColorsScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(PageScript);
             core.WebMessageReceived += (_, e) => OnMessage(e.TryGetWebMessageAsString());
-            core.NavigationCompleted += (_, _) =>
-            {
-                if (_pendingSearch is { } q) { _pendingSearch = null; Search(q); }
-            };
-            SetState(_state with { On = true });
-            AppPaths.LogLine("music: started");
-            core.Navigate(url);
+            _state = _state with { On = true };
+            AppPaths.LogLine("music: started (YouTube on the TV)");
         }
         catch (Exception ex)
         {
@@ -142,29 +113,27 @@ public sealed class MusicService
     private void OnMessage(string? text)
     {
         if (string.IsNullOrEmpty(text)) return;
-        if (Music.ParseNow(text) is { } now)
+        try
         {
-            if (now == _state) return;
-            if (now.Title != _state.Title || now.Playing != _state.Playing)
-                AppPaths.LogLine($"music: {(now.Playing ? "playing" : "paused")} {now.Title} - {now.Artist}");
-            SetState(now);
-            return;
-        }
-        if (text.StartsWith("{\"type\":\"diag\"", StringComparison.Ordinal))
-        {
-            try
+            using var d = System.Text.Json.JsonDocument.Parse(text);
+            var type = d.RootElement.GetProperty("type").GetString();
+            if (type == "state")
             {
-                var d = System.Text.Json.JsonDocument.Parse(text).RootElement.GetProperty("text").GetString() ?? "";
-                AppPaths.LogLine("music page: " + (d.Length > 300 ? d[..300] : d));
+                _playing = d.RootElement.TryGetProperty("playing", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.True;
+                Publish();
             }
-            catch { }
-            return;
+            else if (type == "ended") { AppPaths.LogLine("music: song ended"); _ = NextAsync(); }
         }
-        if (Music.ParseResults(text) is { } r)
-        {
-            AppPaths.LogLine($"music: search \"{r.Query}\": {r.Tracks.Count} songs{(r.Error ? " (failed)" : "")}");
-            Results?.Invoke(r.Query, r.Tracks, r.Error);
-        }
+        catch { }
+    }
+
+    private void Publish()
+    {
+        var c = Current;
+        var s = new MusicState(IsOn, _playing, c?.Title ?? "", c?.Artist ?? "", null);
+        if (s == _state) return;
+        if (s.Title != _state.Title || s.Playing != _state.Playing) AppPaths.LogLine($"music: {(s.Playing ? "playing" : "paused")} {s.Title} - {s.Artist}");
+        SetState(s);
     }
 
     private void SetState(MusicState s) { _state = s; Changed?.Invoke(s); }
@@ -174,42 +143,95 @@ public sealed class MusicService
         if (_web?.CoreWebView2 is { } core) _ = core.ExecuteScriptAsync("window.__kw && window.__kw." + js);
     }
 
-    public void PlayPause() { if (_window is null) _ = OpenAsync(); else Run("toggle()"); }
-    public void Next() => Run("next()");
-    public void Previous() => Run("prev()");
+    private static async Task<string?> Post(string url, string body)
+    {
+        try
+        {
+            using var content = new StringContent(body, Encoding.UTF8, "application/json");
+            using var r = await Http.PostAsync(url, content);
+            return r.IsSuccessStatusCode ? await r.Content.ReadAsStringAsync() : null;
+        }
+        catch (Exception ex) { AppPaths.LogLine("music: " + ex.Message); return null; }
+    }
 
-    /// <summary>Pauses the music (a channel or video starts on the TV).</summary>
-    public void Pause() { if (_state.Playing) Run("pause()"); }
+    /// <summary>Searches songs with YouTube Music's own search; the results go to the phones (Results).</summary>
+    public async void Search(string query)
+    {
+        if (!Music.IsQuery(query)) return;
+        var json = await Post(YouTubeMusicApi.SearchUrl, YouTubeMusicApi.SearchBody(query));
+        IReadOnlyList<MusicTrack> tracks = json is null ? Array.Empty<MusicTrack>() : YouTubeMusicApi.ParseSearch(json);
+        AppPaths.LogLine($"music: search \"{query}\": {tracks.Count} songs{(json is null ? " (failed)" : "")}");
+        Results?.Invoke(query, tracks, json is null);
+    }
 
-    /// <summary>Plays one song; YouTube Music continues with similar songs.</summary>
+    /// <summary>Plays one song; the queue goes on with YouTube Music's radio for it.</summary>
     public async void Play(string id)
     {
         if (!Music.IsTrackId(id)) return;
         AppPaths.LogLine("music: play " + id);
-        if (_window is null) { try { await OpenAsync(Music.WatchUrl(id)); } catch (Exception ex) { AppPaths.LogLine("music: " + ex.Message); } return; }
-        if (_starting is { } t) { try { await t; } catch { return; } }
-        _web?.CoreWebView2?.Navigate(Music.WatchUrl(id));
+        var json = await Post(YouTubeMusicApi.NextUrl, YouTubeMusicApi.NextBody(id));
+        IReadOnlyList<MusicTrack> radio = json is null ? Array.Empty<MusicTrack>() : YouTubeMusicApi.ParseNext(json);
+        _queue.Clear();
+        _queue.Add(radio.FirstOrDefault(t => t.Id == id) ?? new MusicTrack(id, "", ""));
+        _queue.AddRange(radio.Where(t => _queue.All(q => q.Id != t.Id)));
+        _index = 0;
+        AppPaths.LogLine($"music: queue of {_queue.Count}");
+        await LoadCurrentAsync();
     }
 
-    /// <summary>Searches songs; the results go to the phones (Results).</summary>
-    public async void Search(string query)
+    private async Task LoadCurrentAsync()
     {
-        if (!Music.IsQuery(query)) return;
-        if (_window is null)
+        if (Current is not { } c) return;
+        try { await OpenAsync(); } catch (Exception ex) { AppPaths.LogLine("music: " + ex.Message); return; }
+        _playing = false; Publish();
+        Run("pause()");
+        if (_web?.CoreWebView2 is { } core)
         {
-            _pendingSearch = query;
-            try { await OpenAsync(); } catch (Exception ex) { AppPaths.LogLine("music: " + ex.Message); Results?.Invoke(query, Array.Empty<MusicTrack>(), true); }
-            return;
+            await core.ExecuteScriptAsync("window.__kwPaused = false;");
+            core.Navigate(YouTubeMusicApi.TvWatchUrl(c.Id));
         }
-        if (_web?.CoreWebView2 is null) { _pendingSearch = query; return; }
-        Run("search(" + System.Text.Json.JsonSerializer.Serialize(query) + ")");
     }
+
+    public void PlayPause()
+    {
+        if (Current is null) return;
+        if (_window is null) { _ = LoadCurrentAsync(); return; }
+        Run("toggle()");
+    }
+
+    public void Next() => _ = NextAsync();
+
+    private async Task NextAsync()
+    {
+        if (Current is not { } c) return;
+        if (_index + 1 >= _queue.Count)
+        {
+            // End of the queue: more of the same radio, starting from this song.
+            var json = await Post(YouTubeMusicApi.NextUrl, YouTubeMusicApi.NextBody(c.Id));
+            IReadOnlyList<MusicTrack> more = json is null ? Array.Empty<MusicTrack>() : YouTubeMusicApi.ParseNext(json);
+            _queue.AddRange(more.Where(t => _queue.All(q => q.Id != t.Id)));
+            if (_index + 1 >= _queue.Count) return;
+        }
+        _index++;
+        await LoadCurrentAsync();
+    }
+
+    public void Previous()
+    {
+        if (Current is null) return;
+        if (_index == 0) { Run("restart()"); return; }
+        _index--;
+        _ = LoadCurrentAsync();
+    }
+
+    /// <summary>Pauses the music (a channel or video starts on the TV).</summary>
+    public void Pause() { if (_state.Playing) Run("pause()"); }
 
     /// <summary>Stops the music and closes its browser.</summary>
     public void Stop()
     {
         var w = _window; var web = _web;
-        _window = null; _web = null; _starting = null; _pendingSearch = null;
+        _window = null; _web = null; _starting = null; _playing = false;
         try { web?.Dispose(); } catch { }
         try { w?.Close(); } catch { }
         if (w is not null) AppPaths.LogLine("music: stopped");

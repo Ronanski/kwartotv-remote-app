@@ -35,6 +35,8 @@ public partial class MainWindow : Window, IShell
         _host.Attach(this);
         // While the clock lock screen is up, the remote can only unlock it (and use volume and power).
         _tv.Router.IsLocked = () => _locked;
+        // YouTube and the music share one browser profile, which must start with the same switches.
+        WebAppWindow.YouTubeRenderMode = _tv.Settings.YouTubeRenderMode;
 
         foreach (var (label, action) in new (string, Action)[] { ("Home", GoHome), ("Live TV", ShowLiveTv), ("Library", ShowLibrary), ("Settings", ShowSettings) })
         {
@@ -359,20 +361,26 @@ public partial class MainWindow : Window, IShell
     }
 
     /// <summary>
-    /// YouTube Music on the TV screen, with the same saved profile as the music the phone plays in the background: sign in
-    /// here once (type with the phone) and that music is signed in too (Premium: no ads).
+    /// YouTube Music. Signing in: the music the phone plays goes through YouTube on the TV, so the YouTube app's own
+    /// sign-in (the code on the phone) is the one that counts (Premium: no ads). The tile opens the YouTube Music
+    /// website with the same saved profile.
     /// </summary>
     public void OpenYouTubeMusic(bool signIn)
     {
+        if (signIn)
+        {
+            AppPaths.LogLine("music: sign in through YouTube");
+            LaunchYouTube();
+            ShowToast("Sign in to YouTube here (Settings → Sign in, the code goes on your phone). The music uses the same account: Premium = no ads.");
+            return;
+        }
         _tv.MusicPlayer.Stop();
-        var url = signIn ? "https://accounts.google.com/ServiceLogin?service=youtube&continue=" + Uri.EscapeDataString("https://music.youtube.com/") : KwartoTV.Core.Music.Home;
-        AppPaths.LogLine("music: open YouTube Music" + (signIn ? " (sign in)" : ""));
-        OpenWeb(url, "music", ForegroundKind.Web, null, "YouTube Music", () =>
+        AppPaths.LogLine("music: open YouTube Music");
+        OpenWeb(KwartoTV.Core.Music.Home, "youtube", ForegroundKind.Web, null, "YouTube Music", () =>
         {
             ShowToast("Could not open YouTube Music: Microsoft Edge WebView2 is missing.");
             return true;
         });
-        if (signIn) ShowToast("Sign in to YouTube Music. Type on your phone: the KwartoTV Remote opens its keyboard for each box.");
     }
 
     /// <summary>Redraws the page on screen (after a setting changed).</summary>

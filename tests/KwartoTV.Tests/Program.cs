@@ -475,6 +475,19 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(Bilibili.SearchUrl("one piece").Contains("keyword=one%20piece") && Bilibili.AnimePageUrl(1).Contains("page_type=4&pn=1"), "bilibili: list links");
 }
 
+// ---- YouTube Music search and up next (shapes from YouTube Music's own answers)
+{
+    const string search = "{\"contents\":{\"x\":[{\"musicResponsiveListItemRenderer\":{\"overlay\":{\"musicItemThumbnailOverlayRenderer\":{\"content\":{\"musicPlayButtonRenderer\":{\"playNavigationEndpoint\":{\"watchEndpoint\":{\"videoId\":\"hJhVURhdLEg\"}}}}}},\"flexColumns\":[{\"musicResponsiveListItemFlexColumnRenderer\":{\"text\":{\"runs\":[{\"text\":\"Maybe The Night\"}]}}},{\"musicResponsiveListItemFlexColumnRenderer\":{\"text\":{\"runs\":[{\"text\":\"Ben&Ben\"},{\"text\":\" • \"},{\"text\":\"Limasawa Street\"}]}}}]}},{\"musicResponsiveListItemRenderer\":{\"playlistItemData\":{\"videoId\":\"bgCansrDpVo\"},\"flexColumns\":[{\"musicResponsiveListItemFlexColumnRenderer\":{\"text\":{\"runs\":[{\"text\":\"Make It With You\"}]}}}]}},{\"musicResponsiveListItemRenderer\":{\"playlistItemData\":{\"videoId\":\"bad\"}}}]}}";
+    var st = YouTubeMusicApi.ParseSearch(search);
+    Check(st.Count == 2 && st[0] == new MusicTrack("hJhVURhdLEg", "Maybe The Night", "Ben&Ben") && st[1].Id == "bgCansrDpVo" && st[1].Artist == "", "yt music: search songs (id from the play button or the row; artist before the bullet)");
+    const string next = "{\"a\":[{\"playlistPanelVideoRenderer\":{\"videoId\":\"hJhVURhdLEg\",\"title\":{\"runs\":[{\"text\":\"Maybe The Night\"}]},\"shortBylineText\":{\"runs\":[{\"text\":\"Ben&Ben\"}]}}},{\"playlistPanelVideoRenderer\":{\"videoId\":\"bgCansrDpVo\",\"title\":{\"runs\":[{\"text\":\"Make It With You\"}]},\"longBylineText\":{\"runs\":[{\"text\":\"Ben&Ben\"},{\"text\":\" • \"},{\"text\":\"2019\"}]}}},{\"playlistPanelVideoRenderer\":{\"videoId\":\"hJhVURhdLEg\",\"title\":{\"runs\":[{\"text\":\"dup\"}]}}}]}";
+    var nq = YouTubeMusicApi.ParseNext(next);
+    Check(nq.Count == 2 && nq[1] == new MusicTrack("bgCansrDpVo", "Make It With You", "Ben&Ben"), "yt music: up next queue in order, unique");
+    Check(YouTubeMusicApi.ParseNext("x").Count == 0 && YouTubeMusicApi.ParseSearch("{}").Count == 0, "yt music: bad answers give nothing");
+    Check(YouTubeMusicApi.NextBody("hJhVURhdLEg").Contains("\"playlistId\":\"RDAMVMhJhVURhdLEg\"") && YouTubeMusicApi.SearchBody("a\"b").Contains("\"query\":\"a\\u0022b\""), "yt music: request bodies");
+    Check(YouTubeMusicApi.TvWatchUrl("hJhVURhdLEg") == "https://www.youtube.com/tv#/watch?v=hJhVURhdLEg", "yt music: songs play in the TV's YouTube app");
+}
+
 // ---- app catalog
 {
     Check(RemoteServer.PhoneAppUpdateMessage(53) == "{\"type\":\"appupdate\",\"versionCode\":53}", "the TV tells phones the newest phone app build");

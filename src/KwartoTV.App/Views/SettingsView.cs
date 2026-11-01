@@ -104,6 +104,8 @@ public sealed class SettingsView : PageBase
             {
                 Tv.Settings.YouTubeRenderMode = (Tv.Settings.YouTubeRenderMode + 1) % AppSettings.YouTubeRenderModes.Length;
                 Tv.SaveSettings(); Refresh();
+                // YouTube and the music share one browser: it starts again with the new picture setting.
+                Tv.MusicPlayer.Stop(); KwartoTV.App.Services.WebAppWindow.YouTubeRenderMode = Tv.Settings.YouTubeRenderMode;
                 Shell.ShowToast("Applies the next time YouTube opens. Black boxes behind text or icons? Use Text fix, or Safe.");
             })));
         Body.Children.Add(Buttons(

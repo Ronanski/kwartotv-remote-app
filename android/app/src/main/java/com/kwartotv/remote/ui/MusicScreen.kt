@@ -112,9 +112,9 @@ fun MusicTab(vm: AppViewModel) {
             if (music.on) RemoteKey("", "Stop the music", Modifier.weight(0.8f), height = 64.dp, icon = Icons.Rounded.Stop) { send(Cmd.MUSIC_STOP) }
         }
 
-        // Signed in to YouTube Music on the TV, Premium has no ads. The sign-in opens on the TV (type with the phone).
+        // The music plays through YouTube on the TV: its sign-in counts (Premium has no ads).
         androidx.compose.material3.TextButton(onClick = { send(Cmd.MUSIC_SIGNIN) }) {
-            Text("Ads? Sign in to YouTube Music on the TV (Premium = no ads)", fontSize = 13.sp)
+            Text("Ads? Sign in to YouTube on the TV — same account as the music (Premium = no ads)", fontSize = 13.sp)
         }
 
         OutlinedTextField(

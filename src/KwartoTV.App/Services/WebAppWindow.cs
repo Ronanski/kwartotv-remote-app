@@ -180,8 +180,8 @@ public sealed class WebAppWindow : Window
         {
             // YouTube may get extra switches (Settings → YouTube picture); its profile has its own browser, so they apply only there.
             var extra = Kind == ForegroundKind.YouTube ? " " + KwartoTV.Core.AppSettings.YouTubeBrowserArgs(YouTubeRenderMode) : "";
-            // The music profile is shared with the background music player, which needs its own switches: use the same ones.
-            var options = new CoreWebView2EnvironmentOptions(_profile == "music" ? MusicService.BrowserArgs : ("--autoplay-policy=no-user-gesture-required" + extra).Trim());
+            // The YouTube profile is shared with the music the phone plays (off screen), which needs its own switches: use the same ones.
+            var options = new CoreWebView2EnvironmentOptions(_profile == "youtube" ? MusicService.YouTubeArgs(YouTubeRenderMode) : ("--autoplay-policy=no-user-gesture-required" + extra).Trim());
             var env = await CoreWebView2Environment.CreateAsync(null, AppPaths.Profile("webview-" + _profile), options);
             await _web.EnsureCoreWebView2Async(env);
             var core = _web.CoreWebView2;
