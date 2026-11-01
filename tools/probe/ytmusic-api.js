@@ -23,3 +23,21 @@ function find(o, key, out, max = 6) {
   const nj = JSON.parse(n); const vids = []; find(nj, 'playlistPanelVideoRenderer', vids, 3);
   console.log('next count sample:', vids.length, JSON.stringify(vids[1] || vids[0]).slice(0, 2500));
 })();
+
+// Home rows (Quick picks, charts, moods) without an account.
+(async () => {
+  await new Promise(r => setTimeout(r, 3000));
+  const h = await call('browse', { browseId: 'FEmusic_home' });
+  const hj = JSON.parse(h);
+  const shelves = []; find(hj, 'musicCarouselShelfRenderer', shelves, 12);
+  console.log('home shelves:', shelves.length);
+  for (const s of shelves) {
+    const title = JSON.stringify(s.header && s.header.musicCarouselShelfBasicHeaderRenderer && s.header.musicCarouselShelfBasicHeaderRenderer.title);
+    const kinds = (s.contents || []).map(c => Object.keys(c)[0]);
+    console.log('shelf', title, kinds.length, [...new Set(kinds)].join(','));
+  }
+  const two = []; find(hj, 'musicTwoRowItemRenderer', two, 2);
+  console.log('twoRow sample:', JSON.stringify(two[0]).slice(0, 2500));
+  const rows = []; find(hj, 'musicResponsiveListItemRenderer', rows, 1);
+  console.log('listItem sample:', JSON.stringify(rows[0] || null).slice(0, 1500));
+})();
