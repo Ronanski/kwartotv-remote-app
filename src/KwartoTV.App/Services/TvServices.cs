@@ -17,6 +17,19 @@ public sealed class TvServices : IDisposable
     public ExternalApps Apps { get; } = new();
     /// <summary>YouTube Music in the background, controlled from the phone (plays on behind the lock screen).</summary>
     public MusicService MusicPlayer { get; } = new();
+
+    /// <summary>Catalog apps installed on this PC (catalog id → Start menu id), found at start.</summary>
+    public IReadOnlyDictionary<string, string> InstalledApps { get; private set; } = new Dictionary<string, string>();
+
+    /// <summary>Looks again which catalog apps are installed; the Home screen redraws when that changed.</summary>
+    public async Task RefreshInstalledAppsAsync()
+    {
+        var found = await Task.Run(ExternalApps.DiscoverCatalogApps);
+        var changed = !found.OrderBy(k => k.Key).SequenceEqual(InstalledApps.OrderBy(k => k.Key));
+        InstalledApps = found;
+        if (found.Count > 0) AppPaths.LogLine("apps: installed " + string.Join(", ", found.Keys));
+        if (changed) ChannelsChanged?.Invoke();
+    }
     public Updater Updater { get; } = new();
     public CommandRouter Router { get; private set; } = null!;
     public RemoteServer? Server { get; private set; }

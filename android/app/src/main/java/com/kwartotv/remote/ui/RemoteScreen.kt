@@ -265,6 +265,13 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
             RemoteKey("Sign in to Netflix", "Sign in to Netflix on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("netflix") }
             RemoteKey("Sign in to Bilibili", "Sign in to Bilibili on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("bilibili") }
         }
+        // More apps on the TV: the real app when it is installed on the PC, otherwise inside KwartoTV.
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(com.kwartotv.remote.MORE_APPS, key = { it.first }) { (id, name) ->
+                val ctx = LocalContext.current
+                FilterChip(selected = false, onClick = { Haptics.click(ctx); send(Cmd.APP_OPEN, id) }, label = { Text(name) })
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val ctx = LocalContext.current
             FilterChip(selected = kind == 0, onClick = { Haptics.click(ctx); kind = 0; vm.padKind = 0 }, label = { Text("D-pad") })

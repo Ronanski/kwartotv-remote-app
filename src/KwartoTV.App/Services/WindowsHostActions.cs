@@ -21,6 +21,8 @@ public interface IShell
     void LaunchYouTube();
     void LaunchNetflix();
     void LaunchBilibili();
+    /// <summary>An app of the catalog (AppCatalog id).</summary>
+    void OpenApp(string id);
     /// <summary>Handled by the built-in player? Returns false when nothing is playing in KwartoTV.</summary>
     bool PlayerTogglePause();
     bool PlayerSeek(int seconds);
@@ -73,6 +75,7 @@ public sealed class WindowsHostActions : IHostActions
             case "app.youtube": ui.Invoke(shell.LaunchYouTube); return;
             case "app.netflix": ui.Invoke(shell.LaunchNetflix); return;
             case "app.bilibili": ui.Invoke(shell.LaunchBilibili); return;
+            case "app.open": ui.Invoke(() => shell.OpenApp(arg!)); return;
 
             case "media.playpause":
                 if (ui.Invoke(shell.PlayerTogglePause)) return;

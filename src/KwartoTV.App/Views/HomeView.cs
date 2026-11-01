@@ -66,6 +66,13 @@ public sealed class HomeView : PageBase
             var s = site;
             apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard(s.Name, "◎", UiKit.Hue(s.Name), UiKit.Hue(s.Url), new Uri(s.Url).Host), () => Shell.LaunchWeb(s), s.Name));
         }
+        // More apps: the ones installed on this PC show by themselves, plus the ones the user put here.
+        foreach (var app in AppCatalog.All.Where(a => tv.InstalledApps.ContainsKey(a.Id) || tv.Settings.HomeApps.Contains(a.Id)))
+        {
+            var a = app;
+            apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard(a.Name, a.Icon, Rgb(a.From), Rgb(a.To), tv.InstalledApps.ContainsKey(a.Id) ? a.Tagline : a.Tagline + " · web"), () => Shell.OpenCatalogApp(a), a.Name));
+        }
+        apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("More apps", "⊞", Color.FromRgb(0x1E, 0x24, 0x30), Color.FromRgb(0x3A, 0x42, 0x58), "Prime · Disney+ · Viu…"), () => Dialogs.MoreApps(Shell), "More apps"));
         apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Add website", "+", Color.FromRgb(0x1E, 0x24, 0x30), Color.FromRgb(0x2B, 0x31, 0x40)), Shell.ShowSettings, "Add website"));
         Body.Children.Add(UiKit.Row("Apps", apps));
 
@@ -121,6 +128,8 @@ public sealed class HomeView : PageBase
             Body.Children.Add(empty);
         }
     }
+
+    private static Color Rgb(uint c) => Color.FromRgb((byte)(c >> 16), (byte)(c >> 8), (byte)c);
 
     private FrameworkElement Card(Channel c, int number, bool fav) =>
         UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.ChannelCard(c, number, fav), () => Shell.TuneChannel(c), $"{number} {c.Name}", key: "ch:" + c.Id);

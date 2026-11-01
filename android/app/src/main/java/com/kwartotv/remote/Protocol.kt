@@ -71,6 +71,8 @@ object Cmd {
     const val APP_YOUTUBE = "app.youtube"
     const val APP_NETFLIX = "app.netflix"
     const val APP_BILIBILI = "app.bilibili"
+    /** An app of the TV's catalog, by id (arg). */
+    const val APP_OPEN = "app.open"
 
     const val SCREEN_ON = "power.screenon"
     const val SCREEN_OFF = "power.screenoff"
@@ -339,3 +341,9 @@ fun parseMusicResults(o: JSONObject): MusicResults {
     }
     return MusicResults(o.optString("q").take(64), list, o.optBoolean("error"))
 }
+
+/** The TV's app catalog (same ids as AppCatalog on the TV). */
+val MORE_APPS = listOf(
+    "primevideo" to "Prime Video", "disneyplus" to "Disney+", "hbomax" to "HBO Max", "viu" to "Viu", "iwanttfc" to "iWantTFC",
+    "crunchyroll" to "Crunchyroll", "spotify" to "Spotify", "twitch" to "Twitch", "appletv" to "Apple TV", "plex" to "Plex",
+)

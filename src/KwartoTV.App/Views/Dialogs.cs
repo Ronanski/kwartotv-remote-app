@@ -162,6 +162,47 @@ public static class Dialogs
     }
 
     /// <summary>Sleep, restart or shut down the whole PC (not only KwartoTV), or close the app.</summary>
+    /// <summary>
+    /// The app catalog: open any app, or put it on the Home screen. An app installed on this PC opens as itself;
+    /// the others open their website inside KwartoTV.
+    /// </summary>
+    public static void MoreApps(MainWindow w)
+    {
+        var tv = w.Tv;
+        var panel = new StackPanel { Width = 860 };
+        panel.Children.Add(new TextBlock { Text = "More apps", FontSize = 32, FontWeight = FontWeights.Bold });
+        panel.Children.Add(UiKit.Dimmed("Apps installed on this PC open as the real app. The others open inside KwartoTV (use the arrows and OK). Install an app from the Microsoft Store to use the real one.", 17));
+        var list = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
+        foreach (var app in AppCatalog.All.OrderByDescending(a => tv.InstalledApps.ContainsKey(a.Id)))
+        {
+            var a = app;
+            bool installed = tv.InstalledApps.ContainsKey(a.Id), onHome = installed || tv.Settings.HomeApps.Contains(a.Id);
+            var row = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
+            text.Children.Add(new TextBlock { Text = a.Name, FontSize = 21, FontWeight = FontWeights.SemiBold });
+            text.Children.Add(UiKit.Dimmed((installed ? "Installed on this PC · opens the app" : "Opens inside KwartoTV") + "  ·  " + a.Tagline, 15));
+            var open = UiKit.ActionButton("Open", () => { w.CloseDialog(); w.OpenCatalogApp(a); });
+            open.Margin = new Thickness(0, 0, 10, 0);
+            DockPanel.SetDock(open, Dock.Left); row.Children.Add(open);
+            if (!installed)
+            {
+                var pin = UiKit.ActionButton(onHome ? "Remove from Home" : "Add to Home", () =>
+                {
+                    if (!tv.Settings.HomeApps.Remove(a.Id)) tv.Settings.HomeApps.Add(a.Id);
+                    tv.SaveSettings(); w.CloseDialog(); w.RefreshPage(); MoreApps(w);
+                });
+                pin.Margin = new Thickness(0);
+                DockPanel.SetDock(pin, Dock.Right); row.Children.Add(pin);
+            }
+            row.Children.Add(text);
+            list.Children.Add(row);
+        }
+        panel.Children.Add(new ScrollViewer { Content = list, MaxHeight = 560, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 18, 0, 0), Children = { UiKit.ActionButton("Close", w.CloseDialog) } });
+        w.ShowDialog(panel);
+        _ = tv.RefreshInstalledAppsAsync();
+    }
+
     public static void PowerMenu(MainWindow w)
     {
         var panel = new StackPanel { Width = 620 };

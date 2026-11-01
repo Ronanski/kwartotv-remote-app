@@ -77,6 +77,7 @@ public partial class MainWindow : Window, IShell
             _updateTimer.Tick += async (_, _) => await AutoUpdateTickAsync();
             _updateTimer.Start();
             _ = AutoUpdateTickAsync();
+            _ = _tv.RefreshInstalledAppsAsync();
             // A phone connecting is a good moment to look for an update (it may have just updated itself).
             if (_tv.Server is { } srv) srv.PhoneConnected += () => Dispatcher.BeginInvoke(async () =>
             {
@@ -333,6 +334,32 @@ public partial class MainWindow : Window, IShell
             return;
         }
         if (!_tv.Apps.LaunchNetflix(_tv.Settings.NetflixAppId)) ShowToast(_tv.Apps.LastError ?? "Could not open Netflix.");
+    }
+
+    /// <summary>
+    /// An app of the catalog: the real app when it is installed on this PC (it looks and works like the TV app), otherwise
+    /// its website inside KwartoTV with remote navigation.
+    /// </summary>
+    public void OpenCatalogApp(CatalogApp app)
+    {
+        if (_tv.InstalledApps.TryGetValue(app.Id, out var appId))
+        {
+            _tv.Apps.Close(); CloseWeb(); PrepareExternal(); _tv.MusicPlayer.Pause();
+            ShowToast($"Opening {app.Name}…");
+            AppPaths.LogLine($"app: {app.Name} (installed)");
+            if (!_tv.Apps.LaunchStoreApp(appId)) ShowToast(_tv.Apps.LastError ?? $"Could not open {app.Name}.");
+            return;
+        }
+        AppPaths.LogLine($"app: {app.Name} (in KwartoTV)");
+        LaunchWeb(new WebTile("app-" + app.Id, app.Name, app.WebUrl));
+    }
+
+    /// <summary>Redraws the page on screen (after a setting changed).</summary>
+    public void RefreshPage() => _current?.Refresh();
+
+    public void OpenApp(string id)
+    {
+        if (AppCatalog.Find(id) is { } app) OpenCatalogApp(app);
     }
 
     public void LaunchWeb(WebTile tile)

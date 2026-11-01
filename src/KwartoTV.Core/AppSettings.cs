@@ -19,6 +19,8 @@ public sealed class AppSettings
     public List<PlaylistEntry> Playlists { get; set; } = new();
     public List<WebTile> WebTiles { get; set; } = new();
     public List<string> LibraryFolders { get; set; } = new();
+    /// <summary>Catalog apps (AppCatalog ids) the user put on the Home screen. Installed ones show there anyway.</summary>
+    public List<string> HomeApps { get; set; } = new();
     public LineupState Lineup { get; set; } = new(null, null, new List<string>());
     public int Port { get; set; } = DefaultPort;
     public string? NetflixAppId { get; set; }

@@ -459,6 +459,18 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(!mr2.Handle(new(null, "music.play", "../../etc")).Ok && !mr2.Handle(new(null, "music.search", "  ")).Ok && !mr2.Handle(new(null, "nav.ok", null)).Ok, "music: bad song ids and empty searches refused; other keys still locked");
 }
 
+// ---- app catalog
+{
+    Check(AppCatalog.All.Select(a => a.Id).Distinct().Count() == AppCatalog.All.Count && AppCatalog.All.All(a => AppSettings.IsHttpsUrl(a.WebUrl)), "catalog: unique ids, https websites");
+    var inst = AppCatalog.Installed("[{\"Name\":\"Prime Video for Windows\",\"AppID\":\"AmazonVideo.PrimeVideo_pwbj9vvecjh7j!App\"},{\"Name\":\"Spotify\",\"AppID\":\"SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify\"},{\"Name\":\"3ds Max\",\"AppID\":\"x!y\"},{\"Name\":\"Disney+\",\"AppID\":\"bad&id|calc\"}]");
+    Check(inst.Count == 2 && inst["primevideo"] == "AmazonVideo.PrimeVideo_pwbj9vvecjh7j!App" && inst.ContainsKey("spotify"), "catalog: installed apps found by their exact Windows name");
+    Check(!inst.ContainsKey("hbomax") && !inst.ContainsKey("disneyplus"), "catalog: no partial-name matches; unsafe app ids ignored");
+    Check(AppCatalog.Installed("garbage").Count == 0 && AppCatalog.Installed("{\"Name\":\"Viu\",\"AppID\":\"Viu.App!Viu\"}")["viu"] == "Viu.App!Viu", "catalog: bad JSON and a single object");
+    Check(AppCatalog.StoreApp("A.B!C").Args[0] == @"shell:AppsFolder\A.B!C", "catalog: installed apps open through the Start menu id");
+    var ah = new FakeHost(); var ar = new CommandRouter(new ChannelLineup(), ah);
+    Check(ar.Handle(new(null, "app.open", "viu")).Ok && ah.Last == "app.open:viu" && !ar.Handle(new(null, "app.open", "calc.exe")).Ok, "catalog: the phone opens catalog apps by id only");
+}
+
 // ---- updates
 {
     var h = new string('a', 64);

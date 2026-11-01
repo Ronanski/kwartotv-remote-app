@@ -40,6 +40,25 @@ public sealed class ExternalApps
         return true;
     }
 
+    /// <summary>Opens an app installed on this PC (Prime Video, Disney+, Spotify...) by its Start menu id.</summary>
+    public bool LaunchStoreApp(string appId) =>
+        AppCatalog.IsSafeAppId(appId) ? Start(AppCatalog.StoreApp(appId), ForegroundKind.Web, trackProcess: false) : Fail("Could not open the app.");
+
+    /// <summary>The catalog apps installed on this PC (catalog id → Start menu id). Takes a few seconds.</summary>
+    public static IReadOnlyDictionary<string, string> DiscoverCatalogApps()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("powershell.exe", AppCatalog.StartAppsArgs) { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
+            using var p = Process.Start(psi);
+            if (p is null) return new Dictionary<string, string>();
+            var output = p.StandardOutput.ReadToEnd();
+            if (!p.WaitForExit(20000)) { try { p.Kill(); } catch { } }
+            return AppCatalog.Installed(output);
+        }
+        catch { return new Dictionary<string, string>(); }
+    }
+
     /// <summary>Looks up the real Netflix app id on this PC (it differs between installs).</summary>
     public static string? DiscoverNetflixAppId()
     {

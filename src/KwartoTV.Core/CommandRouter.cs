@@ -27,7 +27,7 @@ public sealed class CommandRouter
         "channel.list", "playlist.add",
         "key.text", "key.backspace", "key.enter",
         "mouse.move", "mouse.click", "mouse.rightclick", "mouse.scroll",
-        "app.youtube", "app.netflix", "app.bilibili", "app.livetv", "app.library", "app.settings",
+        "app.youtube", "app.netflix", "app.bilibili", "app.open", "app.livetv", "app.library", "app.settings",
         "power.sleep", "power.screenoff", "power.screenon", "power.shutdown", "power.restart",
         // the phone's channel finder: check every channel, then pick working ones and favorites
         "scan.start", "scan.stop", "catalog.choose", "catalog.favorite", "catalog.choosegroup",
@@ -122,6 +122,9 @@ public sealed class CommandRouter
                 break;
             case "catalog.choosegroup":
                 if (!ChannelFinder.TryParseToggle(c.Arg, out _, out var grp) || grp.Length > 60) return new(false, "bad category");
+                break;
+            case "app.open":
+                if (AppCatalog.Find(c.Arg) is null) return new(false, "unknown app");
                 break;
             case "music.search":
                 if (!Music.IsQuery(c.Arg)) return new(false, "Type a song or artist.");
