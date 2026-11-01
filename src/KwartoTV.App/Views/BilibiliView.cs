@@ -54,9 +54,20 @@ public sealed class BilibiliView : PageBase
             var anime1 = Http.GetStringAsync(Bilibili.AnimePageUrl(1));
             var anime2 = Http.GetStringAsync(Bilibili.AnimePageUrl(2));
             var rows = new List<BiliRow>();
-            try { var cards = Bilibili.ParseCards(await rec); if (cards.Count > 0) rows.Add(new BiliRow("Recommended", cards)); } catch (Exception ex) { AppPaths.LogLine("bilibili: recommend: " + ex.Message); }
+            static string Head(string s) => s.Length > 300 ? s[..300] : s;
+            try
+            {
+                var json = await rec; var cards = Bilibili.ParseCards(json);
+                if (cards.Count > 0) rows.Add(new BiliRow("Recommended", cards)); else AppPaths.LogLine("bilibili: recommend gave nothing: " + Head(json));
+            }
+            catch (Exception ex) { AppPaths.LogLine("bilibili: recommend: " + ex.Message); }
             foreach (var t in new[] { anime1, anime2 })
-                try { rows.AddRange(Bilibili.ParseModules(await t)); } catch (Exception ex) { AppPaths.LogLine("bilibili: anime: " + ex.Message); }
+                try
+                {
+                    var json = await t; var mods = Bilibili.ParseModules(json);
+                    if (mods.Count > 0) rows.AddRange(mods); else AppPaths.LogLine("bilibili: anime page gave nothing: " + Head(json));
+                }
+                catch (Exception ex) { AppPaths.LogLine("bilibili: anime: " + ex.Message); }
             _rows = rows.GroupBy(r => r.Title).Select(g => new BiliRow(g.Key, g.SelectMany(r => r.Items).DistinctBy(i => (i.IsSeason, i.Id)).Take(40).ToList())).Take(14).ToList();
             AppPaths.LogLine($"bilibili: {_rows.Count} rows, {_rows.Sum(r => r.Items.Count)} shows");
             if (_rows.Count == 0) _error = "Bilibili did not send its lists. Check the internet, or open the website.";
