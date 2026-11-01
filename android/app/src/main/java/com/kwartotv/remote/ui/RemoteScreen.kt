@@ -18,7 +18,6 @@ import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
@@ -29,7 +28,6 @@ import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material.icons.rounded.RestartAlt
@@ -37,7 +35,6 @@ import androidx.compose.material.icons.rounded.SettingsRemote
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.StarOutline
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -108,9 +105,10 @@ import com.kwartotv.remote.net.Conn
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+/** Four tabs: the remote itself, channels, music, and everything else (typing, touchpad, power). */
 private enum class Tab(val label: String, val icon: ImageVector) {
-    Remote("Remote", Icons.Rounded.SettingsRemote), Media("Media", Icons.Rounded.PlayCircle), Channels("Channels", Icons.Rounded.LiveTv),
-    Music("Music", Icons.Rounded.MusicNote), Keys("Keys", Icons.Rounded.Keyboard), Power("Power", Icons.Rounded.PowerSettingsNew)
+    Remote("Remote", Icons.Rounded.SettingsRemote), Channels("Channels", Icons.Rounded.LiveTv),
+    Music("Music", Icons.Rounded.MusicNote), More("More", Icons.Rounded.MoreVert)
 }
 
 @Composable
@@ -238,11 +236,9 @@ fun RemoteScreen(vm: AppViewModel) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp)) {
                 when (tab) {
                     Tab.Remote -> NavTab(vm, send) { signInFor = it }
-                    Tab.Media -> MediaTab(send)
                     Tab.Channels -> ChannelsTab(vm, send)
                     Tab.Music -> MusicTab(vm)
-                    Tab.Keys -> KeysTab(send)
-                    Tab.Power -> PowerTab(send)
+                    Tab.More -> MoreTab(send)
                 }
             }
         }
@@ -251,10 +247,10 @@ fun RemoteScreen(vm: AppViewModel) {
 
 @Composable
 private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: (String) -> Unit) {
-    var kind by remember { mutableIntStateOf(vm.padKind) }
     val signedIn by vm.signedIn.collectAsState()
+    val tvApp by vm.client.tvApp.collectAsState()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // The apps first, with their logos: one tap opens them on the TV.
+        // The apps, with their logos: one tap opens them on the TV.
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             AppTile(QuickApp.LiveTv, Modifier.weight(1f)) { send(Cmd.APP_LIVE, null) }
             AppTile(QuickApp.YouTube, Modifier.weight(1f)) { send(Cmd.APP_YOUTUBE, null) }
@@ -262,40 +258,65 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
             AppTile(QuickApp.Netflix, Modifier.weight(1f)) { send(Cmd.APP_NETFLIX, null) }
             AppTile(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
         }
-        // Volume always in view, without scrolling.
+        // Sign-ins only while one is needed (gone once the TV confirmed it).
+        val needNetflix = "netflix" !in signedIn
+        val needBilibili = "bilibili" !in signedIn
+        if (needNetflix || needBilibili) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (needNetflix) RemoteKey("Sign in to Netflix", "Sign in to Netflix on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 40.dp) { onSignIn("netflix") }
+            if (needBilibili) RemoteKey("Sign in to Bilibili", "Sign in to Bilibili on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 40.dp) { onSignIn("bilibili") }
+        }
+        DPad(send)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RemoteKey("Back", "Back", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.ArrowBack) { send(Cmd.BACK, null) }
+            RemoteKey("Home", "Home", Modifier.weight(1f), icon = Icons.Rounded.Home) { send(Cmd.HOME, null) }
+        }
+        // Playing: one row for what plays now (a channel, a video, Netflix).
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RemoteKey("", "Previous", Modifier.weight(1f), height = 52.dp, icon = Icons.Rounded.SkipPrevious) { send(Cmd.PREV, null) }
+            RemoteKey("", "Back 10 seconds", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.Rounded.Replay10) { send(Cmd.SEEK, "-10") }
+            RemoteKey("", "Play or pause", Modifier.weight(1.3f), primary = true, height = 52.dp, icon = Icons.Rounded.PlayArrow) { send(Cmd.PLAY_PAUSE, null) }
+            RemoteKey("", "Forward 10 seconds", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.Rounded.Forward10) { send(Cmd.SEEK, "10") }
+            RemoteKey("", "Next", Modifier.weight(1f), height = 52.dp, icon = Icons.Rounded.SkipNext) { send(Cmd.NEXT, null) }
+        }
+        // Netflix's own buttons, only while Netflix is on the TV.
+        if (tvApp == "netflix") {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_SKIP, null) }
+                RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_NEXT, null) }
+            }
+            var nq by rememberSaveable { mutableStateOf("") }
+            OutlinedTextField(
+                value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                label = { Text("Search Netflix") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { if (nq.isNotBlank()) send(Cmd.NETFLIX_SEARCH, nq.trim()) }),
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("", "Volume down", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
             RemoteKey("", "Mute", Modifier.weight(1f), height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
             RemoteKey("", "Volume up", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
+    }
+}
+
+/** Everything that is not used all the time: typing, the touchpad and mouse, and power. */
+@Composable
+private fun MoreTab(send: (String, String?) -> Unit) {
+    var part by rememberSaveable { mutableIntStateOf(0) }
+    val ctx = LocalContext.current
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val ctx = LocalContext.current
-            FilterChip(selected = kind == 0, onClick = { Haptics.click(ctx); kind = 0; vm.padKind = 0 }, label = { Text("D-pad") })
-            FilterChip(selected = kind == 1, onClick = { Haptics.click(ctx); kind = 1; vm.padKind = 1 }, label = { Text("Touchpad") })
-            FilterChip(selected = kind == 2, onClick = { Haptics.click(ctx); kind = 2; vm.padKind = 2 }, label = { Text("Mouse") })
+            listOf("Keyboard", "Touchpad", "Mouse", "Power").forEachIndexed { i, name ->
+                FilterChip(selected = part == i, onClick = { Haptics.click(ctx); part = i }, label = { Text(name) })
+            }
         }
-        when (kind) {
-            1 -> Touchpad(send)
-            2 -> MousePad(send)
-            else -> DPad(send)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Back", "Back", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.ArrowBack) { send(Cmd.BACK, null) }
-            RemoteKey("Home", "Home", Modifier.weight(1f), icon = Icons.Rounded.Home) { send(Cmd.HOME, null) }
-        }
-        // Signing in with the TV's arrows is slow: sign in here on the phone, the TV picks it up by itself.
-        // Gone once the TV confirmed the sign-in (it comes back if the TV says it is signed out).
-        val needNetflix = "netflix" !in signedIn
-        val needBilibili = "bilibili" !in signedIn
-        if (needNetflix || needBilibili) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (needNetflix) RemoteKey("Sign in to Netflix", "Sign in to Netflix on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("netflix") }
-            if (needBilibili) RemoteKey("Sign in to Bilibili", "Sign in to Bilibili on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 44.dp) { onSignIn("bilibili") }
-        }
-        // More apps on the TV: the real app when it is installed on the PC, otherwise inside KwartoTV.
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(com.kwartotv.remote.MORE_APPS, key = { it.first }) { (id, name) ->
-                val ctx = LocalContext.current
-                FilterChip(selected = false, onClick = { Haptics.click(ctx); send(Cmd.APP_OPEN, id) }, label = { Text(name) })
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when (part) {
+                1 -> Column(Modifier.verticalScroll(rememberScrollState())) { Touchpad(send) }
+                2 -> Column(Modifier.verticalScroll(rememberScrollState())) { MousePad(send) }
+                3 -> PowerTab(send)
+                else -> KeysTab(send)
             }
         }
     }
@@ -376,41 +397,6 @@ private fun MousePad(send: (String, String?) -> Unit) {
             RemoteKey("Click", "Mouse click", Modifier.weight(1f), fontSize = 18) { send(Cmd.MOUSE_CLICK, null) }
             RemoteKey("▲ Scroll", "Scroll up", Modifier.weight(1f), repeat = true, fontSize = 16) { send(Cmd.MOUSE_SCROLL, "-2") }
             RemoteKey("▼ Scroll", "Scroll down", Modifier.weight(1f), repeat = true, fontSize = 16) { send(Cmd.MOUSE_SCROLL, "2") }
-        }
-    }
-}
-
-@Composable
-private fun MediaTab(send: (String, String?) -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("", "Previous", Modifier.weight(1f), height = 72.dp, icon = Icons.Rounded.SkipPrevious) { send(Cmd.PREV, null) }
-            RemoteKey("Play / Pause", "Play or pause", Modifier.weight(1f), primary = true, height = 72.dp, icon = Icons.Rounded.PlayArrow) { send(Cmd.PLAY_PAUSE, null) }
-            RemoteKey("", "Next", Modifier.weight(1f), height = 72.dp, icon = Icons.Rounded.SkipNext) { send(Cmd.NEXT, null) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("−10 s", "Back 10 seconds", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.Replay10) { send(Cmd.SEEK, "-10") }
-            RemoteKey("Stop", "Stop", Modifier.weight(1f), icon = Icons.Rounded.Stop) { send(Cmd.STOP, null) }
-            RemoteKey("+10 s", "Forward 10 seconds", Modifier.weight(1f), repeat = true, icon = Icons.Rounded.Forward10) { send(Cmd.SEEK, "10") }
-        }
-        // Netflix: its own player's buttons, and search with the phone's keyboard.
-        SectionLabel("Netflix")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_SKIP, null) }
-            RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 52.dp) { send(Cmd.NETFLIX_NEXT, null) }
-        }
-        var nq by rememberSaveable { mutableStateOf("") }
-        OutlinedTextField(
-            value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            label = { Text("Search Netflix") },
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { if (nq.isNotBlank()) send(Cmd.NETFLIX_SEARCH, nq.trim()) }),
-        )
-        Text("Volume", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Vol −", "Volume down", Modifier.weight(1f), repeat = true, height = 80.dp, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
-            RemoteKey("Mute", "Mute", Modifier.weight(1f), height = 80.dp, icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
-            RemoteKey("Vol +", "Volume up", Modifier.weight(1f), repeat = true, height = 80.dp, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
     }
 }

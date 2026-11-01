@@ -34,6 +34,7 @@ public sealed class HomeView : PageBase
 
     private void Build()
     {
+        _scanText = null; _scanButton = null;
         var tv = Shell.Tv;
         var lineup = tv.Lineup;
         var channels = lineup.Channels;
@@ -74,11 +75,10 @@ public sealed class HomeView : PageBase
             apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard(a.Name, a.Icon, Rgb(a.From), Rgb(a.To), tv.InstalledApps.ContainsKey(a.Id) ? a.Tagline : a.Tagline + " · web"), () => Shell.OpenCatalogApp(a), a.Name));
         }
         apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("More apps", "⊞", Color.FromRgb(0x1E, 0x24, 0x30), Color.FromRgb(0x3A, 0x42, 0x58), "Prime · Disney+ · Viu…"), () => Dialogs.MoreApps(Shell), "More apps"));
-        apps.Add(UiKit.Tile(UiKit.CardW, UiKit.CardH, UiKit.AppCard("Add website", "+", Color.FromRgb(0x1E, 0x24, 0x30), Color.FromRgb(0x2B, 0x31, 0x40)), Shell.ShowSettings, "Add website"));
         Body.Children.Add(UiKit.Row("Apps", apps));
 
         // The channel scan, right on the TV: which channels really play from this PC.
-        if (tv.Settings.Playlists.Count > 0)
+        if (tv.Settings.Playlists.Count > 0 && (tv.Scan.Running || tv.Scan.Total == 0))
         {
             _scanText = UiKit.Dimmed("", 18);
             _scanText.TextWrapping = TextWrapping.Wrap; _scanText.VerticalAlignment = VerticalAlignment.Center; _scanText.Margin = new Thickness(18, 0, 0, 0);
@@ -153,7 +153,7 @@ public sealed class HomeView : PageBase
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 22, 0, 0) };
         if (count > 0) buttons.Children.Add(UiKit.ActionButton(current is not null ? "▶  Resume" : "▶  Watch", Shell.ShowLiveTv));
         else buttons.Children.Add(UiKit.ActionButton("Add channels", Shell.AddChannelsMenu));
-        buttons.Children.Add(UiKit.ActionButton(Shell.Tv.Pairing.Devices.Count == 0 ? "Pair your phone" : "Pair another phone", () => Dialogs.Pair(Shell)));
+        if (Shell.Tv.Pairing.Devices.Count == 0) buttons.Children.Add(UiKit.ActionButton("Pair your phone", () => Dialogs.Pair(Shell)));
         col.Children.Add(buttons);
         box.Child = col;
         return box;

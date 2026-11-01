@@ -82,6 +82,7 @@ public partial class MainWindow : Window, IShell
             _updateTimer.Start();
             _ = AutoUpdateTickAsync();
             _ = _tv.RefreshInstalledAppsAsync();
+            if (_tv.Server is { } fgServer) fgServer.ForegroundNow = () => RemoteServer.ForegroundMessage(_lastForeground);
             // A phone connecting is a good moment to look for an update (it may have just updated itself).
             if (_tv.Server is { } srv) srv.PhoneConnected += () => Dispatcher.BeginInvoke(async () =>
             {
@@ -692,9 +693,19 @@ public partial class MainWindow : Window, IShell
     private DateTime _lastMouseMove = DateTime.UtcNow, _lastRemote = DateTime.UtcNow;
     private readonly DispatcherTimer _idleTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
+    private string _lastForeground = "";
+
+    /// <summary>What the TV shows now, for the phone (it shows the buttons that fit, e.g. Netflix's).</summary>
+    private string ForegroundName() =>
+        _player is { IsVisible: true } ? "live"
+        : _web is { IsVisible: true } w ? (w.Kind == ForegroundKind.Netflix ? "netflix" : w.Kind == ForegroundKind.YouTube ? "youtube" : w.ProfileName)
+        : _tv.Apps.IsRunning ? _tv.Apps.Kind.ToString().ToLowerInvariant() : _currentName;
+
     /// <summary>Every second: hide the mouse pointer when it rests, the sleep timer, the screensaver when idle.</summary>
     private void IdleTick()
     {
+        var fg = ForegroundName();
+        if (fg != _lastForeground) { _lastForeground = fg; _tv.Server?.Broadcast(RemoteServer.ForegroundMessage(fg)); }
         if (Mouse.OverrideCursor is null && DateTime.UtcNow - _lastMouseMove > TimeSpan.FromSeconds(3)) Mouse.OverrideCursor = Cursors.None;
 
         if (_sleepAt is { } at)

@@ -201,4 +201,9 @@ class LineupTest {
     fun appUpdateMessage() {
         assertEquals(TvMessage.AppUpdate(53), parseTvMessage("""{"type":"appupdate","versionCode":53}"""))
     }
+
+    @Test
+    fun foregroundMessage() {
+        assertEquals(TvMessage.Foreground("netflix"), parseTvMessage("""{"type":"fg","app":"netflix"}"""))
+    }
 }

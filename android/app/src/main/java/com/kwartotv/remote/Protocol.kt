@@ -139,6 +139,8 @@ sealed interface TvMessage {
     data class TextWanted(val request: TextRequest?) : TvMessage
     data class SignInWanted(val request: SignInRequest) : TvMessage
     data class MusicNow(val music: MusicState) : TvMessage
+    /** What the TV shows now: "netflix", "youtube", "live", "Home", "Music"… (the remote shows the buttons for it). */
+    data class Foreground(val app: String) : TvMessage
     /** The TV saw a phone app release with this build. */
     data class AppUpdate(val versionCode: Long) : TvMessage
     data class MusicFound(val results: MusicResults) : TvMessage
@@ -157,6 +159,7 @@ fun parseTvMessage(text: String): TvMessage = try {
         "signin" -> parseSignIn(o)?.let { TvMessage.SignInWanted(it) } ?: TvMessage.Unknown
         "music" -> TvMessage.MusicNow(parseMusic(o))
         "appupdate" -> TvMessage.AppUpdate(o.optLong("versionCode"))
+        "fg" -> TvMessage.Foreground(o.optString("app").take(40))
         "music.results" -> TvMessage.MusicFound(parseMusicResults(o))
         else -> TvMessage.Unknown
     }

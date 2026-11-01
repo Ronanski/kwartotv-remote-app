@@ -58,6 +58,12 @@ public sealed class RemoteServer : IAsyncDisposable
     /// <summary>{"type":"appupdate","versionCode":N}: tells the phones the build of the newest phone app.</summary>
     public static string PhoneAppUpdateMessage(int versionCode) => JsonSerializer.Serialize(new { type = "appupdate", versionCode }, Json);
 
+    /// <summary>What the TV shows now, sent to a phone when it connects (ForegroundMessage). Null: unknown.</summary>
+    public Func<string?>? ForegroundNow { get; set; }
+
+    /// <summary>{"type":"fg","app":".."}: what the TV shows ("netflix", "youtube", "live", "Home", "Music"…).</summary>
+    public static string ForegroundMessage(string app) => JsonSerializer.Serialize(new { type = "fg", app }, Json);
+
     /// <summary>A paired phone connected (the TV looks for an update right away). Any thread.</summary>
     public event Action? PhoneConnected;
 
@@ -353,6 +359,7 @@ public sealed class RemoteServer : IAsyncDisposable
         try { if (PendingText?.Invoke() is { } pending) await Send(ws, pending); } catch { }
         try { if (MusicNow?.Invoke() is { } music) await Send(ws, music); } catch { }
         try { if (PhoneAppUpdate?.Invoke() is { } upd) await Send(ws, upd); } catch { }
+        try { if (ForegroundNow?.Invoke() is { } fgNow) await Send(ws, fgNow); } catch { }
 
         var buf = new byte[4096];
         try
