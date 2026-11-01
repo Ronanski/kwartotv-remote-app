@@ -25,6 +25,9 @@ public abstract class PageBase : UserControl
 
     public void FocusFirst() => MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
 
+    /// <summary>Back on this page from something it opened: the page may put the selection back where it was.</summary>
+    public virtual void FocusFirstOrLast() => FocusFirst();
+
     /// <summary>Rebuild but keep the user roughly where they were.</summary>
     protected void Rebuild(Action build)
     {

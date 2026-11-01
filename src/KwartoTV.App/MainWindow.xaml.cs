@@ -174,6 +174,7 @@ public partial class MainWindow : Window, IShell
         {
             "Library" => new LibraryView(this),
             "Settings" => new SettingsView(this),
+            "Bilibili" => _bilibili ??= new BilibiliView(this),
             _ => new HomeView(this),
         };
         Page.Content = _current;
@@ -374,11 +375,34 @@ public partial class MainWindow : Window, IShell
         });
     }
 
-    /// <summary>Bilibili (anime, dramas, with English subtitles), inside KwartoTV with TV-style remote navigation.</summary>
-    public void LaunchBilibili() => LaunchWeb(new WebTile("bilibili", "Bilibili", AppLaunchPlans.BilibiliUrl));
+    /// <summary>
+    /// Bilibili (anime, dramas, with English subtitles) as KwartoTV's own TV screen: rows of posters, arrows and OK.
+    /// The page is kept, so Back from an episode returns to the same place in the rows.
+    /// </summary>
+    private BilibiliView? _bilibili;
+    public void LaunchBilibili()
+    {
+        CloseDialog(); _player?.Hide(); CloseWeb(); _tv.Apps.Close();
+        if (_currentName != "Bilibili") Navigate("Bilibili");
+        Native.BringToFront(Handle); Activate();
+    }
+
+    /// <summary>The Bilibili website itself, inside KwartoTV with TV-style navigation (sign-in, account pages).</summary>
+    public void LaunchBilibiliWebsite() => LaunchWeb(new WebTile("bilibili", "Bilibili", AppLaunchPlans.BilibiliUrl));
+
+    /// <summary>Plays a show or video picked on the Bilibili screen: only its video, fullscreen; Back returns to the rows.</summary>
+    public void PlayBilibili(BiliItem item)
+    {
+        AppPaths.LogLine($"bilibili: play {item.Title} {item.PlayUrl}");
+        OpenWeb(item.PlayUrl, "web-bilibili", ForegroundKind.Web, null, item.Title, () =>
+        {
+            ShowToast("Could not open Bilibili: Microsoft Edge WebView2 is missing.");
+            return true;
+        }, playerOnly: true);
+    }
 
     /// <summary>Opens a site fullscreen inside KwartoTV. If the embedded browser is not available, uses an external browser window.</summary>
-    private void OpenWeb(string url, string profile, ForegroundKind kind, string? userAgent, string name, Func<bool> browserFallback, bool videoOnly = false)
+    private void OpenWeb(string url, string profile, ForegroundKind kind, string? userAgent, string name, Func<bool> browserFallback, bool videoOnly = false, bool playerOnly = false)
     {
         PrepareExternal();
         _tv.Apps.Close();
@@ -388,14 +412,15 @@ public partial class MainWindow : Window, IShell
         // Netflix and Bilibili can be signed in from the phone (PhoneSignIn).
         var signIn = profile == "netflix" ? "netflix" : profile == "web-bilibili" ? "bilibili" : null;
         WebAppWindow.YouTubeRenderMode = _tv.Settings.YouTubeRenderMode;
-        var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this, SignInService = signIn };
+        var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this, SignInService = playerOnly ? null : signIn, PlayerOnly = playerOnly };
         w.SignedOut += id =>
         {
             if (PhoneSignIn.Find(id) is not { } svc) return;
             _tv.Server?.Broadcast(PhoneSignIn.Message(svc, done: false));
             ShowToast($"Not signed in to {svc.Name}. Sign in on your phone: the KwartoTV Remote app shows the sign-in page.");
         };
-        w.HomeRequested += GoHome;
+        if (playerOnly) w.HomeRequested += () => { CloseWeb(); if (_currentName != "Bilibili") Navigate("Bilibili"); Native.BringToFront(Handle); Activate(); _current?.FocusFirstOrLast(); };
+        else w.HomeRequested += GoHome;
         w.ChannelUp += () => _tv.Lineup.Next();
         w.ChannelDown += () => _tv.Lineup.Previous();
         w.Failed += _ => Dispatcher.BeginInvoke(() =>

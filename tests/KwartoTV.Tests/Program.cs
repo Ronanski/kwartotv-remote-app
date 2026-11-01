@@ -459,6 +459,22 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
     Check(!mr2.Handle(new(null, "music.play", "../../etc")).Ok && !mr2.Handle(new(null, "music.search", "  ")).Ok && !mr2.Handle(new(null, "nav.ok", null)).Ok, "music: bad song ids and empty searches refused; other keys still locked");
 }
 
+// ---- Bilibili as a TV screen (samples from bilibili.tv's own API)
+{
+    const string anime = "{\"code\":0,\"data\":{\"modules\":[{\"header\":{\"title\":\"For you\"},\"cards\":[{\"title\":\"Rakshasa Street S3\",\"cover\":\"https://pic.bstarstatic.com/ogv/a.jpg\",\"season_id\":2085022},{\"title\":\"Free one\",\"cover\":\"http://x/b.jpg\",\"season_id\":2105814,\"corner_mark\":{\"text\":\"Free\"}},{\"title\":\"\",\"season_id\":1}]},{\"header\":{\"title\":\"Empty\"},\"cards\":[]}]}}";
+    var rows = Bilibili.ParseModules(anime);
+    Check(rows.Count == 1 && rows[0].Title == "For you" && rows[0].Items.Count == 2, "bilibili: anime page rows (empty rows and untitled cards left out)");
+    Check(rows[0].Items[0] == new BiliItem(true, "2085022", "Rakshasa Street S3", "https://pic.bstarstatic.com/ogv/a.jpg", null) && rows[0].Items[1].Cover is null && rows[0].Items[1].Badge == "Free", "bilibili: season card with cover (https only) and badge");
+    Check(rows[0].Items[0].PlayUrl == "https://www.bilibili.tv/en/play/2085022", "bilibili: a show plays from its play page");
+    const string rec = "{\"code\":0,\"data\":{\"cards\":[{\"type\":\"ugc\",\"aid\":\"4801348909013504\",\"title\":\"Video\",\"cover\":\"https://pic.bstarstatic.com/ugc/x.jpg\"},{\"type\":\"ogv\",\"title\":\"The Daily Life of the Immortal King \",\"season_id\":\"34695\"},{\"title\":\"bad\",\"aid\":\"12a\"}]}}";
+    var cards = Bilibili.ParseCards(rec);
+    Check(cards.Count == 2 && !cards[0].IsSeason && cards[0].PlayUrl == "https://www.bilibili.tv/en/video/4801348909013504" && cards[1].Title == "The Daily Life of the Immortal King", "bilibili: recommended videos and shows; bad ids dropped");
+    Check(Bilibili.ParseCards("{\"code\":-404}").Count == 0 && Bilibili.ParseModules("garbage").Count == 0, "bilibili: errors give empty lists");
+    var found = Bilibili.ParseSearch("{\"code\":0,\"data\":{\"modules\":[{\"items\":[{\"aid\":\"1\",\"title\":\"clip\"}]},{\"items\":[{\"season_id\":\"99\",\"title\":\"One Piece\"}]}]}}");
+    Check(found.Count == 2 && found[0].IsSeason && found[0].Title == "One Piece", "bilibili: search lists shows first");
+    Check(Bilibili.SearchUrl("one piece").Contains("keyword=one%20piece") && Bilibili.AnimePageUrl(1).Contains("page_type=4&pn=1"), "bilibili: list links");
+}
+
 // ---- app catalog
 {
     Check(RemoteServer.PhoneAppUpdateMessage(53) == "{\"type\":\"appupdate\",\"versionCode\":53}", "the TV tells phones the newest phone app build");

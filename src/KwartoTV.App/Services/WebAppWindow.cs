@@ -118,6 +118,52 @@ public sealed class WebAppWindow : Window
   add(); document.addEventListener('DOMContentLoaded', add); setInterval(add, 3000);
 })();";
 
+    /// <summary>
+    /// Player mode (a Bilibili episode picked on KwartoTV's own Bilibili screen): only the site's video player, fullscreen.
+    /// OK = play/pause, ←/→ = 10 seconds, Back = back to the list. The player box is the video's closest container of the
+    /// same size, so the site's own subtitles stay on the picture.
+    /// </summary>
+    private const string PlayerOnlyScript = @"
+(function () {
+  if (window.__kwPlayer) return; window.__kwPlayer = true;
+  var css = 'html,body{overflow:hidden!important;background:#000!important}' +
+    '[data-kw-player]{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483646!important;background:#000!important;margin:0!important;transform:none!important}' +
+    '[data-kw-player] video{width:100%!important;height:100%!important;object-fit:contain!important}';
+  var sheet = null;
+  function style() {
+    try { if (!sheet) { sheet = new CSSStyleSheet(); sheet.replaceSync(css); } if (document.adoptedStyleSheets.indexOf(sheet) < 0) document.adoptedStyleSheets = document.adoptedStyleSheets.concat([sheet]); }
+    catch (x) { if (!document.getElementById('kw-player')) { var s = document.createElement('style'); s.id = 'kw-player'; s.textContent = css; (document.head || document.documentElement).appendChild(s); } }
+  }
+  function box(v) {
+    var r = v.getBoundingClientRect(), best = v, p = v.parentElement;
+    while (p && p !== document.body) { var q = p.getBoundingClientRect(); if (q.width <= r.width * 1.25 + 40 && q.height <= r.height * 1.6 + 80) best = p; else break; p = p.parentElement; }
+    return best;
+  }
+  var marked = null;
+  function apply() {
+    var v = document.querySelector('video'); if (!v) return;
+    if (!marked || !marked.isConnected || !marked.contains(v)) {
+      if (v.getBoundingClientRect().width < 50) return;
+      if (marked) marked.removeAttribute('data-kw-player');
+      marked = box(v); marked.setAttribute('data-kw-player', '1');
+      try { window.chrome.webview.postMessage('player:' + marked.tagName + '.' + (marked.className || '').toString().slice(0, 60)); } catch (e) {}
+    }
+    style();
+  }
+  setInterval(function () { apply(); var v = document.querySelector('video'); if (v && v.paused && !v.ended && !window.__kwPausedByUser) v.play().catch(function () {}); }, 1500);
+  window.addEventListener('keydown', function (e) {
+    var v = document.querySelector('video');
+    if (e.key === 'Escape' || e.key === 'BrowserBack' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); window.chrome.webview.postMessage('home'); return; }
+    if (!v) return;
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'MediaPlayPause') { e.preventDefault(); e.stopPropagation(); if (v.paused) { window.__kwPausedByUser = false; v.play(); } else { window.__kwPausedByUser = true; v.pause(); } }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); v.currentTime = Math.max(0, v.currentTime - 10); }
+  }, true);
+})();";
+
+    /// <summary>Show only the site's video player (see PlayerOnlyScript).</summary>
+    public bool PlayerOnly { get; init; }
+
     public WebAppWindow(string url, string profileName, ForegroundKind kind, string? userAgent = null, bool videoOnly = false)
     {
         _url = url; _profile = profileName; Kind = kind; _userAgent = userAgent; _videoOnly = videoOnly;
@@ -163,7 +209,8 @@ public sealed class WebAppWindow : Window
             await core.AddScriptToExecuteOnDocumentCreatedAsync(NoForcedColorsScript);
             if (_videoOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(VideoOnlyScript);
             // Netflix and other websites are made for a mouse: add TV-style remote navigation and make them bigger for the couch.
-            if (Kind is ForegroundKind.Netflix or ForegroundKind.Web)
+            if (PlayerOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(PlayerOnlyScript);
+            else if (Kind is ForegroundKind.Netflix or ForegroundKind.Web)
             {
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(TvWebScript.Script);
                 _web.ZoomFactor = 1.25;
@@ -175,6 +222,7 @@ public sealed class WebAppWindow : Window
                 else if (msg == "chup") Dispatcher.BeginInvoke(() => ChannelUp?.Invoke());
                 else if (msg == "chdown") Dispatcher.BeginInvoke(() => ChannelDown?.Invoke());
                 else if (msg?.StartsWith("tvfocus:") == true && _focusLogs++ < 40) AppPaths.LogLine("web highlight: " + msg[8..]);
+                else if (msg?.StartsWith("player:") == true && _focusLogs++ < 40) AppPaths.LogLine("web player: " + msg[7..]);
                 else if (msg?.StartsWith("textfocus") == true && Kind != ForegroundKind.YouTube)
                 {
                     var kind = msg.Length > 10 ? msg[10..] : "";
@@ -191,7 +239,7 @@ public sealed class WebAppWindow : Window
             {
                 // Signed in on the phone just before this window opened: use it and go straight to the home page.
                 PutCookies(core, signIn.Domain, signIn.Cookies);
-                start = signIn.Home;
+                if (!PlayerOnly) start = signIn.Home;   // an episode picked on the Bilibili screen still plays that episode
             }
             else if (SignInService is { } service && KwartoTV.Core.PhoneSignIn.Find(service) is { } svc)
             {

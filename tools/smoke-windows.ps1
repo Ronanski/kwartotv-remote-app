@@ -265,19 +265,25 @@ Check ($hl.Count -ge 3) "Netflix: arrow keys move the TV highlight ($($hl.Count)
 Keys "{F1}"
 Start-Sleep -Seconds 2
 
-# Bilibili inside KwartoTV, the same TV highlight; Back from its home page returns to KwartoTV.
-$before = $hl.Count
+# Bilibili as KwartoTV's own TV screen: rows of posters from bilibili.tv's lists; OK plays only the video; Back returns.
 Keys "{F11}"
-Start-Sleep -Seconds 18
-Shot "32-bilibili-opened"
-# Down then Up moves the highlight both on the page and inside the region pop-up that bilibili.tv shows to US runners
-# (the highlight rightly stays inside a pop-up, where Right has nowhere to go).
-Keys "{DOWN}"; Keys "{DOWN}"; Keys "{RIGHT}"; Keys "{UP}"; Keys "{UP}"
-Start-Sleep -Seconds 1
-Shot "33-bilibili-after-arrows"
-$hl2 = @(Get-Content (Join-Path $data "log.txt") | Where-Object { $_ -match "web highlight:" })
-$hl2 | Select-Object -Skip $before -First 12 | ForEach-Object { Write-Host "bilibili: $_" }
-Check (($hl2.Count - $before) -ge 3) "Bilibili: arrow keys move the TV highlight ($($hl2.Count - $before) moves)"
+Start-Sleep -Seconds 12
+Shot "32-bilibili-screen"
+$bl = @(Get-Content (Join-Path $data "log.txt") | Where-Object { $_ -match "bilibili: " })
+$bl | Select-Object -Last 6 | ForEach-Object { Write-Host "bilibili log: $_" }
+$rowsLine = $bl | Where-Object { $_ -match "bilibili: (\d+) rows, (\d+) shows" } | Select-Object -Last 1
+Check ($rowsLine -match "bilibili: ([1-9]\d*) rows, ([1-9]\d*) shows") "Bilibili screen: rows of shows load ($rowsLine)"
+Keys "{DOWN}"
+Keys "{ENTER}"
+Start-Sleep -Seconds 25
+Shot "33-bilibili-playing"
+$bl2 = @(Get-Content (Join-Path $data "log.txt") | Where-Object { $_ -match "bilibili: play|web player:" })
+$bl2 | Select-Object -Last 4 | ForEach-Object { Write-Host "bilibili log: $_" }
+Check (@($bl2 | Where-Object { $_ -match "bilibili: play" }).Count -ge 1) "Bilibili screen: OK on a show opens it"
+Warn (@($bl2 | Where-Object { $_ -match "web player:" }).Count -ge 1) "Bilibili: the episode's video player was found and made fullscreen"
+Keys "{ESC}"
+Start-Sleep -Seconds 2
+Shot "33b-bilibili-back"
 Keys "{F1}"
 Start-Sleep -Seconds 2
 
