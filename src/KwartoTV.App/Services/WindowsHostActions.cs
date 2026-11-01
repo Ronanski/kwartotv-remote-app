@@ -42,6 +42,8 @@ public interface IShell
     bool ScreenIsOff { get; }
     /// <summary>YouTube Music: music.open, music.playpause, music.next, music.prev, music.stop, music.search, music.play.</summary>
     void Music(string cmd, string? arg);
+    /// <summary>Play/pause, next or previous for the music (locked TV, or nothing else playing). False: not for the music.</summary>
+    bool MusicMediaKey(string cmd);
     void ScreenOff();
     void ScreenOn();
 }
@@ -56,6 +58,10 @@ public sealed class WindowsHostActions : IHostActions
     {
         var shell = _shell ?? throw new InvalidOperationException("shell not ready");
         var ui = Application.Current.Dispatcher;
+
+        // Play/pause, next and previous are the music's while the TV is locked (the lock screen shows the song) or when
+        // nothing else plays on the TV.
+        if (cmd is "media.playpause" or "media.next" or "media.prev" && ui.Invoke(() => shell.MusicMediaKey(cmd))) return;
 
         // The remote's keys are sent as key presses, and Windows gives key presses to the window in front. On a PC that
         // is also used for other things (a laptop with the TV as a second screen), that may be another program: put

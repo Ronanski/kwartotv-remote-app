@@ -57,6 +57,15 @@ public sealed class LockScreenWindow : Window
     private readonly TextBlock _songIcon = new() { FontSize = 30, Foreground = new SolidColorBrush(Accent), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
     private readonly Border _song = new() { Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 22, 0, 0), Padding = new Thickness(22, 12, 26, 12), CornerRadius = new CornerRadius(18), Background = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF)) };
 
+    // The music buttons under the song: the phone's ⏮ ⏯ ⏭ (Remote, Media or Music tab) and the PC's media keys work while locked.
+    private readonly TextBlock _playKey = new() { Text = "▶", FontSize = 26, Foreground = Brushes.Black, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+
+    /// <summary>A media key pressed on the PC while locked: "music.playpause", "music.next" or "music.prev".</summary>
+    public event Action<string>? MusicKey;
+
+    private static FrameworkElement Round(UIElement content, Brush fill, double size) =>
+        new Border { Width = size, Height = size, CornerRadius = new CornerRadius(size / 2), Background = fill, Margin = new Thickness(10, 0, 10, 0), Child = content };
+
     /// <summary>Shows the song playing (or hides the line when the music is off).</summary>
     public void SetMusic(KwartoTV.Core.MusicState s)
     {
@@ -65,6 +74,7 @@ public sealed class LockScreenWindow : Window
         _songArtist.Text = s.Artist;
         _songArtist.Visibility = s.Artist.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         _songIcon.Text = s.Playing ? "♫" : "❚❚";
+        _playKey.Text = s.Playing ? "❚❚" : "▶";
         _song.Opacity = s.Playing ? 1 : 0.6;
         _song.Visibility = Visibility.Visible;
     }
@@ -111,7 +121,16 @@ public sealed class LockScreenWindow : Window
         songText.Children.Add(_songTitle); songText.Children.Add(_songArtist);
         var songRow = new StackPanel { Orientation = Orientation.Horizontal };
         songRow.Children.Add(_songIcon); songRow.Children.Add(songText);
-        _song.Child = songRow;
+        var keys = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
+        TextBlock Glyph(string t) => new() { Text = t, FontSize = 22, Foreground = Soft, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var dimFill = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+        keys.Children.Add(Round(Glyph("⏮"), dimFill, 52));
+        keys.Children.Add(Round(_playKey, new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xFF, 0xFF)), 62));
+        keys.Children.Add(Round(Glyph("⏭"), dimFill, 52));
+        var songAll = new StackPanel();
+        songAll.Children.Add(songRow); songAll.Children.Add(keys);
+        songAll.Children.Add(new TextBlock { Text = "Phone: ⏮ ⏯ ⏭ on the Remote, Media or Music tab", FontSize = 13, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) });
+        _song.Child = songAll;
         _verseBox.Children.Add(_song);
         _verseBox.RenderTransform = _drift;
         var root = new Grid { Background = Brushes.Black, ClipToBounds = true };
@@ -142,7 +161,13 @@ public sealed class LockScreenWindow : Window
         };
         Closed += (_, _) => { _tick.Stop(); _wander.Stop(); _slides.Stop(); };
         // Locked: nothing on the PC itself gets past this screen.
-        PreviewKeyDown += (_, e) => e.Handled = true;
+        PreviewKeyDown += (_, e) =>
+        {
+            e.Handled = true;
+            // Only the PC's media keys get through, to the music.
+            var cmd = e.Key switch { Key.MediaPlayPause => "music.playpause", Key.MediaNextTrack => "music.next", Key.MediaPreviousTrack => "music.prev", _ => null };
+            if (cmd is not null) MusicKey?.Invoke(cmd);
+        };
         PreviewMouseDown += (_, e) => e.Handled = true;
         PreviewMouseWheel += (_, e) => e.Handled = true;
         Closing += (_, e) => { if (!_allowClose) e.Cancel = true; };

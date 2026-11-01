@@ -620,6 +620,7 @@ public partial class MainWindow : Window, IShell
         var l = new LockScreenWindow(tvWindow, _tv.Settings);
         _lock = l;
         l.SetMusic(_tv.MusicPlayer.State);
+        l.MusicKey += cmd => Music(cmd, null);
         l.Show();
         l.Activate();
         // The PC must not go to sleep behind the clock (the phone could not reach it to unlock), and the clock stays on screen.
@@ -638,6 +639,24 @@ public partial class MainWindow : Window, IShell
         if (_player is { IsVisible: true } p) { p.Activate(); p.Focus(); }
         else if (_web is { IsVisible: true } w) w.Activate();
         else { Native.BringToFront(Handle); Activate(); }
+    }
+
+    /// <summary>
+    /// The remote's play/pause, next and previous go to the music while the TV is locked, or when nothing else is playing
+    /// on the TV. Returns false when they are for the player or an app instead.
+    /// </summary>
+    public bool MusicMediaKey(string cmd)
+    {
+        var m = _tv.MusicPlayer;
+        if (!m.State.On) return false;
+        if (!_locked && (_player is { IsVisible: true } || _web is { IsVisible: true } || _tv.Apps.IsRunning)) return false;
+        switch (cmd)
+        {
+            case "media.playpause": m.PlayPause(); return true;
+            case "media.next": m.Next(); return true;
+            case "media.prev": m.Previous(); return true;
+            default: return false;
+        }
     }
 
     public void Music(string cmd, string? arg)

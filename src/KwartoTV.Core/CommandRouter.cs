@@ -44,6 +44,8 @@ public sealed class CommandRouter
     {
         "power.screenon", "power.screenoff", "power.sleep", "power.shutdown", "power.restart",
         "media.volup", "media.voldown", "media.volume", "media.mute",
+        // play/pause, next, previous: for the music on the lock screen
+        "media.playpause", "media.next", "media.prev",
         // music is what the lock screen is for: it can be changed without unlocking
         "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play",
     };
