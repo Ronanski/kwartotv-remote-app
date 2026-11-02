@@ -51,7 +51,7 @@ jobs:
       - run: dotnet run --project tests/KwartoTV.Tests -c Release
       # The scripts KwartoTV puts in websites (TV highlight, Back, Netflix's player), in a real browser.
       - name: Website scripts in Chromium
-        run: npm i --no-save playwright@1.47.2 && npx playwright install --with-deps chromium && node tools/qa/web-nav.js && node tools/qa/netflix-row.js && node tools/qa/keyboard-page.js && node tools/qa/netflix-player.js
+        run: npm i --no-save playwright@1.47.2 && npx playwright install --with-deps chromium && node tools/qa/web-nav.js && node tools/qa/netflix-row.js && node tools/qa/keyboard-page.js && node tools/qa/netflix-player.js && node tools/qa/netflix-bar.js && node tools/qa/netflix-row-real.js
 
   windows:
     name: Windows app and installer

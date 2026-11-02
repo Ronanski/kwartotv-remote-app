@@ -221,8 +221,60 @@ public static class TvWebScript
   // In a sliding row (Netflix and the like) Left/Right go to the next title in the row's own order, like a TV app:
   // when that title is off screen (or under the row's arrow), the row slides first and the highlight lands on it.
   var ROWS = '.lolomoRow,.rowContainer,[data-list-context],.slider,.scroll-wrap';
+  // Netflix's rows (as Netflix's own pages build them, and as the NetflixController extension drives them): each title
+  // is a "".slider-item-N"" where N is its place among the titles in view; titles out of view have no number. At the
+  // edge, Netflix's own arrow (span.handleNext / handlePrev) slides the row and Netflix rebuilds the titles, numbered
+  // again: the highlight then goes to the right place in the rebuilt row (found again by the row's id).
+  var nfBusy = 0;
+  function nfItem(el) { return el && el.closest ? el.closest('[class*=""slider-item-""]') : null; }
+  function nfPos(item) { var m = /(?:^|\s)slider-item-(\d+)(?:\s|$)/.exec(item.className || ''); return m ? +m[1] : -1; }
+  function nfTarget(item) { return item.querySelector('a[href*=""/watch""], a[href*=""/title""], a.slider-refocus, a[href], [role=link], [tabindex]') || item; }
+  function nfVisible(row) { return Array.prototype.filter.call(row.querySelectorAll('[class*=""slider-item-""]'), function (x) { return nfPos(x) >= 0; }); }
+  function nfAfterSlide(rowId, pick) {
+    nfBusy = Date.now() + 1200;
+    setTimeout(function () {
+      nfBusy = 0;
+      var row = rowId ? document.getElementById(rowId) : null; if (!row) return;
+      var items = nfVisible(row); if (!items.length) return;
+      var it = pick(items); if (it) focus(nfTarget(it));
+    }, 800);
+  }
+  function nfStep(dir) {
+    var item = nfItem(cur); if (!item || nfPos(item) < 0) return null;
+    var row = item.closest('[id^=""row-""]') || item.closest('.lolomoRow, .rowContainer');
+    if (!row) return null;
+    if (Date.now() < nfBusy) return true;   // the row is still sliding
+    var next = dir === 'right' ? item.nextElementSibling : item.previousElementSibling;
+    if (!next || !/slider-item-/.test(next.className || '')) return false;   // the row's end
+    var after = dir === 'right' ? next.nextElementSibling : next.previousElementSibling;
+    // the neighbour is the half-shown title at the edge (an unnumbered title follows it): slide the row
+    var edge = nfPos(next) < 0 || (after && /slider-item-/.test(after.className || '') && nfPos(after) < 0);
+    if (!edge) { focus(nfTarget(next)); return true; }
+    var h = row.querySelector(dir === 'right' ? 'span.handleNext, .handleNext' : 'span.handlePrev, .handlePrev');
+    if (!h) { focus(nfTarget(next)); return true; }
+    h.click();
+    var id = row.id;
+    // after sliding right the next title is the first full one (place 1); after sliding left, the last full one
+    nfAfterSlide(id, function (items) {
+      if (dir === 'right') return items.filter(function (x) { return nfPos(x) === 1; })[0] || items[0];
+      var max = Math.max.apply(null, items.map(nfPos));
+      return items.filter(function (x) { return nfPos(x) === max - 1; })[0] || items[items.length - 1];
+    });
+    return true;
+  }
+  // The control nearest to where the highlight was (its rectangle), for when the page replaced it.
+  function nearest(r) {
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2, best = null, bd = 1e9;
+    Array.prototype.forEach.call(scope().querySelectorAll(SEL), function (el) {
+      if (!meaningful(el) || !visible(el)) return;
+      var q = rectOf(el), d = Math.abs(q.left + q.width / 2 - cx) + Math.abs(q.top + q.height / 2 - cy);
+      if (d < bd) { bd = d; best = el; }
+    });
+    return bd < Math.max(120, r.width) ? best : null;
+  }
   function rowStep(dir) {
     if (!cur) return false;
+    if (NF) { var nf = nfStep(dir); if (nf !== null) return nf; }
     var row = cur.closest(ROWS);
     if (!row) return false;
     var cards = Array.prototype.filter.call(row.querySelectorAll(SEL), function (el) { return meaningful(el) && !el.closest('.handle,.handleNext,.handlePrev'); });
@@ -399,13 +451,14 @@ public static class TvWebScript
     try {
       addCss(); siteClasses();
       if (location.pathname !== lastPath && !/search/i.test(location.pathname)) document.documentElement.classList.remove('kw-search');
-      if (menuOpen || watching() || typing(document.activeElement)) return;
+      if (menuOpen || watching() || typing(document.activeElement) || Date.now() < nfBusy) return;
       var s = scope();
       var lost = !cur || !document.contains(cur) || !visible(cur) || (s !== document && !s.contains(cur));
       if (lost || s !== lastScope || location.pathname !== lastPath) {
         if (s !== lastScope && s !== document) stash = cur; // remember the title the pop-up was opened from
         var back2 = s === document && s !== lastScope && stash && document.contains(stash) && visible(stash) ? stash : null;
         if (back2) { focus(back2); stash = null; }
+        else if (lost && s === lastScope && cur && lastRect && !document.contains(cur) && nearest(lastRect)) { focus(nearest(lastRect)); }   // the page rebuilt what had the highlight (Netflix's rows): the title now in its place
         else if (lost || s !== lastScope) { var p = preferred(); if (p) focus(p); }
         lastScope = s; lastPath = location.pathname;
       }
@@ -455,6 +508,12 @@ public static class TvWebScript
       else if (e.key === 'ArrowRight' || isBack || e.key === 'Backspace') closeMenu();
       return;
     }
+    // KwartoTV's Netflix bar is open: every key goes to it (◀ ▶ choose, OK presses, Back hides it).
+    if (netflixWatch() && window.__kwNfBar && window.__kwNfBar.isOpen()) {
+      if (e.key === 'Enter' && e.repeat) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+      if (/^(Arrow(Up|Down|Left|Right)|Enter|Escape|BrowserBack|Backspace)$/.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); window.__kwNfBar.key(e.key); }
+      return;
+    }
     // Netflix's controls shown: the highlight moves on them; Back hides them (and stays in the video).
     if (inControls()) {
       ctlUntil = Date.now() + 8000; wakeControls();
@@ -463,7 +522,11 @@ public static class TvWebScript
     // While a video plays: OK pauses/plays, hold OK or Back leaves, ◀ ▶ skip 10 s. On Netflix its own player keys also
     // work; ▲ ▼ show Netflix's controls (as on the Netflix TV app).
     if (watching()) {
-      if (netflixWatch() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); e.stopImmediatePropagation(); enterControls(e.key === 'ArrowDown' ? 'down' : 'up'); return; }
+      if (netflixWatch() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (window.__kwNfBar) window.__kwNfBar.show(e.key === 'ArrowDown' ? 'down' : 'up'); else enterControls(e.key === 'ArrowDown' ? 'down' : 'up');
+        return;
+      }
       var v = theVideo();
       if (isBack || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); back(); }
       else if (e.key === 'Enter') okDown(e);

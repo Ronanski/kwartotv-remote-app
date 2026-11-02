@@ -30,16 +30,9 @@ let fail = 0; const check = (ok, n) => { console.log((ok ? 'PASS ' : 'FAIL ') + 
   await p.keyboard.press('Enter'); await p.waitForTimeout(200);
   check((await p.evaluate(() => window.__calls)).join() === 'pause', `OK while watching pauses through Netflix's player (${await p.evaluate(() => window.__calls)})`);
   await p.keyboard.press('ArrowDown'); await p.waitForTimeout(500);
-  check(await last() === 'Audio & Subtitles', `▼ shows the controls, on Audio & Subtitles (${await last()})`);
-  await p.keyboard.press('ArrowRight'); await p.waitForTimeout(300);
-  check(await last() === 'Speed', `▶ moves to the next button (${await last()})`);
-  await p.keyboard.press('ArrowLeft'); await p.waitForTimeout(300);
-  await p.keyboard.press('ArrowLeft'); await p.waitForTimeout(300);
-  check(await last() === 'Episodes', `◀ moves back (${await last()})`);
-  await p.keyboard.press('Enter'); await p.waitForTimeout(300);
-  check((await p.evaluate(() => window.__clicked)).includes('Episodes'), 'OK presses the highlighted button (Episodes)');
+  check(await last() === 'Audio & Subtitles', `▼ shows the bar, on Audio & Subtitles (${await last()})`);
   await p.keyboard.press('Escape'); await p.waitForTimeout(400);
-  check(p.url() === 'https://www.netflix.com/watch/81234567', `Back hides the controls and stays in the video (${p.url()})`);
+  check(p.url() === 'https://www.netflix.com/watch/81234567', `Back hides the bar and stays in the video (${p.url()})`);
   await p.keyboard.press('Enter'); await p.waitForTimeout(200);
   check((await p.evaluate(() => window.__calls)).join() === 'pause,play', `after that, OK plays again (${await p.evaluate(() => window.__calls)})`);
   await p.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<button data-uia="interrupt-autoplay-continue" onclick="window.__clicked.push(\'Continue\'); this.remove()">Continue Watching</button>'));
