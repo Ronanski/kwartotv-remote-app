@@ -45,7 +45,12 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
     lint { abortOnError = false; checkReleaseBuilds = true }
-    testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        // The phone UI tests (Robolectric): every button pressed, every screen drawn to a picture.
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.testLogging { showStandardStreams = true }; it.maxHeapSize = "2g" }
+    }
 }
 
 dependencies {
@@ -63,5 +68,9 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.test:core:1.6.1")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("org.json:json:20240303")
 }

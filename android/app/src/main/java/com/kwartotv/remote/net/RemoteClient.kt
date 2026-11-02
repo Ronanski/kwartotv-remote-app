@@ -206,30 +206,7 @@ class RemoteClient {
                 val m = parseTvMessage(text)
                 onMain {
                     lastRx = android.os.SystemClock.elapsedRealtime()
-                    when (m) {
-                        is TvMessage.State -> _now.value = Now(m.number, m.channelName)
-                        is TvMessage.Channels -> { _lineup.value = m.lineup; _lineupUnsupported.value = false }
-                        is TvMessage.Found -> { _catalog.value = m.catalog; _catalogUnsupported.value = false }
-                        is TvMessage.TextWanted -> _textRequest.value = m.request
-                        is TvMessage.SignInWanted -> _signIn.value = m.request
-                        is TvMessage.MusicNow -> _music.value = m.music
-                        is TvMessage.AppUpdate -> _tvSeesApk.value = m.versionCode
-                        is TvMessage.Foreground -> { _tvApp.value = m.app; if (m.app != "netflix") _netflixNow.value = null }
-                        is TvMessage.NetflixTracksNow -> _netflixTracks.value = m.tracks
-                        is TvMessage.NetflixNowPlaying -> _netflixNow.value = m.now
-                        is TvMessage.NetflixEpisodesNow -> _netflixEpisodes.value = m.episodes
-                        is TvMessage.MusicFound -> { _musicResults.value = m.results; _musicSearching.value = false }
-                        is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
-                            ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)
-                        is TvMessage.Ack -> when {
-                            m.ok -> Unit
-                            // An older TV app does not know the lineup request: say so on the list, not as an error toast.
-                            m.id != null && m.id == lineupRequest -> _lineupUnsupported.value = true
-                            m.id != null && m.id == catalogRequest -> _catalogUnsupported.value = true
-                            else -> _lastError.value = m.error ?: "Not done"
-                        }
-                        TvMessage.Unknown -> Unit
-                    }
+                    apply(m)
                 }
             }
 
@@ -303,10 +280,49 @@ class RemoteClient {
         } catch (_: Exception) { null }
     }
 
+
+    /** One message from the TV, on the main thread. */
+    private fun apply(m: TvMessage) {
+        when (m) {
+            is TvMessage.State -> _now.value = Now(m.number, m.channelName)
+            is TvMessage.Channels -> { _lineup.value = m.lineup; _lineupUnsupported.value = false }
+            is TvMessage.Found -> { _catalog.value = m.catalog; _catalogUnsupported.value = false }
+            is TvMessage.TextWanted -> _textRequest.value = m.request
+            is TvMessage.SignInWanted -> _signIn.value = m.request
+            is TvMessage.MusicNow -> _music.value = m.music
+            is TvMessage.AppUpdate -> _tvSeesApk.value = m.versionCode
+            is TvMessage.Foreground -> { _tvApp.value = m.app; if (m.app != "netflix") _netflixNow.value = null }
+            is TvMessage.NetflixTracksNow -> _netflixTracks.value = m.tracks
+            is TvMessage.NetflixNowPlaying -> _netflixNow.value = m.now
+            is TvMessage.NetflixEpisodesNow -> _netflixEpisodes.value = m.episodes
+            is TvMessage.MusicFound -> { _musicResults.value = m.results; _musicSearching.value = false }
+            is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
+                ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)
+            is TvMessage.Ack -> when {
+                m.ok -> Unit
+                // An older TV app does not know the lineup request: say so on the list, not as an error toast.
+                m.id != null && m.id == lineupRequest -> _lineupUnsupported.value = true
+                m.id != null && m.id == catalogRequest -> _catalogUnsupported.value = true
+                else -> _lastError.value = m.error ?: "Not done"
+            }
+            TvMessage.Unknown -> Unit
+        }
+    }
+
+    // ---- for the phone UI tests: the TV's messages are fed in and the commands the buttons send are kept.
+    /** Commands sent while [record] is set ("cmd" or "cmd arg"). */
+    val sent = mutableListOf<String>()
+    @Volatile var record = false
+    /** Feeds a message as if the TV had sent it (tests). */
+    fun deliver(text: String) = apply(parseTvMessage(text))
+    /** Acts as connected without a TV (tests). */
+    fun pretendConnected() { _conn.value = Conn.Connected }
+
     fun send(cmd: String, arg: String? = null): Boolean = sendWithId(cmd, arg) != null
 
     /** Sends a command; returns its id, or null when not connected. Call on the main thread. */
     private fun sendWithId(cmd: String, arg: String?): String? {
+        if (record) { sent += if (arg == null) cmd else "$cmd $arg"; return (++seq).toString() }
         val s = socket ?: return null
         if (_conn.value != Conn.Connected) return null
         val id = (++seq).toString()
