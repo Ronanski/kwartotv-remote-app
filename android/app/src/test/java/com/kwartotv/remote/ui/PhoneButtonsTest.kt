@@ -26,6 +26,7 @@ import org.robolectric.annotation.GraphicsMode
  * the TV expects (the TV side of each command is checked in tools/smoke-windows.ps1).
  */
 @RunWith(RobolectricTestRunner::class)
+@org.junit.FixMethodOrder(org.junit.runners.MethodSorters.NAME_ASCENDING)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-port-hdpi")
 class PhoneButtonsTest {
@@ -58,7 +59,7 @@ class PhoneButtonsTest {
 
     private fun done(name: String) { println("== $name: ${log.size} buttons checked"); log.forEach { println("  $it") } }
 
-    @Test fun homeAndTheRemote() {
+    @Test fun t1_homeAndTheRemote() {
         start(); ui.tv(PhoneUi.fg("Home"))
         press("Open Live TV", "app.livetv"); press("Open YouTube", "app.youtube"); press("Open YT Music", "app.ytmusic")
         press("Open Netflix", "app.netflix"); press("Open Bilibili", "app.bilibili")
@@ -74,7 +75,7 @@ class PhoneButtonsTest {
         done("Home")
     }
 
-    @Test fun netflixBrowsing() {
+    @Test fun t6_netflixBrowsing() {
         start(); ui.tv(PhoneUi.fg("netflix"))
         ui.shot("b10-netflix-browsing")
         press("Skip the intro or recap", "netflix.skip"); press("Play the next episode", "netflix.next")
@@ -85,7 +86,7 @@ class PhoneButtonsTest {
         done("Netflix browsing")
     }
 
-    @Test fun netflix() {
+    @Test fun t7_netflixWatching() {
         start(); ui.tv(PhoneUi.fg("netflix"), PhoneUi.NETFLIX)
         ui.shot("b11-netflix-watching")
         press("Skip the intro or recap", "netflix.skip"); press("Play the next episode", "netflix.next")
@@ -115,7 +116,7 @@ class PhoneButtonsTest {
         done("Netflix")
     }
 
-    @Test fun liveTvMusicVideosAndLock() {
+    @Test fun t2_liveTvMusicVideosAndLock() {
         start(); ui.tv(PhoneUi.fg("live"), PhoneUi.channel(7, "GMA 7"), PhoneUi.LINEUP)
         press("Channel down", "channel.prev"); press("Channel list on the TV", "channel.list"); press("Channel up", "channel.next")
         press("Last channel", "channel.last"); press("Favorite channel", "channel.favorite"); press("Play or pause", "media.playpause")
@@ -131,7 +132,7 @@ class PhoneButtonsTest {
         done("Live TV, music, videos, lock")
     }
 
-    @Test fun channelsTab() {
+    @Test fun t3_channelsTab() {
         start(); ui.tv(PhoneUi.fg("live"), PhoneUi.channel(1, "GMA 7"), PhoneUi.LINEUP)
         tab("Channels"); ui.clearSent()
         ui.shot("b09-channels")
@@ -143,7 +144,7 @@ class PhoneButtonsTest {
         done("Channels")
     }
 
-    @Test fun musicTab() {
+    @Test fun t4_musicTab() {
         start(); ui.tv(PhoneUi.fg("Music"), PhoneUi.SONG)
         tab("Music"); ui.clearSent()
         ui.tv("""{"type":"music.results","query":"ben&ben","items":[{"id":"hJhVURhdLEg","title":"Maybe The Night","artist":"Ben&Ben"},{"id":"bgCansrDpVo","title":"Make It With You","artist":"Ben&Ben"}]}""")
@@ -153,7 +154,7 @@ class PhoneButtonsTest {
         done("Music tab")
     }
 
-    @Test fun moreTab() {
+    @Test fun t5_moreTab() {
         start(); ui.tv(PhoneUi.fg("Home"))
         tab("More"); ui.clearSent()
         // Keyboard: letters as typed, Delete, Enter

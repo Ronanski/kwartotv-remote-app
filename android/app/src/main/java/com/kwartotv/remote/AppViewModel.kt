@@ -170,6 +170,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun reconnect() { if (selected() != null) connectSelected() }
 
     fun checkForUpdate(manual: Boolean) {
+        if (client.record) return   // the phone UI tests: no update checks over the internet
         lastUpdateCheck = android.os.SystemClock.elapsedRealtime()
         viewModelScope.launch {
             val info = updater.check()
