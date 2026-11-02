@@ -59,7 +59,7 @@ public static class NetflixControl
     return [t, e];
   }
   // A title's details open (Netflix's pop-up over the rows, or its title page): its name, the label of its Play
-  // button ("Resume", "Play", "Play S1:E9") and its number, so the phone can show a Resume button for it.
+  // button (Resume, Play, Play S1:E9) and its number, so the phone can show a Resume button for it.
   var MODAL = '.previewModal--container.detail-modal, .detail-modal-container, [data-uia*=""detail-modal""], [role=dialog][aria-modal=true]';
   var PLAYSEL = '[data-uia=""play-button""], a[data-uia*=""play-button""], button[data-uia*=""play-button""], [data-uia=""resume-button""], [data-uia*=""play-resume""]';
   function modalEl() {
