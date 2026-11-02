@@ -1127,7 +1127,7 @@ public partial class MainWindow : Window, IShell
         // Nothing has the highlight (a screen just opened, or the focused control went away): the first arrow or OK
         // puts it on the screen's first item instead of doing nothing.
         if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.Enter && !e.IsRepeat && !DialogOpen && !KeyboardOpen && _current is { } page
-            && (Keyboard.FocusedElement is null || ReferenceEquals(Keyboard.FocusedElement, this) || Keyboard.FocusedElement is UIElement { IsVisible: false }))
+            && (Keyboard.FocusedElement is null || Keyboard.FocusedElement is UIElement { IsVisible: false }))
         {
             page.FocusFirstOrLast();
             if (_focusLogCount++ < 3000) AppPaths.LogLine($"focus: nothing had the highlight; {e.Key} put it on the screen");
