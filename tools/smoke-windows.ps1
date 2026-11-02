@@ -456,6 +456,7 @@ try {
     Phone "netflix.speed" "1.5" "netflix: speed\(1.5\)" 10 "speed from the phone reaches Netflix" $null
     Phone "netflix.seekto" "60" "netflix: seekTo\(60\)" 10 "jump to a time from the phone reaches Netflix" $null
     Phone "netflix.continue" $null "netflix: cont\(\)" 10 "Continue watching from the phone reaches Netflix" $null
+    Phone "netflix.play" $null "netflix: play\(\)" 10 "Resume (the title open on the TV) from the phone reaches Netflix" $null
     Phone "nav.home" $null "web: closed netflix" 10 "Home button leaves Netflix" $null
     Phone "app.open" "primevideo" "app: Prime Video" 10 "More apps: Prime Video opens" $null
     Phone "nav.home" $null "home" 10 "Home button leaves Prime Video" $null
@@ -482,6 +483,28 @@ try {
     $locked = WsCmd "nav.ok" $null
     Check ($null -ne $locked -and -not $locked.ok) "phone: other buttons do nothing while locked ($(if ($locked) { $locked.error }))"
     Phone "power.screenon" $null "screen: unlocked" 10 "Unlock returns to the TV" "47-phone-unlocked"
+    # ---- The phone's Lock workspace: the lock screen's options, its state, the photo folders and a preview photo.
+    WsSend "lock.get" $null
+    $ls = WsReceiveUntil "lock.state" 10
+    Check ($null -ne $ls -and $ls.clock) "lock: the phone gets the lock screen's options ($(if ($ls) { "clock=$($ls.clock) bg=$($ls.bg) locked=$($ls.locked)" }))"
+    Phone "lock.set" "clock=big" "lock: clock=big" 5 "lock screen: big clock" $null
+    Phone "lock.set" "color=9DB8FF" "lock: color=9DB8FF" 5 "lock screen: clock color" $null
+    Phone "lock.set" "bg=midnight" "lock: bg=midnight" 5 "lock screen: midnight background" $null
+    Phone "power.screenoff" $null "screen: locked" 10 "Lock with the new look" "47f-lock-big-midnight"
+    Phone "lock.set" "clock=corner" "lock: clock=corner" 5 "lock screen changes while locked (the TV shows it right away)" "47g-lock-corner"
+    Phone "lock.set" "dim=40" "lock: dim=40" 5 "lock screen: dim" "47h-lock-dim"
+    $bad = WsCmd "lock.set" "clock=huge"
+    Check ($null -ne $bad -and -not $bad.ok) "lock: a value that is not a choice is refused ($(if ($bad) { $bad.error }))"
+    WsSend "lock.folders" $null
+    $lf = WsReceiveUntil "lock.folders" 10
+    Check ($null -ne $lf) "lock: the phone gets the photo folders ($(if ($lf) { @($lf.folders).Count }) folders)"
+    if ($lf -and @($lf.folders).Count -gt 0) { Phone "lock.set" ("folder=" + @($lf.folders)[0].path) "lock: folder=" 5 "lock screen: photo folder from the phone" $null }
+    Phone "lock.set" "bg=photos" "lock: bg=photos" 5 "lock screen: photos" "47i-lock-photos"
+    WsSend "lock.photo" "0"
+    $lp = WsReceiveUntil "lock.photo" 15
+    Check ($null -ne $lp) "lock: the phone gets a preview photo (n=$(if ($lp) { $lp.n }))"
+    foreach ($o in "clock=classic", "color=FFFFFF", "dim=100", "bg=black") { WsCmd "lock.set" $o | Out-Null }
+    Phone "power.screenon" $null "screen: unlocked" 10 "Unlock after the Lock workspace" $null
     # ---- Every button of the phone, app by app: the command must do its job on the TV (seen in the log), not only be accepted.
     # Effect: like Phone, but a missing effect is only a warning when the CI machine itself cannot show it (no sign-in, no sound, bot checks).
     function Effect($cmd, $arg, $expect, $seconds, $name, [switch]$soft) {
