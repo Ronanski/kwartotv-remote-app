@@ -135,6 +135,7 @@ jobs:
     name: Android remote (APK)
     needs: version
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults: { run: { working-directory: android } }
     steps:
       - uses: actions/checkout@v4

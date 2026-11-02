@@ -51,7 +51,6 @@ android {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.testLogging { showStandardStreams = true; events("passed", "failed", "started") }; it.maxHeapSize = "2g"
-            it.timeout.set(java.time.Duration.ofMinutes(8))
             // Robolectric downloads its Android jar itself; repo1 answers CI machines with 429 (too many requests).
             it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
         }
