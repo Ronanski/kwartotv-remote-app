@@ -63,6 +63,10 @@ fun RemoteKey(
     height: Dp = 60.dp,
     icon: ImageVector? = null,
     caption: String? = null,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(20.dp),
+    /** No tile of its own (keys drawn on a shared background, such as the round D-pad). */
+    bare: Boolean = false,
+    iconSize: Dp? = null,
     content: (@Composable () -> Unit)? = null,
     onFire: () -> Unit,
 ) {
@@ -71,7 +75,6 @@ fun RemoteKey(
     val fire by rememberUpdatedState(onFire)
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (pressed) 0.95f else 1f, animationSpec = tween(90), label = "press")
-    val shape = RoundedCornerShape(20.dp)
     val fg = when {
         primary -> Color.White
         danger -> Color(0xFFFF8A96)
@@ -82,6 +85,7 @@ fun RemoteKey(
         .graphicsLayer { scaleX = scale; scaleY = scale }
         .clip(shape)
     val filled = when {
+        bare -> base.background(if (pressed) Color(0x22FFFFFF) else Color.Transparent)
         primary -> base.background(AccentBrush)
         danger -> base.background(Color(0xFF2A161B)).border(1.dp, Color(0x33FF5C6C), shape)
         else -> base.background(if (pressed) CardHigh else Card).border(1.dp, Hairline, shape)
@@ -111,7 +115,7 @@ fun RemoteKey(
         contentAlignment = Alignment.Center,
     ) {
         if (content != null) content() else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(if (caption == null && label.isEmpty()) 30.dp else 24.dp))
+            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(iconSize ?: if (caption == null && label.isEmpty()) 30.dp else 24.dp))
             if (icon == null && label.isNotEmpty()) Text(label, color = fg, fontSize = fontSize.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             val small = caption ?: if (icon != null) label.ifEmpty { null } else null
             if (small != null) Text(small, color = if (primary) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)

@@ -29,17 +29,25 @@ class PhoneUi(private val rule: ComposeContentTestRule) {
         vm.client.pretendConnected()
     }
 
-    fun show() = rule.setContent { KwartoTheme { RemoteScreen(vm) } }
+    fun show() {
+        // The clock moves only when the test says so: endless animations and timers never keep the test waiting.
+        rule.mainClock.autoAdvance = false
+        rule.setContent { KwartoTheme { RemoteScreen(vm) } }
+        settle()
+    }
+
+    /** Lets the screen catch up (half a second of its clock). */
+    fun settle() { rule.mainClock.advanceTimeBy(500); rule.waitForIdle() }
 
     /** Messages from the TV (JSON), as they come over the connection. */
-    fun tv(vararg json: String) { rule.runOnIdle { json.forEach { vm.client.deliver(it) } }; rule.waitForIdle() }
+    fun tv(vararg json: String) { rule.runOnUiThread { json.forEach { vm.client.deliver(it) } }; settle() }
 
-    fun sent(): List<String> = rule.runOnIdle { vm.client.sent.toList() }
-    fun clearSent() = rule.runOnIdle { vm.client.sent.clear() }
+    fun sent(): List<String> = vm.client.sent.toList()
+    fun clearSent() = vm.client.sent.clear()
 
     /** The screen as a picture: printed for the CI log (##SHOT name, then base64 JPEG) and saved under build/phone-shots. */
     fun shot(name: String) {
-        rule.waitForIdle()
+        settle()
         val bmp = rule.onRoot().captureToImage().asAndroidBitmap()
         val out = ByteArrayOutputStream()
         bmp.compress(Bitmap.CompressFormat.JPEG, 72, out)

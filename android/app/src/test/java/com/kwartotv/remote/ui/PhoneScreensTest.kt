@@ -32,11 +32,11 @@ class PhoneScreensTest {
         ui.tv(PhoneUi.fg("locked"))
         ui.shot("p05-remote-locked")
         ui.tv(PhoneUi.fg("live"), PhoneUi.LINEUP)
-        rule.onAllNodesWithText("Channels").onLast().performClick()
+        rule.onAllNodesWithText("Channels").onLast().performClick(); ui.settle()
         ui.shot("p06-channels")
-        rule.onAllNodesWithText("Music").onLast().performClick()
+        rule.onAllNodesWithText("Music").onLast().performClick(); ui.settle()
         ui.shot("p07-music")
-        rule.onAllNodesWithText("More").onLast().performClick()
+        rule.onAllNodesWithText("More").onLast().performClick(); ui.settle()
         ui.shot("p08-more")
     }
 }

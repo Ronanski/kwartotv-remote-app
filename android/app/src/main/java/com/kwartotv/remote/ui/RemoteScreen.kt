@@ -90,6 +90,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -120,13 +122,13 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 fun RemoteScreen(vm: AppViewModel) {
     val client = vm.client
     val conn by client.conn.collectAsState()
-    val now by client.now.collectAsState()
     val tvs by vm.tvs.collectAsState()
     val selectedId by vm.selectedId.collectAsState()
     val error by client.lastError.collectAsState()
     val context = LocalContext.current
     val tv = tvs.firstOrNull { it.deviceId == selectedId } ?: tvs.first()
     var tab by rememberSaveable { mutableStateOf(Tab.Remote) }
+    var morePart by rememberSaveable { mutableIntStateOf(0) }
     var menu by remember { mutableStateOf(false) }
     // Sign in to Netflix / Bilibili for the TV on the phone (from the menu, or when the TV asks).
     var signInFor by remember { mutableStateOf<String?>(null) }
@@ -227,7 +229,9 @@ fun RemoteScreen(vm: AppViewModel) {
                 val locked = tvNow == "locked"
                 Row(
                     Modifier.clip(RoundedCornerShape(20.dp)).background(if (locked) Accent else Card).border(1.dp, Hairline, RoundedCornerShape(20.dp))
-                        .clickable { send(if (locked) Cmd.SCREEN_ON else Cmd.SCREEN_OFF, null) }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        .clickable(onClickLabel = if (locked) "Unlock the TV" else "Lock the TV") { send(if (locked) Cmd.SCREEN_ON else Cmd.SCREEN_OFF, null) }
+                        .semantics(mergeDescendants = true) { contentDescription = if (locked) "Unlock button" else "Lock button" }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, null, tint = if (locked) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
@@ -246,71 +250,16 @@ fun RemoteScreen(vm: AppViewModel) {
                     Text((conn as Conn.Rejected).reason, Modifier.weight(1f), fontSize = 14.sp)
                     TextButton(onClick = { vm.forget(tv); vm.adding.value = true }) { Text("Pair again") }
                 }
-            } else {
-                // What the TV is on now.
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(18.dp)).background(Card)
-                        .border(1.dp, Hairline, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("LIVE", Modifier.clip(RoundedCornerShape(6.dp)).background(Accent.copy(alpha = 0.16f)).padding(horizontal = 7.dp, vertical = 3.dp),
-                        color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Text(if (now.number > 0) "  ${now.number}" else "  –", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("  ${now.name ?: "No channel yet"}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp)
-                }
             }
 
             Box(Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp)) {
                 when (tab) {
-                    Tab.Remote -> NavTab(vm, send) { signInFor = it }
+                    Tab.Remote -> RemoteTab(vm, send, onSignIn = { signInFor = it }, openKeyboard = { morePart = 0; tab = Tab.More }, openMusic = { tab = Tab.Music })
                     Tab.Channels -> ChannelsTab(vm, send)
                     Tab.Music -> MusicTab(vm)
-                    Tab.More -> MoreTab(send)
+                    Tab.More -> MoreTab(send, morePart) { morePart = it }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: (String) -> Unit) {
-    val signedIn by vm.signedIn.collectAsState()
-    val tvApp by vm.client.tvApp.collectAsState()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // The apps, with their logos: one tap opens them on the TV.
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AppTile(QuickApp.LiveTv, Modifier.weight(1f)) { send(Cmd.APP_LIVE, null) }
-            AppTile(QuickApp.YouTube, Modifier.weight(1f)) { send(Cmd.APP_YOUTUBE, null) }
-            AppTile(QuickApp.YtMusic, Modifier.weight(1f)) { send(Cmd.APP_YTMUSIC, null) }
-            AppTile(QuickApp.Netflix, Modifier.weight(1f)) { send(Cmd.APP_NETFLIX, null) }
-            AppTile(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
-        }
-        // Sign-ins only while one is needed (gone once the TV confirmed it).
-        val needNetflix = "netflix" !in signedIn
-        val needBilibili = "bilibili" !in signedIn
-        if (needNetflix || needBilibili) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (needNetflix) RemoteKey("Sign in to Netflix", "Sign in to Netflix on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 40.dp) { onSignIn("netflix") }
-            if (needBilibili) RemoteKey("Sign in to Bilibili", "Sign in to Bilibili on this phone for the TV", Modifier.weight(1f), fontSize = 14, height = 40.dp) { onSignIn("bilibili") }
-        }
-        DPad(send)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Back", "Back", Modifier.weight(1f), icon = Icons.AutoMirrored.Rounded.ArrowBack) { send(Cmd.BACK, null) }
-            RemoteKey("Home", "Home", Modifier.weight(1f), icon = Icons.Rounded.Home) { send(Cmd.HOME, null) }
-        }
-        // Playing: one row for what plays now (a channel, a video, Netflix).
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RemoteKey("", "Previous", Modifier.weight(1f), height = 52.dp, icon = Icons.Rounded.SkipPrevious) { send(Cmd.PREV, null) }
-            RemoteKey("", "Back 10 seconds", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.Rounded.Replay10) { send(Cmd.SEEK, "-10") }
-            RemoteKey("", "Play or pause", Modifier.weight(1.3f), primary = true, height = 52.dp, icon = Icons.Rounded.PlayArrow) { send(Cmd.PLAY_PAUSE, null) }
-            RemoteKey("", "Forward 10 seconds", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.Rounded.Forward10) { send(Cmd.SEEK, "10") }
-            RemoteKey("", "Next", Modifier.weight(1f), height = 52.dp, icon = Icons.Rounded.SkipNext) { send(Cmd.NEXT, null) }
-        }
-        // Netflix's own controls, only while Netflix is on the TV.
-        if (tvApp == "netflix") NetflixPanel(vm, send)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("", "Volume down", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
-            RemoteKey("", "Mute", Modifier.weight(1f), height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
-            RemoteKey("", "Volume up", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
     }
 }
@@ -336,7 +285,7 @@ private fun SearchWhereDialog(words: String, close: () -> Unit, search: (String,
 
 /** Netflix on the TV, like its TV app: what plays with a progress bar to jump anywhere, and every player button. */
 @Composable
-private fun NetflixPanel(vm: AppViewModel, send: (String, String?) -> Unit) {
+internal fun NetflixPanel(vm: AppViewModel, send: (String, String?) -> Unit) {
     val now by vm.client.netflixNow.collectAsState()
     var tracksOpen by remember { mutableStateOf(false) }
     var episodesOpen by remember { mutableStateOf(false) }
@@ -464,21 +413,20 @@ private fun TrackRow(t: NetflixTrack, pick: () -> Unit) {
     }
 }
 
-/** Everything that is not used all the time: typing, the touchpad and mouse, and power. */
+/** Everything that is not used all the time: typing, the mouse, more apps, and power. */
 @Composable
-private fun MoreTab(send: (String, String?) -> Unit) {
-    var part by rememberSaveable { mutableIntStateOf(0) }
+private fun MoreTab(send: (String, String?) -> Unit, part: Int, setPart: (Int) -> Unit) {
     val ctx = LocalContext.current
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Keyboard", "Touchpad", "Mouse", "Power").forEachIndexed { i, name ->
-                FilterChip(selected = part == i, onClick = { Haptics.click(ctx); part = i }, label = { Text(name) })
+            listOf("Keyboard", "Mouse", "Apps", "Power").forEachIndexed { i, name ->
+                FilterChip(selected = part == i, onClick = { Haptics.click(ctx); setPart(i) }, label = { Text(name) })
             }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (part) {
-                1 -> Column(Modifier.verticalScroll(rememberScrollState())) { Touchpad(send) }
-                2 -> Column(Modifier.verticalScroll(rememberScrollState())) { MousePad(send) }
+                1 -> Column(Modifier.verticalScroll(rememberScrollState())) { MousePad(send) }
+                2 -> MoreApps(send)
                 3 -> PowerTab(send)
                 else -> KeysTab(send)
             }
@@ -486,25 +434,34 @@ private fun MoreTab(send: (String, String?) -> Unit) {
     }
 }
 
+/** The other apps the TV can open (Prime Video, Disney+…): the TV opens the installed app, or its website. */
+private val MORE_APPS = listOf(
+    Triple("primevideo", "Prime Video", 0xFF1A98FF), Triple("disneyplus", "Disney+", 0xFF1F80E0), Triple("hbomax", "HBO Max", 0xFF5822B4),
+    Triple("viu", "Viu", 0xFFF5B800), Triple("iwanttfc", "iWantTFC", 0xFFD0213A), Triple("crunchyroll", "Crunchyroll", 0xFFF47521),
+    Triple("spotify", "Spotify", 0xFF1DB954), Triple("twitch", "Twitch", 0xFF9146FF), Triple("appletv", "Apple TV", 0xFF555555), Triple("plex", "Plex", 0xFFE5A00D),
+)
+
 @Composable
-private fun DPad(send: (String, String?) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.weight(1f)); RemoteKey("", "Up", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowUp) { send(Cmd.UP, null) }; Box(Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("", "Left", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowLeft) { send(Cmd.LEFT, null) }
-            RemoteKey("OK", "OK", Modifier.weight(1f), primary = true, height = 72.dp) { send(Cmd.OK, null) }
-            RemoteKey("", "Right", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowRight) { send(Cmd.RIGHT, null) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.weight(1f)); RemoteKey("", "Down", Modifier.weight(1f), repeat = true, height = 72.dp, icon = Icons.Rounded.KeyboardArrowDown) { send(Cmd.DOWN, null) }; Box(Modifier.weight(1f))
+private fun MoreApps(send: (String, String?) -> Unit) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        MORE_APPS.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                pair.forEach { (id, name, color) ->
+                    RemoteKey("", "Open $name", Modifier.weight(1f), height = 64.dp, content = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(14.dp).clip(CircleShape).background(Color(color)))
+                            Text("  $name", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }) { send(Cmd.APP_OPEN, id) }
+                }
+                if (pair.size == 1) Box(Modifier.weight(1f))
+            }
         }
     }
 }
 
 @Composable
-private fun Touchpad(send: (String, String?) -> Unit) {
+internal fun Touchpad(send: (String, String?) -> Unit) {
     val context = LocalContext.current
     val step = with(LocalDensity.current) { 44.dp.toPx() }
     Box(

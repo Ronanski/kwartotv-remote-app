@@ -32,10 +32,10 @@ enum class QuickApp(val title: String) { LiveTv("Live TV"), YouTube("YouTube"), 
 
 /** A logo tile: the app's logo on its own colour, its name under it. */
 @Composable
-fun AppTile(app: QuickApp, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    RemoteKey("", "Open ${app.title}", modifier, height = 92.dp, content = {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            AppLogo(app, 40.dp)
+fun AppTile(app: QuickApp, modifier: Modifier = Modifier, height: Dp = 92.dp, logo: Dp = 40.dp, onOpen: () -> Unit) {
+    RemoteKey("", "Open ${app.title}", modifier, height = height, content = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            AppLogo(app, logo)
             Text(app.title, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }, onFire = onOpen)
