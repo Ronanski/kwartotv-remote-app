@@ -110,6 +110,15 @@ class RemoteClient {
     /** Asks the TV for Netflix's Audio & Subtitles. */
     fun askNetflixTracks(): Boolean { _netflixTracks.value = null; return send(Cmd.NETFLIX_TRACKS, null) }
 
+    private val _lock = MutableStateFlow<com.kwartotv.remote.LockState?>(null)
+    /** The lock screen's options and whether the TV is locked (the Lock workspace). */
+    val lock: StateFlow<com.kwartotv.remote.LockState?> = _lock
+    private val _lockPhoto = MutableStateFlow<com.kwartotv.remote.LockPhoto?>(null)
+    val lockPhoto: StateFlow<com.kwartotv.remote.LockPhoto?> = _lockPhoto
+    private val _lockFolders = MutableStateFlow<List<com.kwartotv.remote.LockFolder>?>(null)
+    val lockFolders: StateFlow<List<com.kwartotv.remote.LockFolder>?> = _lockFolders
+    fun askLockFolders(): Boolean { _lockFolders.value = null; return send(Cmd.LOCK_FOLDERS, null) }
+
     private val _tvSeesApk = MutableStateFlow(0L)
     /** The newest phone app build the TV knows of (0: none yet). The app looks for that update right away. */
     val tvSeesApk: StateFlow<Long> = _tvSeesApk
@@ -296,6 +305,9 @@ class RemoteClient {
             is TvMessage.NetflixTracksNow -> _netflixTracks.value = m.tracks
             is TvMessage.NetflixNowPlaying -> _netflixNow.value = m.now
             is TvMessage.NetflixEpisodesNow -> _netflixEpisodes.value = m.episodes
+            is TvMessage.LockNow -> _lock.value = m.state
+            is TvMessage.LockPhotoNow -> _lockPhoto.value = m.photo
+            is TvMessage.LockFoldersNow -> _lockFolders.value = m.folders
             is TvMessage.MusicFound -> { _musicResults.value = m.results; _musicSearching.value = false }
             is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
                 ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)

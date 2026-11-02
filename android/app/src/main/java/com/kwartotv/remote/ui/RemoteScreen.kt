@@ -116,10 +116,10 @@ import com.kwartotv.remote.net.Conn
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Four tabs: the remote itself, channels, music, and everything else (typing, touchpad, power). */
+/** Five tabs: the remote itself, channels, music, the lock screen, and everything else (typing, mouse, apps, power). */
 private enum class Tab(val label: String, val icon: ImageVector) {
     Remote("Remote", Icons.Rounded.SettingsRemote), Channels("Channels", Icons.Rounded.LiveTv),
-    Music("Music", Icons.Rounded.MusicNote), More("More", Icons.Rounded.MoreVert)
+    Music("Music", Icons.Rounded.MusicNote), Lock("Lock", Icons.Rounded.Lock), More("More", Icons.Rounded.MoreVert)
 }
 
 @Composable
@@ -134,6 +134,7 @@ fun RemoteScreen(vm: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.Remote) }
     var morePart by rememberSaveable { mutableIntStateOf(0) }
     var menu by remember { mutableStateOf(false) }
+    var swipe by remember { mutableStateOf(vm.padKind == 1) }
     // Sign in to Netflix / Bilibili for the TV on the phone (from the menu, or when the TV asks).
     var signInFor by remember { mutableStateOf<String?>(null) }
     SignInForTv(vm, signInFor) { signInFor = null }
@@ -157,15 +158,15 @@ fun RemoteScreen(vm: AppViewModel) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+            NavigationBar(containerColor = Color(0xFF121318)) {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(
                         selected = tab == t, onClick = { Haptics.click(context); tab = t },
                         icon = { Icon(t.icon, contentDescription = null) },
-                        label = { Text(t.label, fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                        label = { Text(t.label, style = T.mini.copy(fontWeight = FontWeight.SemiBold)) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Accent, selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = Accent.copy(alpha = 0.16f),
+                            selectedIconColor = Ink, selectedTextColor = Ink,
+                            indicatorColor = Accent.copy(alpha = 0.28f),
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
@@ -174,10 +175,23 @@ fun RemoteScreen(vm: AppViewModel) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().padding(horizontal = 16.dp)) {
-            // ---- header: TV picker + connection state
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Voice search for every app: said on the phone, searched in the app on the TV (asks which on Home).
+            val tvNow by vm.client.tvApp.collectAsState()
+            var heard by remember { mutableStateOf<String?>(null) }
+            lateinit var say: () -> Unit
+            say = rememberVoice("Say what to search") { said ->
+                val app = searchAppFor(tvNow)
+                if (app != null) { send(Cmd.APP_SEARCH, "$app|$said"); Toast.makeText(context, "Searching “$said”", Toast.LENGTH_SHORT).show() }
+                else heard = said
+            }
+            heard?.let { words -> SearchWhereSheet(words, again = { heard = null; say() }, close = { heard = null }) { app, q -> send(Cmd.APP_SEARCH, "$app|$q"); heard = null } }
+            // Netflix on the TV: the Remote tab is Netflix's own remote (‹ goes back to the usual remote until Netflix changes).
+            var netflixAway by remember(tvNow) { mutableStateOf(false) }
+            val netflixWorkspace = tab == Tab.Remote && tvNow == "netflix" && !netflixAway
+            val ownBar = netflixWorkspace || tab == Tab.Lock
+            // ---- header: the TV (tap for other TVs, sign-ins and settings) and the connection
+            if (!ownBar) Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
-                    // The TV (tap for other TVs, sign-ins and settings) and how the connection is.
                     val (label, color) = when (conn) {
                         Conn.Connected -> "Connected" to Ok
                         Conn.Connecting, Conn.Retrying -> "Connecting…" to AccentSoft
@@ -185,22 +199,15 @@ fun RemoteScreen(vm: AppViewModel) {
                         Conn.Idle -> "Offline" to Bad
                     }
                     Row(
-                        Modifier.clip(RoundedCornerShape(16.dp)).clickable { menu = true }.padding(vertical = 6.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(Card).border(1.dp, Hairline, RoundedCornerShape(20.dp))
+                            .clickable(onClickLabel = "Choose the TV") { menu = true }
+                            .semantics(mergeDescendants = true) { contentDescription = "${tv.name}, $label" }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(AccentBrush), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.Tv, null, tint = Color.White, modifier = Modifier.size(22.dp))
-                        }
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(tv.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                                Icon(Icons.Rounded.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(7.dp).clip(CircleShape).background(color))
-                                Text("  $label", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                            }
-                        }
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+                        Text(tv.name, style = T.label, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Icon(Icons.Rounded.ExpandMore, null, tint = Muted, modifier = Modifier.size(18.dp))
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         tvs.forEach { t ->
@@ -210,6 +217,7 @@ fun RemoteScreen(vm: AppViewModel) {
                             )
                         }
                         DropdownMenuItem(text = { Text("+  Add another TV") }, onClick = { menu = false; vm.adding.value = true })
+                        DropdownMenuItem(text = { Text(if (swipe) "Use the D-pad" else "Use the swipe pad") }, onClick = { menu = false; swipe = !swipe; vm.padKind = if (swipe) 1 else 0 })
                         DropdownMenuItem(text = { Text("Sign in to Netflix for the TV") }, onClick = { menu = false; signInFor = "netflix" })
                         DropdownMenuItem(text = { Text("Sign in to Bilibili for the TV") }, onClick = { menu = false; signInFor = "bilibili" })
                         DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; vm.reconnect() })
@@ -217,31 +225,7 @@ fun RemoteScreen(vm: AppViewModel) {
                         DropdownMenuItem(text = { Text("Forget ${tv.name}") }, onClick = { menu = false; vm.forget(tv) })
                     }
                 }
-                // Voice search for every app: said on the phone, searched in the app on the TV (asks which on Home).
-                val tvNow by vm.client.tvApp.collectAsState()
-                var heard by remember { mutableStateOf<String?>(null) }
-                val ctx = LocalContext.current
-                val say = rememberVoice("Say what to search") { said ->
-                    val app = searchAppFor(tvNow)
-                    if (app != null) { send(Cmd.APP_SEARCH, "$app|$said"); Toast.makeText(ctx, "Searching “$said”", Toast.LENGTH_SHORT).show() }
-                    else heard = said
-                }
-                Icon(Icons.Rounded.Mic, "Voice search", tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(end = 6.dp).size(40.dp).clip(CircleShape).background(Card).clickable { Haptics.click(ctx); say() }.padding(9.dp))
-                heard?.let { words -> SearchWhereDialog(words, { heard = null }) { app, q -> send(Cmd.APP_SEARCH, "$app|$q"); heard = null } }
-                // Lock / screensaver, always in sight (the TV says when it is locked).
-                val locked = tvNow == "locked"
-                Row(
-                    Modifier.clip(RoundedCornerShape(20.dp)).background(if (locked) Accent else Card).border(1.dp, Hairline, RoundedCornerShape(20.dp))
-                        .clickable(onClickLabel = if (locked) "Unlock the TV" else "Lock the TV") { send(if (locked) Cmd.SCREEN_ON else Cmd.SCREEN_OFF, null) }
-                        .semantics(mergeDescendants = true) { contentDescription = if (locked) "Unlock button" else "Lock button" }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, null, tint = if (locked) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
-                    Text(if (locked) "  Unlock" else "  Lock", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (locked) Color.White else MaterialTheme.colorScheme.onSurface)
-                }
-                Icon(Icons.Rounded.MoreVert, "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Icon(Icons.Rounded.MoreVert, "Menu", tint = Muted,
                     modifier = Modifier.size(40.dp).clip(CircleShape).clickable { menu = true }.padding(8.dp))
             }
 
@@ -256,11 +240,14 @@ fun RemoteScreen(vm: AppViewModel) {
                 }
             }
 
-            Box(Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp)) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    Tab.Remote -> RemoteTab(vm, send, onSignIn = { signInFor = it }, openKeyboard = { morePart = 0; tab = Tab.More }, openMusic = { tab = Tab.Music })
+                    Tab.Remote -> if (netflixWorkspace) NetflixWorkspace(vm, send, onBack = { netflixAway = true }, voice = say, openType = { morePart = 0; tab = Tab.More })
+                        else RemoteTab(vm, send, onSignIn = { signInFor = it }, voice = say, openKeyboard = { morePart = 0; tab = Tab.More }, openMusic = { tab = Tab.Music },
+                            openLock = { tab = Tab.Lock }, swipe = swipe, openNetflix = { netflixAway = false; send(Cmd.APP_NETFLIX, null) })
                     Tab.Channels -> ChannelsTab(vm, send)
                     Tab.Music -> MusicTab(vm)
+                    Tab.Lock -> LockTab(vm, send)
                     Tab.More -> MoreTab(send, morePart) { morePart = it }
                 }
             }
@@ -268,31 +255,12 @@ fun RemoteScreen(vm: AppViewModel) {
     }
 }
 
-/** Something said on the phone while the TV shows Home: which app to search it in (the words can be corrected). */
-@Composable
-private fun SearchWhereDialog(words: String, close: () -> Unit, search: (String, String) -> Unit) {
-    var q by remember(words) { mutableStateOf(words) }
-    AlertDialog(
-        onDismissRequest = close,
-        title = { Text("Search where?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = q, onValueChange = { q = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                listOf("youtube" to "YouTube", "netflix" to "Netflix", "music" to "YouTube Music", "bilibili" to "Bilibili", "channels" to "Live TV channels").forEach { (id, name) ->
-                    RemoteKey(name, "Search $name", Modifier.fillMaxWidth(), fontSize = 15, height = 46.dp) { if (q.isNotBlank()) search(id, q.trim()) }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = close) { Text("Cancel") } },
-    )
-}
-
 /**
  * A progress bar: the part watched, a knob, drag or tap anywhere to choose a time; [onSeek] when the finger lets go.
  * Also a slider for TalkBack (and the tests): setting its progress jumps there.
  */
 @Composable
-internal fun SeekBar(pos: Float, dur: Float, drag: Float?, onDrag: (Float) -> Unit, onSeek: (Float) -> Unit) {
+internal fun SeekBar(pos: Float, dur: Float, drag: Float?, onDrag: (Float) -> Unit, color: Color = Accent, onSeek: (Float) -> Unit) {
     val shown = (drag ?: pos).coerceIn(0f, dur.coerceAtLeast(1f))
     var width by remember { mutableIntStateOf(1) }
     fun at(x: Float) = (x / width).coerceIn(0f, 1f) * dur
@@ -317,137 +285,10 @@ internal fun SeekBar(pos: Float, dur: Float, drag: Float?, onDrag: (Float) -> Un
     ) {
         val f = if (dur > 0f) shown / dur else 0f
         Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Hairline))
-        Box(Modifier.fillMaxWidth(f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(Accent))
+        Box(Modifier.fillMaxWidth(f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(color))
         Box(Modifier.fillMaxWidth(f.coerceAtLeast(0.001f)), contentAlignment = Alignment.CenterEnd) {
             Box(Modifier.size(if (drag != null) 22.dp else 16.dp).clip(CircleShape).background(Color.White))
         }
-    }
-}
-
-/** Netflix on the TV, like its TV app: what plays with a progress bar to jump anywhere, and every player button. */
-@Composable
-internal fun NetflixPanel(vm: AppViewModel, send: (String, String?) -> Unit) {
-    val now by vm.client.netflixNow.collectAsState()
-    var tracksOpen by remember { mutableStateOf(false) }
-    var episodesOpen by remember { mutableStateOf(false) }
-    var speedOpen by remember { mutableStateOf(false) }
-    val n = now
-    if (n != null && n.dur > 0) Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Card).border(1.dp, Hairline, RoundedCornerShape(18.dp)).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(n.title.ifBlank { "Netflix" }, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (n.episode.isNotBlank()) Text(n.episode, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // Drag (or tap) to any point, let go: the video jumps there.
-        var drag by remember { mutableStateOf<Float?>(null) }
-        SeekBar(n.pos.toFloat(), n.dur.toFloat(), drag, onDrag = { drag = it }) { to -> drag = null; send(Cmd.NETFLIX_SEEKTO, to.toInt().toString()) }
-        Row(Modifier.fillMaxWidth()) {
-            Text(clock((drag ?: n.pos.toFloat()).toInt()), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            if (n.rate != 1.0) Text("${n.rate}×   ", fontSize = 12.sp, color = Accent)
-            Text("−" + clock(n.dur - n.pos), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (n.still) RemoteKey("Yes, continue watching", "Answer Are you still watching", Modifier.fillMaxWidth(), primary = true, fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_CONTINUE, null) }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_SKIP, null) }
-        RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_NEXT, null) }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        RemoteKey("Audio & Subs", "Choose the audio language and subtitles", Modifier.weight(1f), fontSize = 14, height = 48.dp) { vm.client.askNetflixTracks(); tracksOpen = true }
-        RemoteKey("Episodes", "Choose an episode", Modifier.weight(1f), fontSize = 14, height = 48.dp) { vm.client.askNetflixEpisodes(); episodesOpen = true }
-        RemoteKey("Speed", "Playback speed", Modifier.weight(1f), fontSize = 14, height = 48.dp) { speedOpen = true }
-    }
-    var nq by rememberSaveable { mutableStateOf("") }
-    val sayNetflix = rememberVoice("Search Netflix") { said -> nq = said; send(Cmd.NETFLIX_SEARCH, said) }
-    // While a video plays the search makes room for the D-pad (🎤 at the top still searches Netflix).
-    if (n == null || n.dur == 0) OutlinedTextField(
-        value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-        label = { Text("Search Netflix") },
-        trailingIcon = { Icon(Icons.Rounded.Mic, "Say it", modifier = Modifier.clip(CircleShape).clickable { sayNetflix() }.padding(8.dp)) },
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { if (nq.isNotBlank()) send(Cmd.NETFLIX_SEARCH, nq.trim()) }),
-    )
-    if (tracksOpen) NetflixTracksDialog(vm, send) { tracksOpen = false }
-    if (episodesOpen) NetflixEpisodesDialog(vm, send) { episodesOpen = false }
-    if (speedOpen) AlertDialog(
-        onDismissRequest = { speedOpen = false },
-        title = { Text("Playback speed") },
-        text = {
-            Column {
-                listOf("0.5", "0.75", "1", "1.25", "1.5").forEach { r ->
-                    val on = (n?.rate ?: 1.0) == r.toDouble()
-                    TrackRow(NetflixTrack(0, if (r == "1") "1× (normal)" else "$r×", on)) { send(Cmd.NETFLIX_SPEED, r); speedOpen = false }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { speedOpen = false }) { Text("Done") } },
-    )
-}
-
-@Composable
-private fun NetflixEpisodesDialog(vm: AppViewModel, send: (String, String?) -> Unit, close: () -> Unit) {
-    val eps by vm.client.netflixEpisodes.collectAsState()
-    var season by remember { mutableIntStateOf(-1) }
-    AlertDialog(
-        onDismissRequest = close,
-        title = { Text(eps?.show?.ifBlank { null } ?: "Episodes") },
-        text = {
-            val e = eps
-            when {
-                e == null -> Text("Asking Netflix on the TV…")
-                e.seasons.isEmpty() && e.onTv -> Text("Netflix's episode list is open on the TV: choose with the arrows and OK.")
-                e.seasons.isEmpty() -> Text("Play a show on Netflix first.")
-                else -> {
-                    val cur = if (season in e.seasons.indices) season else e.seasons.indexOfFirst { s -> s.episodes.any { it.on } }.coerceAtLeast(0)
-                    Column {
-                        if (e.seasons.size > 1) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(e.seasons.size) { i -> FilterChip(selected = i == cur, onClick = { season = i }, label = { Text(e.seasons[i].name) }) }
-                        }
-                        LazyColumn(Modifier.height(360.dp)) {
-                            items(e.seasons[cur].episodes) { ep -> TrackRow(NetflixTrack(0, ep.name, ep.on)) { send(Cmd.NETFLIX_EPISODE, ep.id); close() } }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = close) { Text("Done") } },
-    )
-}
-
-@Composable
-private fun NetflixTracksDialog(vm: AppViewModel, send: (String, String?) -> Unit, close: () -> Unit) {
-    val tracks by vm.client.netflixTracks.collectAsState()
-    AlertDialog(
-        onDismissRequest = close,
-        title = { Text("Audio & Subtitles") },
-        text = {
-            val t = tracks
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                when {
-                    t == null -> Text("Asking Netflix on the TV…")
-                    t.audio.isEmpty() && t.subs.isEmpty() -> Text("Play a video on Netflix first.")
-                    else -> {
-                        if (t.audio.isNotEmpty()) SectionLabel("Audio")
-                        t.audio.forEach { a -> TrackRow(a) { send(Cmd.NETFLIX_TRACK, "a:${a.index}") } }
-                        if (t.subs.isNotEmpty()) SectionLabel("Subtitles")
-                        t.subs.forEach { a -> TrackRow(a) { send(Cmd.NETFLIX_TRACK, "s:${a.index}") } }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = close) { Text("Done") } },
-    )
-}
-
-@Composable
-private fun TrackRow(t: NetflixTrack, pick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = pick)
-            .background(if (t.on) Accent.copy(alpha = 0.16f) else Color.Transparent).padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(if (t.on) "✓" else "", Modifier.width(24.dp), color = Accent, fontWeight = FontWeight.Bold)
-        Text(t.name, fontSize = 16.sp, fontWeight = if (t.on) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -774,10 +615,7 @@ private fun SendLinkBox(send: (String, String?) -> Unit) {
 private fun PowerTab(send: (String, String?) -> Unit) {
     var confirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RemoteKey("Unlock", "Unlock the TV", Modifier.weight(1f), primary = true, height = 80.dp, icon = Icons.Rounded.LockOpen) { send(Cmd.SCREEN_ON, null) }
-            RemoteKey("Lock · clock", "Lock the TV and show the clock", Modifier.weight(1f), height = 80.dp, icon = Icons.Rounded.Lock) { send(Cmd.SCREEN_OFF, null) }
-        }
+        Text("Lock, the screensaver and the sleep timer are in the Lock tab.", style = T.cap, color = Muted)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("Sleep PC", "Put the whole PC to sleep", Modifier.weight(1f), height = 80.dp, icon = Icons.Rounded.Bedtime) { confirm = Cmd.SLEEP to "Put the whole TV PC to sleep?" }
             RemoteKey("Restart PC", "Restart the whole PC", Modifier.weight(1f), danger = true, height = 80.dp, icon = Icons.Rounded.RestartAlt) { confirm = Cmd.RESTART to "Restart the whole TV PC (laptop/computer), not just the app?" }
@@ -786,15 +624,6 @@ private fun PowerTab(send: (String, String?) -> Unit) {
             confirm = Cmd.SHUTDOWN to "Shut down the whole TV PC (laptop/computer)? You will need to switch it on by hand."
         }
         Text("These control the whole PC, not only the KwartoTV app.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-        // Sleep timer: the TV stops the video and music and shows the clock (locked) when the time is up.
-        SectionLabel("Sleep timer")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val ctx = LocalContext.current
-            listOf(15, 30, 60, 90).forEach { m ->
-                RemoteKey("$m min", "Sleep in $m minutes", Modifier.weight(1f), fontSize = 15, height = 52.dp) { Haptics.click(ctx); send(Cmd.SLEEP_TIMER, m.toString()) }
-            }
-            RemoteKey("Off", "Cancel the sleep timer", Modifier.weight(1f), fontSize = 15, height = 52.dp) { Haptics.click(ctx); send(Cmd.SLEEP_TIMER, "0") }
-        }
     }
     confirm?.let { (cmd, question) ->
         AlertDialog(

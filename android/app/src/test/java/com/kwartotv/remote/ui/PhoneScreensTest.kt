@@ -36,6 +36,8 @@ class PhoneScreensTest {
         ui.shot("p06-channels")
         rule.onAllNodesWithText("Music").onLast().performClick(); ui.settle()
         ui.shot("p07-music")
+        rule.onAllNodesWithText("Lock").onLast().performClick(); ui.settle()
+        ui.shot("p09-lock")
         rule.onAllNodesWithText("More").onLast().performClick(); ui.settle()
         ui.shot("p08-more")
     }

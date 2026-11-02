@@ -96,6 +96,16 @@ object Cmd {
     const val NETFLIX_EPISODE = "netflix.episode"
     /** Answers "Are you still watching?". */
     const val NETFLIX_CONTINUE = "netflix.continue"
+    /** Presses Play / Resume of the title whose details are open on the TV. */
+    const val NETFLIX_PLAY = "netflix.play"
+    /** The Lock workspace: "lock.set key=value" (clock, color, dim, date, song, verse, bg, folder, every, saver). */
+    const val LOCK_SET = "lock.set"
+    /** Asks for the lock screen's options (the TV answers with "lock.state"). */
+    const val LOCK_GET = "lock.get"
+    /** Asks for photo N of the slideshow, small, for the live preview (the TV answers with "lock.photo"). */
+    const val LOCK_PHOTO = "lock.photo"
+    /** Asks for the folders the photos can come from (the TV answers with "lock.folders"). */
+    const val LOCK_FOLDERS = "lock.folders"
     /** A search said or typed on the phone: "app|words" (netflix, youtube, bilibili, music, channels). */
     const val APP_SEARCH = "app.search"
     /** An app of the TV's catalog, by id (arg). */
@@ -165,6 +175,9 @@ sealed interface TvMessage {
     /** What Netflix plays on the TV (every second while a video is open). */
     data class NetflixNowPlaying(val now: NetflixPlaying) : TvMessage
     data class NetflixEpisodesNow(val episodes: NetflixEpisodes) : TvMessage
+    data class LockNow(val state: LockState) : TvMessage
+    data class LockPhotoNow(val photo: LockPhoto) : TvMessage
+    data class LockFoldersNow(val folders: List<LockFolder>) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -183,7 +196,13 @@ fun parseTvMessage(text: String): TvMessage = try {
         "fg" -> TvMessage.Foreground(o.optString("app").take(40))
         "music.results" -> TvMessage.MusicFound(parseMusicResults(o))
         "netflix.now" -> TvMessage.NetflixNowPlaying(NetflixPlaying(o.optString("title").take(120), o.optString("episode").take(120),
-            o.optInt("pos").coerceIn(0, 86400), o.optInt("dur").coerceIn(0, 86400), o.optBoolean("paused"), o.optDouble("rate", 1.0), o.optBoolean("still")))
+            o.optInt("pos").coerceIn(0, 86400), o.optInt("dur").coerceIn(0, 86400), o.optBoolean("paused"), o.optDouble("rate", 1.0), o.optBoolean("still"),
+            o.optJSONObject("modal")?.let { m -> NetflixTitleOpen(m.optString("title").take(120), m.optString("play").take(40), m.optString("id").take(12)) }))
+        "lock.state" -> TvMessage.LockNow(parseLockState(o))
+        "lock.photo" -> TvMessage.LockPhotoNow(LockPhoto(o.optInt("i"), o.optInt("n"),
+            o.optString("jpg").takeIf { it.isNotEmpty() && it.length < 400_000 }?.let { try { java.util.Base64.getMimeDecoder().decode(it) } catch (_: Exception) { null } }))
+        "lock.folders" -> TvMessage.LockFoldersNow((o.optJSONArray("folders") ?: org.json.JSONArray()).let { a ->
+            (0 until minOf(a.length(), 40)).mapNotNull { i -> a.optJSONObject(i)?.let { f -> LockFolder(f.optString("path").take(400), f.optString("name").take(80)) } }.filter { it.path.isNotEmpty() } })
         "netflix.episodes" -> TvMessage.NetflixEpisodesNow(parseEpisodes(o))
         "netflix.tracks" -> TvMessage.NetflixTracksNow(NetflixTracks(parseTracks(o, "audio"), parseTracks(o, "subs")))
         else -> TvMessage.Unknown
@@ -193,7 +212,26 @@ fun parseTvMessage(text: String): TvMessage = try {
 }
 
 /** The Netflix video playing on the TV. [dur] 0: no video open. Times in seconds. */
-data class NetflixPlaying(val title: String, val episode: String, val pos: Int, val dur: Int, val paused: Boolean, val rate: Double, val still: Boolean)
+data class NetflixPlaying(val title: String, val episode: String, val pos: Int, val dur: Int, val paused: Boolean, val rate: Double, val still: Boolean, val modal: NetflixTitleOpen? = null)
+
+/** A title's details open on the TV (not playing yet): its name, the label of its Play button ("Resume"…), its number. */
+data class NetflixTitleOpen(val title: String, val play: String, val id: String)
+
+/** The lock screen's look and state, as the TV reports it ("lock.state"). */
+data class LockState(
+    val locked: Boolean, val clock: String, val color: String, val dim: Int, val date: Boolean, val song: Boolean, val verse: Boolean,
+    val bg: String, val folder: String, val folderName: String, val photos: Int, val every: Int, val saver: Int, val timer: Int,
+)
+
+fun parseLockState(o: JSONObject) = LockState(
+    o.optBoolean("locked"), o.optString("clock", "classic"), o.optString("color", "FFFFFF").take(6), o.optInt("dim", 100), o.optBoolean("date", true),
+    o.optBoolean("song", true), o.optBoolean("verse"), o.optString("bg", "black"), o.optString("folder").take(400), o.optString("folderName").take(80),
+    o.optInt("photos"), o.optInt("every", 20), o.optInt("saver", 10), o.optInt("timer"),
+)
+
+/** One photo of the slideshow for the phone's live preview ([jpeg] null: no photos). */
+class LockPhoto(val index: Int, val count: Int, val jpeg: ByteArray?)
+data class LockFolder(val path: String, val name: String)
 
 data class NetflixEpisode(val id: String, val name: String, val on: Boolean)
 data class NetflixSeason(val name: String, val episodes: List<NetflixEpisode>)

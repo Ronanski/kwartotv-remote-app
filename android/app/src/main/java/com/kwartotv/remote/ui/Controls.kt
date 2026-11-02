@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -67,6 +68,11 @@ fun RemoteKey(
     /** No tile of its own (keys drawn on a shared background, such as the round D-pad). */
     bare: Boolean = false,
     iconSize: Dp? = null,
+    /** Its own fill (the round keys, the pills); null: the usual card. */
+    fill: Color? = null,
+    /** Its own text and icon color. */
+    tint: Color? = null,
+    outline: Boolean = true,
     content: (@Composable () -> Unit)? = null,
     onFire: () -> Unit,
 ) {
@@ -76,6 +82,7 @@ fun RemoteKey(
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (pressed) 0.95f else 1f, animationSpec = tween(90), label = "press")
     val fg = when {
+        tint != null -> tint
         primary -> Color.White
         danger -> Color(0xFFFF8A96)
         else -> MaterialTheme.colorScheme.onSurface
@@ -86,6 +93,7 @@ fun RemoteKey(
         .clip(shape)
     val filled = when {
         bare -> base.background(if (pressed) Color(0x22FFFFFF) else Color.Transparent)
+        fill != null -> base.background(if (pressed) lerp(fill, Color.White, 0.12f) else fill).then(if (outline) Modifier.border(1.dp, Hairline, shape) else Modifier)
         primary -> base.background(AccentBrush)
         danger -> base.background(Color(0xFF2A161B)).border(1.dp, Color(0x33FF5C6C), shape)
         else -> base.background(if (pressed) CardHigh else Card).border(1.dp, Hairline, shape)
@@ -116,9 +124,9 @@ fun RemoteKey(
     ) {
         if (content != null) content() else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(iconSize ?: if (caption == null && label.isEmpty()) 30.dp else 24.dp))
-            if (icon == null && label.isNotEmpty()) Text(label, color = fg, fontSize = fontSize.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            if (icon == null && label.isNotEmpty()) Text(label, color = fg, style = if (fontSize >= 17) T.head.copy(fontSize = fontSize.sp, lineHeight = (fontSize + 6).sp) else T.label.copy(fontSize = fontSize.sp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             val small = caption ?: if (icon != null) label.ifEmpty { null } else null
-            if (small != null) Text(small, color = if (primary) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            if (small != null) Text(small, color = if (primary) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant, style = T.mini, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
 }
@@ -126,6 +134,5 @@ fun RemoteKey(
 /** A small rounded section title ("APPS", "VOLUME"...). */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(text.uppercase(), modifier = modifier.padding(top = 8.dp, bottom = 2.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
+    Text(text, modifier = modifier.padding(top = 8.dp, bottom = 2.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = T.label)
 }
