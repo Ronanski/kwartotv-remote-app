@@ -53,7 +53,7 @@ public sealed class CommandRouter
     };
 
     /// <summary>The message a phone gets for a button pressed while the TV is locked.</summary>
-    public const string LockedMessage = "The TV is locked. Unlock it on the phone: Power → Unlock.";
+    public const string LockedMessage = "The TV is locked. Tap Unlock at the top of the phone remote.";
 
     /// <summary>True while the TV shows its lock screen. Set by the shell.</summary>
     public Func<bool>? IsLocked { get; set; }

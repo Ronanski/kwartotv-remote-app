@@ -119,7 +119,7 @@ public sealed class LockScreenWindow : Window
 
         var hint = new TextBlock
         {
-            Text = screensaver ? "Press any button to go back" : "🔒  Locked  ·  unlock from KwartoTV Remote on your phone (Power → Unlock)  ·  music: Music tab on the phone",
+            Text = screensaver ? "Press any button to go back" : "🔒  Locked  ·  unlock: tap Unlock at the top of KwartoTV Remote on your phone  ·  music: Music tab on the phone",
             FontSize = 17, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, 36), RenderTransform = _drift,
         };

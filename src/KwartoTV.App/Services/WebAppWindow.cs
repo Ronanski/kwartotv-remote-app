@@ -248,6 +248,12 @@ public sealed class WebAppWindow : Window
             // The on-screen keyboard for text fields. YouTube TV has its own keyboard, so skip it there.
             if (Kind != ForegroundKind.YouTube) await core.AddScriptToExecuteOnDocumentCreatedAsync(WebTextTarget.PageScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(NoForcedColorsScript);
+            // What the video does (play, pause, a jump, the speed), for the log: shows that each remote button worked.
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(@"(function () { if (window.__kwVid) return; window.__kwVid = 1;
+  ['play', 'pause', 'seeked', 'ratechange'].forEach(function (t) { document.addEventListener(t, function (e) {
+    var v = e.target; if (!v || v.tagName !== 'VIDEO' || !(v.duration > 1)) return;
+    try { window.chrome.webview.postMessage('player:' + t + ' at ' + Math.round(v.currentTime) + 's' + (t === 'ratechange' ? ' x' + v.playbackRate : '')); } catch (x) { }
+  }, true); }); })();");
             if (_videoOnly) await core.AddScriptToExecuteOnDocumentCreatedAsync(VideoOnlyScript);
             // Netflix and other websites are made for a mouse: add TV-style remote navigation and make them bigger for the couch.
             if (Kind == ForegroundKind.Netflix) await core.AddScriptToExecuteOnDocumentCreatedAsync(NetflixControl.Script);
@@ -264,8 +270,8 @@ public sealed class WebAppWindow : Window
                 if (msg == "home") Dispatcher.BeginInvoke(() => HomeRequested?.Invoke());
                 else if (msg == "chup") Dispatcher.BeginInvoke(() => ChannelUp?.Invoke());
                 else if (msg == "chdown") Dispatcher.BeginInvoke(() => ChannelDown?.Invoke());
-                else if (msg?.StartsWith("tvfocus:") == true && _focusLogs++ < 40) AppPaths.LogLine("web highlight: " + msg[8..]);
-                else if (msg?.StartsWith("player:") == true && _focusLogs++ < 40) AppPaths.LogLine("web player: " + msg[7..]);
+                else if (msg?.StartsWith("tvfocus:") == true && _focusLogs++ < 400) AppPaths.LogLine("web highlight: " + msg[8..]);
+                else if (msg?.StartsWith("player:") == true && _focusLogs++ < 400) AppPaths.LogLine("web player: " + msg[7..]);
                 else if (msg?.StartsWith("netflix:now:") == true) { var j = msg[12..]; Dispatcher.BeginInvoke(() => NetflixNow?.Invoke(j)); }
                 else if (msg?.StartsWith("netflix:episodes:") == true) { var j = msg[17..]; Dispatcher.BeginInvoke(() => NetflixEpisodes?.Invoke(j)); }
                 else if (msg?.StartsWith("netflix:") == true) AppPaths.LogLine("netflix: " + msg[8..]);

@@ -182,6 +182,7 @@ public sealed class PlayerWindow : Window
     {
         if (_mpv is null) return false;
         _mpv.Paused = !_mpv.Paused;
+        AppPaths.LogLine("player: " + (_mpv.Paused ? "paused" : "playing"));
         ShowStatus();
         return true;
     }
@@ -190,6 +191,7 @@ public sealed class PlayerWindow : Window
     {
         if (_mpv is null || _mode != Mode.Files) return false;
         _mpv.Seek(seconds); ShowStatus();
+        AppPaths.LogLine($"player: seek {seconds:+0;-0}s");
         return true;
     }
 

@@ -49,7 +49,11 @@ android {
         unitTests.isReturnDefaultValues = true
         // The phone UI tests (Robolectric): every button pressed, every screen drawn to a picture.
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.testLogging { showStandardStreams = true }; it.maxHeapSize = "2g" }
+        unitTests.all {
+            it.testLogging { showStandardStreams = true }; it.maxHeapSize = "2g"
+            // Robolectric downloads its Android jar itself; repo1 answers CI machines with 429 (too many requests).
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
     }
 }
 

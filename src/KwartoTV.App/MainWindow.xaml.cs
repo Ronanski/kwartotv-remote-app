@@ -25,6 +25,8 @@ public partial class MainWindow : Window, IShell
     private IInputElement? _focusBeforeDialog;
 
     private PageBase? _current;
+    private string _lastFocusLog = "";
+    private int _focusLogCount;
     private bool _pageStale;
     private string _currentName = "Home";
 
@@ -37,6 +39,16 @@ public partial class MainWindow : Window, IShell
         _tv.Router.IsLocked = () => _locked;
         // YouTube and the music share one browser profile, which must start with the same switches.
         WebAppWindow.YouTubeRenderMode = _tv.Settings.YouTubeRenderMode;
+        // Where the highlight goes on KwartoTV's own screens, for the log (shows that the remote's arrows worked).
+        EventManager.RegisterClassHandler(typeof(FrameworkElement), Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler((s, e) =>
+        {
+            if (e.NewFocus is not FrameworkElement fe || !ReferenceEquals(s, fe)) return;
+            var name = System.Windows.Automation.AutomationProperties.GetName(fe);
+            if (string.IsNullOrWhiteSpace(name)) name = fe is ContentControl { Content: string str } ? str : fe is ContentControl { Content: TextBlock tb } ? tb.Text : fe.Tag as string ?? "";
+            var line = $"focus: {fe.GetType().Name} {name}".Trim();
+            if (line.Length > 90) line = line[..90];
+            if (line != _lastFocusLog && _focusLogCount++ < 2000) { _lastFocusLog = line; AppPaths.LogLine(line); }
+        }));
 
         foreach (var (label, action) in new (string, Action)[] { ("Home", GoHome), ("Live TV", ShowLiveTv), ("Library", ShowLibrary), ("Settings", ShowSettings) })
         {
