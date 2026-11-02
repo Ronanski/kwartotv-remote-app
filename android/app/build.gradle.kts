@@ -60,11 +60,13 @@ android {
     }
 }
 
+// One configuration per Android version: in one, Gradle would keep only the newest of the two.
 val robolectricJars: Configuration by configurations.creating { isTransitive = false }
+val robolectricJars15: Configuration by configurations.creating { isTransitive = false }
 
 dependencies {
     robolectricJars("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7")
-    robolectricJars("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
+    robolectricJars15("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
@@ -89,5 +91,6 @@ dependencies {
 
 tasks.register<Copy>("copyRobolectricJars") {
     from(robolectricJars)
+    from(robolectricJars15)
     into(rootProject.file("app/build/robolectric-jars"))
 }
