@@ -552,6 +552,7 @@ try {
         $onSearch = $null -ne (WaitLog $from "focus: Button .*Search @" 1)
     }
     Check $onSearch "button: the arrows reach Bilibili's Search button"
+    if (-not $onSearch) { @(Get-Content $logPath -ErrorAction SilentlyContinue) | Select-Object -Last 40 | ForEach-Object { Write-Host "app log: $_" } }
     Effect "nav.ok" $null "focus: TextBox" 5 "OK on Search opens the search box"
     Start-Sleep -Seconds 1
     Effect "nav.ok" $null "keyboard: box waiting" 8 "OK on the box"

@@ -1111,6 +1111,16 @@ public partial class MainWindow : Window, IShell
             });
         }
         base.OnPreviewKeyDown(e);
+        // Nothing has the highlight (a screen just opened, or the focused control went away): the first arrow or OK
+        // puts it on the screen's first item instead of doing nothing.
+        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.Enter && !e.IsRepeat && !DialogOpen && !KeyboardOpen && _current is { } page
+            && (Keyboard.FocusedElement is null || ReferenceEquals(Keyboard.FocusedElement, this) || Keyboard.FocusedElement is UIElement { IsVisible: false }))
+        {
+            page.FocusFirstOrLast();
+            if (_focusLogCount++ < 3000) AppPaths.LogLine($"focus: nothing had the highlight; {e.Key} put it on the screen");
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Enter && e.IsRepeat && _eatEnterRepeat) { e.Handled = true; return; }
         if (!e.IsRepeat) _eatEnterRepeat = false;
         // The on-screen keyboard handles the remote itself (wrapping rows, hold OK). Other keys, such as letters typed
