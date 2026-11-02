@@ -64,6 +64,7 @@ val robolectricJars: Configuration by configurations.creating { isTransitive = f
 
 dependencies {
     robolectricJars("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7")
+    robolectricJars("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
