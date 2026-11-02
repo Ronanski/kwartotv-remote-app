@@ -212,7 +212,10 @@ public partial class MainWindow : Window, IShell
             var on = i == 0 ? name == "Home" : (i == 2 && name == "Library") || (i == 3 && name == "Settings");
             _navButtons[i].Tag = on ? "current" : null;   // the page shown: a soft accent pill (see the Pill style)
         }
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _current?.FocusFirst());
+        // After the page has drawn (and redrawn its rows): the item last used on it, or its first item. Focusing
+        // earlier let the redraw move the highlight elsewhere (Bilibili opened on its Reload button).
+        var shown = _current;
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => { if (ReferenceEquals(_current, shown)) shown?.FocusFirstOrLast(); });
     }
 
     public void GoHome()
