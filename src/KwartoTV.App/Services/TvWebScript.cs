@@ -230,6 +230,11 @@ public static class TvWebScript
   function nfPos(item) { var m = /(?:^|\s)slider-item-(\d+)(?:\s|$)/.exec(item.className || ''); return m ? +m[1] : -1; }
   function nfTarget(item) { return item.querySelector('a[href*=""/watch""], a[href*=""/title""], a.slider-refocus, a[href], [role=link], [tabindex]') || item; }
   function nfVisible(row) { return Array.prototype.filter.call(row.querySelectorAll('[class*=""slider-item-""]'), function (x) { return nfPos(x) >= 0; }); }
+  // a title's identity, the same after Netflix rebuilds the row: its /watch/ or /title/ number, else its name
+  function nfKey(item) {
+    var a = nfTarget(item), h = (a.getAttribute && a.getAttribute('href')) || '', m = /\/(?:watch|title)\/(\d+)/.exec(h);
+    return m ? m[1] : ((a.getAttribute && a.getAttribute('aria-label')) || (item.innerText || item.textContent || '')).trim().slice(0, 80);
+  }
   function nfAfterSlide(rowId, pick) {
     nfBusy = Date.now() + 1200;
     setTimeout(function () {
@@ -239,26 +244,46 @@ public static class TvWebScript
       var it = pick(items); if (it) focus(nfTarget(it));
     }, 800);
   }
+  function nfHandle(row, dir) {
+    var h = row.querySelector(dir === 'right' ? 'span.handleNext, .handleNext' : 'span.handlePrev, .handlePrev');
+    if (!h || h.disabled || h.getAttribute('aria-disabled') === 'true' || /disabled/i.test(String(h.className))) return null;
+    return h;
+  }
   function nfStep(dir) {
     var item = nfItem(cur); if (!item || nfPos(item) < 0) return null;
     var row = item.closest('[id^=""row-""]') || item.closest('.lolomoRow, .rowContainer');
     if (!row) return null;
     if (Date.now() < nfBusy) return true;   // the row is still sliding
     var next = dir === 'right' ? item.nextElementSibling : item.previousElementSibling;
-    if (!next || !/slider-item-/.test(next.className || '')) return false;   // the row's end
-    var after = dir === 'right' ? next.nextElementSibling : next.previousElementSibling;
-    // the neighbour is the half-shown title at the edge (an unnumbered title follows it): slide the row
-    var edge = nfPos(next) < 0 || (after && /slider-item-/.test(after.className || '') && nfPos(after) < 0);
-    if (!edge) { focus(nfTarget(next)); return true; }
-    var h = row.querySelector(dir === 'right' ? 'span.handleNext, .handleNext' : 'span.handlePrev, .handlePrev');
-    if (!h) { focus(nfTarget(next)); return true; }
+    if (next && !/slider-item-/.test(next.className || '')) next = null;
+    var h = nfHandle(row, dir);
+    if (!next && !h) return false;   // the row's very end
+    var edge = !next || nfPos(next) < 0;
+    if (!edge) {
+      var after = dir === 'right' ? next.nextElementSibling : next.previousElementSibling, nr = rectOf(next);
+      // the neighbour is the half-shown title at the edge: an unnumbered title follows it, or it is cut by the screen
+      // (or sits under the row's arrow)
+      edge = (after && /slider-item-/.test(after.className || '') && nfPos(after) < 0) ||
+        (dir === 'right' ? nr.right > window.innerWidth - (h ? rectOf(h).width * 0.5 : 2) : nr.left < (h ? rectOf(h).width * 0.5 : 2));
+    }
+    if (!edge || !h) { if (next) { focus(nfTarget(next)); return true; } return false; }
+    var want = next ? nfKey(next) : null, was = nfKey(item);
     h.click();
-    var id = row.id;
-    // after sliding right the next title is the first full one (place 1); after sliding left, the last full one
-    nfAfterSlide(id, function (items) {
-      if (dir === 'right') return items.filter(function (x) { return nfPos(x) === 1; })[0] || items[0];
-      var max = Math.max.apply(null, items.map(nfPos));
-      return items.filter(function (x) { return nfPos(x) === max - 1; })[0] || items[items.length - 1];
+    // after the slide (Netflix rebuilds the titles): the title that was next, found again by its number; else the one
+    // after the title that had the highlight; else the first full title (sliding right) or the last full one (left)
+    nfAfterSlide(row.id, function (items) {
+      var byKey = function (k) { return items.filter(function (x) { return nfKey(x) === k; }); };
+      var sorted = items.slice().sort(function (a, b) { return nfPos(a) - nfPos(b); });
+      if (want) {
+        var w = byKey(want);
+        if (w.length) return dir === 'right' ? w[0] : w[w.length - 1];
+      } else {
+        var c = byKey(was)[0];
+        if (c) { var i = sorted.indexOf(c), n = sorted[i + (dir === 'right' ? 1 : -1)]; return n || c; }
+      }
+      if (dir === 'right') return items.filter(function (x) { return nfPos(x) === 1; })[0] || sorted[0];
+      var max = nfPos(sorted[sorted.length - 1]);
+      return items.filter(function (x) { return nfPos(x) === max - 1; })[0] || sorted[sorted.length - 1];
     });
     return true;
   }
