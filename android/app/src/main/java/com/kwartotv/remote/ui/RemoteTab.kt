@@ -85,7 +85,9 @@ internal fun RemoteTab(vm: AppViewModel, send: (String, String?) -> Unit, onSign
     val what = onTv(tvApp, music.on && music.title.isNotBlank())
     var pad by remember { mutableIntStateOf(if (vm.padKind == 1) 1 else 0) }
     val ctx = LocalContext.current
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // The top part scrolls when it does not fit; Back · Home · Play/Pause · Type and the volume stay at the bottom, always in sight.
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppTile(QuickApp.LiveTv, Modifier.weight(1f), height = 70.dp, logo = 30.dp) { send(Cmd.APP_LIVE, null) }
             AppTile(QuickApp.YouTube, Modifier.weight(1f), height = 70.dp, logo = 30.dp) { send(Cmd.APP_YOUTUBE, null) }
@@ -117,6 +119,7 @@ internal fun RemoteTab(vm: AppViewModel, send: (String, String?) -> Unit, onSign
             FilterChip(selected = pad == 1, onClick = { Haptics.click(ctx); pad = 1; vm.padKind = 1 }, label = { Text("Swipe") })
         }
         if (pad == 0) RoundPad(send) else Touchpad(send)
+    }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("Back", "Back", Modifier.weight(1f), height = 56.dp, icon = Icons.AutoMirrored.Rounded.ArrowBack) { send(Cmd.BACK, null) }
             RemoteKey("Home", "Home", Modifier.weight(1f), height = 56.dp, icon = Icons.Rounded.Home) { send(Cmd.HOME, null) }
