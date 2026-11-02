@@ -542,10 +542,12 @@ try {
     Effect "app.bilibili" $null "page: Bilibili" 10 "Bilibili for the type box"
     Start-Sleep -Seconds 3
     # up to the top, then left to the Search button (the log says where the highlight is)
-    $onSearch = $false
-    for ($i = 0; $i -lt 10 -and -not $onSearch; $i++) {
+    # up until the highlight is on the row of Bilibili's own buttons (Search, Reload, Website), then left to Search
+    $onSearch = $false; $onTop = $false
+    for ($i = 0; $i -lt 10 -and -not $onTop; $i++) {
         $from = LogCount; $null = WsCmd "nav.up" $null; Start-Sleep -Milliseconds 400
-        $onSearch = $null -ne (WaitLog $from "focus: Button .*Search @" 1)
+        $hit = WaitLog $from "focus: Button (.*Search|Reload|Website / sign in) @" 1
+        $onTop = $null -ne $hit; $onSearch = $onTop -and $hit -match "Search @"
     }
     for ($i = 0; $i -lt 4 -and -not $onSearch; $i++) {
         $from = LogCount; $null = WsCmd "nav.left" $null; Start-Sleep -Milliseconds 400

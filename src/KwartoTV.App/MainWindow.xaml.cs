@@ -215,7 +215,14 @@ public partial class MainWindow : Window, IShell
         // After the page has drawn (and redrawn its rows): the item last used on it, or its first item. Focusing
         // earlier let the redraw move the highlight elsewhere (Bilibili opened on its Reload button).
         var shown = _current;
-        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => { if (ReferenceEquals(_current, shown)) shown?.FocusFirstOrLast(); });
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => { if (ReferenceEquals(_current, shown)) shown?.FocusFirstOrLast(); });
+        // Once more after the page has drawn (a redraw can move the highlight), but only if no key was pressed meanwhile.
+        var keys = _keysPressed;
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+        {
+            if (!ReferenceEquals(_current, shown) || shown is null || DialogOpen || _keysPressed != keys) return;
+            shown.FocusFirstOrLast();
+        });
     }
 
     public void GoHome()
@@ -1102,8 +1109,11 @@ public partial class MainWindow : Window, IShell
         }
     }
 
+    private int _keysPressed;
+
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        _keysPressed++;
         // An arrow that leaves the highlight where it was is logged (a dead end on a screen shows up in the tests).
         if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right && Keyboard.FocusedElement is FrameworkElement before)
         {
