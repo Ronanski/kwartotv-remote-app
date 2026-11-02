@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
@@ -24,8 +26,6 @@ import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Pause
@@ -208,8 +208,8 @@ internal fun RoundPad(send: (String, String?) -> Unit) {
             val key = Modifier.size(76.dp)
             RemoteKey("", "Up", key.align(Alignment.TopCenter), repeat = true, bare = true, shape = CircleShape, height = 76.dp, icon = Icons.Rounded.KeyboardArrowUp, iconSize = 38.dp) { send(Cmd.UP, null) }
             RemoteKey("", "Down", key.align(Alignment.BottomCenter), repeat = true, bare = true, shape = CircleShape, height = 76.dp, icon = Icons.Rounded.KeyboardArrowDown, iconSize = 38.dp) { send(Cmd.DOWN, null) }
-            RemoteKey("", "Left", key.align(Alignment.CenterStart), repeat = true, bare = true, shape = CircleShape, height = 76.dp, icon = Icons.Rounded.KeyboardArrowLeft, iconSize = 38.dp) { send(Cmd.LEFT, null) }
-            RemoteKey("", "Right", key.align(Alignment.CenterEnd), repeat = true, bare = true, shape = CircleShape, height = 76.dp, icon = Icons.Rounded.KeyboardArrowRight, iconSize = 38.dp) { send(Cmd.RIGHT, null) }
+            RemoteKey("", "Left", key.align(Alignment.CenterStart), repeat = true, bare = true, shape = CircleShape, height = 76.dp, icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft, iconSize = 38.dp) { send(Cmd.LEFT, null) }
+            RemoteKey("", "Right", key.align(Alignment.CenterEnd), repeat = true, bare = true, shape = CircleShape, height = 76.dp, icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight, iconSize = 38.dp) { send(Cmd.RIGHT, null) }
             RemoteKey("OK", "OK", Modifier.size(100.dp), primary = true, shape = CircleShape, height = 100.dp, fontSize = 22) { send(Cmd.OK, null) }
         }
     }

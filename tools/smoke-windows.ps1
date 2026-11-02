@@ -482,6 +482,109 @@ try {
     $locked = WsCmd "nav.ok" $null
     Check ($null -ne $locked -and -not $locked.ok) "phone: other buttons do nothing while locked ($(if ($locked) { $locked.error }))"
     Phone "power.screenon" $null "screen: unlocked" 10 "Unlock returns to the TV" "47-phone-unlocked"
+    # ---- Every button of the phone, app by app: the command must do its job on the TV (seen in the log), not only be accepted.
+    # Effect: like Phone, but a missing effect is only a warning when the CI machine itself cannot show it (no sign-in, no sound, bot checks).
+    function Effect($cmd, $arg, $expect, $seconds, $name, [switch]$soft) {
+        $from = LogCount
+        $ack = WsCmd $cmd $arg
+        $hit = if ($expect) { WaitLog $from $expect $seconds } else { "ok" }
+        $ok = $null -ne $ack -and $ack.ok -and $null -ne $hit
+        $line = "button: $name ($cmd $arg) ack=$(if ($ack) { $ack.ok } else { 'none' }) $(if ($ack -and $ack.error) { $ack.error }) effect=$hit"
+        if ($soft) { Warn $ok $line } else { Check $ok $line }
+    }
+    $focus = "focus: |web highlight: "
+    # Home and KwartoTV's own screens: the arrows move the highlight, OK opens, Back returns.
+    Effect "nav.home" $null "home" 10 "Home"
+    foreach ($k in "nav.right", "nav.down", "nav.left", "nav.up") { Effect $k $null $focus 5 "arrow on Home" }
+    Effect "app.settings" $null "page: Settings" 10 "Settings"
+    foreach ($k in "nav.down", "nav.down", "nav.up") { Effect $k $null $focus 5 "arrow in Settings" }
+    Effect "nav.back" $null "page: Home|home" 10 "Back from Settings"
+    Effect "app.ytmusic" $null "page: Music" 10 "YouTube Music screen"
+    foreach ($k in "nav.down", "nav.right", "nav.left") { Effect $k $null $focus 5 "arrow on the YouTube Music screen" }
+    # Live TV: play/pause, channels up/down/last/number, typed digits, the channel list, favorite.
+    Effect "app.livetv" $null "player: opening" 25 "Live TV"
+    Start-Sleep -Seconds 4
+    Effect "media.playpause" $null "player: paused" 10 "pause Live TV"
+    Effect "media.playpause" $null "player: playing" 10 "play Live TV"
+    Effect "channel.next" $null "player: opening" 20 "channel up"
+    Effect "channel.prev" $null "player: opening" 20 "channel down"
+    Effect "channel.next" $null "player: opening" 20 "channel up again"
+    Effect "channel.last" $null "player: opening" 20 "last channel"
+    Effect "channel.number" "2" "player: opening" 20 "channel by number (list on the phone)"
+    $null = WsCmd "channel.digit" "1"
+    Effect "channel.commit" $null "player: opening" 20 "typed digit 1 + Go"
+    Effect "channel.favorite" $null $null 5 "favorite channel"
+    $null = WsCmd "channel.favorite" $null
+    Effect "channel.list" $null "guide: open" 10 "channel list on the TV"
+    Effect "nav.down" $null "player key: Down" 5 "down in the channel list"
+    Effect "nav.up" $null "player key: Up" 5 "up in the channel list"
+    Effect "nav.back" $null $null 5 "Back closes the channel list"
+    Shot "50-buttons-live"
+    Effect "nav.home" $null "home" 10 "Home from Live TV"
+    # A Bilibili episode: OK plays, play/pause, ±10 s from the phone, ◀ ▶ on the D-pad, Back.
+    Effect "app.bilibili" $null "page: Bilibili" 10 "Bilibili screen"
+    Start-Sleep -Seconds 6
+    foreach ($k in "nav.down", "nav.right", "nav.left") { Effect $k $null $focus 5 "arrow on the Bilibili screen" }
+    Effect "nav.ok" $null "bilibili: play" 15 "OK plays a show"
+    Start-Sleep -Seconds 12
+    Effect "media.playpause" $null "web player: (pause|play) at" 10 "play/pause the episode" -soft
+    Effect "media.playpause" $null "web player: (pause|play) at" 10 "play/pause the episode again" -soft
+    Effect "media.seek" "10" "web player: seeked at" 10 "+10 s" -soft
+    Effect "media.seek" "-10" "web player: seeked at" 10 "-10 s" -soft
+    Effect "nav.right" $null "web player: seeked at" 10 "▶ on the D-pad skips 10 s" -soft
+    Effect "nav.left" $null "web player: seeked at" 10 "◀ on the D-pad goes back 10 s" -soft
+    Effect "nav.ok" $null "web player: (pause|play) at" 10 "OK on the D-pad pauses" -soft
+    Shot "51-buttons-bilibili-video"
+    Effect "nav.back" $null "web: closed web-bilibili" 15 "Back leaves the episode"
+    # Typing a whole text at once (the phone's type box) into a TV box, then searching it.
+    Effect "nav.home" $null "home" 10 "Home"
+    Effect "app.bilibili" $null "page: Bilibili" 10 "Bilibili for the type box"
+    Start-Sleep -Seconds 3
+    for ($i = 0; $i -lt 6; $i++) { $null = WsCmd "nav.up" $null; Start-Sleep -Milliseconds 300 }
+    for ($i = 0; $i -lt 3; $i++) { $null = WsCmd "nav.left" $null; Start-Sleep -Milliseconds 300 }
+    Effect "nav.ok" $null $null 5 "OK on Search"
+    Start-Sleep -Seconds 1
+    Effect "nav.ok" $null "keyboard: box waiting" 8 "OK on the box"
+    Effect "text.set" "1:kimetsu" $null 5 "the type box sends the whole text"
+    Start-Sleep -Seconds 1
+    Effect "nav.ok" $null 'bilibili: search "kimetsu"' 15 "the whole text is searched"
+    Effect "nav.home" $null "home" 10 "Home"
+    # YouTube: on the results of a search, OK plays, then play/pause, ±10 s, next video (CI machines may get YouTube's bot check).
+    Effect "app.search" "youtube|lofi hip hop" "web: open YouTube" 10 "YouTube search"
+    Start-Sleep -Seconds 10
+    Effect "nav.ok" $null "web player: play at" 25 "OK plays the first result" -soft
+    Start-Sleep -Seconds 5
+    Effect "media.playpause" $null "web player: (pause|play) at" 10 "YouTube play/pause" -soft
+    Effect "media.seek" "10" "web player: seeked at" 10 "YouTube +10 s" -soft
+    Effect "media.seek" "-10" "web player: seeked at" 10 "YouTube -10 s" -soft
+    Shot "52-buttons-youtube"
+    Effect "nav.back" $null $null 5 "Back in YouTube"
+    Effect "nav.home" $null "web: closed youtube" 10 "Home from YouTube"
+    # Netflix (not signed in on CI): the arrows move on its page; a sign-in made on the phone reaches it.
+    Effect "app.netflix" $null "web: open Netflix" 10 "Netflix"
+    Start-Sleep -Seconds 8
+    foreach ($k in "nav.down", "nav.right", "nav.down", "nav.up") { Effect $k $null "web highlight: " 6 "arrow on Netflix" }
+    Effect "web.signin" "netflix|NetflixId=test; SecureNetflixId=test" "signin: Netflix from the phone" 10 "sign-in from the phone"
+    Start-Sleep -Seconds 4
+    Shot "53-buttons-netflix"
+    Effect "nav.home" $null "web: closed netflix" 10 "Home from Netflix"
+    # The mouse pad: the pointer moves, clicks and scrolls.
+    Add-Type -AssemblyName System.Windows.Forms
+    $p0 = [System.Windows.Forms.Cursor]::Position
+    Effect "mouse.move" "60,40" $null 3 "mouse move"
+    Start-Sleep -Milliseconds 300
+    $p1 = [System.Windows.Forms.Cursor]::Position
+    Check ($p1.X -ne $p0.X -or $p1.Y -ne $p0.Y) "button: the pointer moved ($($p0.X),$($p0.Y) -> $($p1.X),$($p1.Y))"
+    Effect "mouse.scroll" "2" $null 3 "mouse scroll"
+    Effect "mouse.click" $null $null 3 "mouse click"
+    Effect "nav.home" $null "home" 10 "Home"
+    # More apps: each opens (its Windows app, or its website inside KwartoTV).
+    foreach ($a in "primevideo", "disneyplus", "hbomax", "viu", "iwanttfc", "crunchyroll", "spotify", "twitch", "appletv", "plex") {
+        Effect "app.open" $a "app: " 10 "open $a"
+        Effect "nav.home" $null "home" 10 "Home after $a"
+    }
+    # Power: the PC's own sleep / restart / shut down are not pressed here (they would end the test machine); the phone
+    # asks first, and the TV accepts them (Core tests).
     $phoneErrors = @(Get-Content $logPath -ErrorAction SilentlyContinue) | Select-Object -Skip $logBefore | Where-Object { $_ -match "UI error|Fatal|Task error" }
     $phoneErrors | Select-Object -First 5 | ForEach-Object { Write-Host "phone error: $_" }
     Check ($phoneErrors.Count -eq 0) "phone: no app errors while the phone drove every screen ($($phoneErrors.Count))"

@@ -79,7 +79,7 @@ class PhoneButtonsTest {
         press("Play or pause", "media.playpause")
         // jump anywhere with the progress bar
         ui.clearSent()
-        reach(rule.onNode(androidx.compose.ui.test.hasSetProgressAction())).performSemanticsAction(SemanticsActions.SetProgress) { it(1800f) }
+        reach(rule.onNode(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))).performSemanticsAction(SemanticsActions.SetProgress) { it(1800f) }
         ui.settle(); assertEquals(listOf("netflix.seekto 1800"), ui.sent()); log += "DRAG progress bar to 30:00 -> netflix.seekto 1800"
         // Audio & Subtitles
         press("Choose the audio language and subtitles", "netflix.tracks")
