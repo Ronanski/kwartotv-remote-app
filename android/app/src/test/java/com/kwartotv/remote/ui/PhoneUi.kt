@@ -20,6 +20,13 @@ class PhoneUi(private val rule: ComposeContentTestRule) {
     val app: Application = ApplicationProvider.getApplicationContext()
     val vm: AppViewModel
     init {
+        // A test that hangs prints where every thread is (CI logs otherwise show nothing until the job times out).
+        val started = System.currentTimeMillis()
+        Thread {
+            try { Thread.sleep(120_000) } catch (_: InterruptedException) { return@Thread }
+            println("!! PhoneUi: still running after ${(System.currentTimeMillis() - started) / 1000}s, threads:")
+            Thread.getAllStackTraces().forEach { (t, st) -> println("-- ${t.name}"); st.take(25).forEach { println("    at $it") } }
+        }.apply { isDaemon = true; start() }
         app.getSharedPreferences("kwartotv", Context.MODE_PRIVATE).edit()
             .putString("tvs", JSONArray().put(JSONObject().put("deviceId", "tv1").put("token", "t").put("name", "Living room TV").put("host", "192.168.1.20").put("port", 8765)).toString())
             .putString("selected", "tv1").commit()
