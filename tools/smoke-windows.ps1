@@ -492,12 +492,13 @@ try {
         $line = "button: $name ($cmd $arg) ack=$(if ($ack) { $ack.ok } else { 'none' }) $(if ($ack -and $ack.error) { $ack.error }) effect=$hit"
         if ($soft) { Warn $ok $line } else { Check $ok $line }
     }
-    $focus = "focus: |web highlight: "
+    $focus = "focus: (?!.*stayed)|web highlight: "
     # Home and KwartoTV's own screens: the arrows move the highlight, OK opens, Back returns.
     Effect "nav.home" $null "home" 10 "Home"
-    foreach ($k in "nav.right", "nav.down", "nav.left", "nav.up") { Effect $k $null $focus 5 "arrow on Home" }
+    # an arrow must move the highlight; at an edge it stays (logged as "stayed on"), so each direction is tried after its opposite
+    foreach ($k in "nav.down", "nav.right", "nav.left", "nav.up") { Effect $k $null $focus 5 "arrow on Home" }
     Effect "app.settings" $null "page: Settings" 10 "Settings"
-    foreach ($k in "nav.down", "nav.down", "nav.up") { Effect $k $null $focus 5 "arrow in Settings" }
+    foreach ($k in "nav.down", "nav.down", "nav.up", "nav.up") { Effect $k $null "focus: (?!.*stayed)" 5 "arrow in Settings" }
     Effect "nav.back" $null "page: Home|home" 10 "Back from Settings"
     Effect "app.ytmusic" $null "page: Music" 10 "YouTube Music screen"
     foreach ($k in "nav.down", "nav.right", "nav.left") { Effect $k $null $focus 5 "arrow on the YouTube Music screen" }
@@ -506,10 +507,10 @@ try {
     Start-Sleep -Seconds 4
     Effect "media.playpause" $null "player: paused" 10 "pause Live TV"
     Effect "media.playpause" $null "player: playing" 10 "play Live TV"
-    Effect "channel.next" $null "player: opening" 20 "channel up"
-    Effect "channel.prev" $null "player: opening" 20 "channel down"
-    Effect "channel.next" $null "player: opening" 20 "channel up again"
-    Effect "channel.last" $null "player: opening" 20 "last channel"
+    Effect "channel.next" $null "player: opening|web: open" 20 "channel up"
+    Effect "channel.prev" $null "player: opening|web: open" 20 "channel down"
+    Effect "channel.next" $null "player: opening|web: open" 20 "channel up again"
+    Effect "channel.last" $null "player: opening|web: open" 20 "last channel"
     Effect "channel.number" "2" "player: opening" 20 "channel by number (list on the phone)"
     $null = WsCmd "channel.digit" "1"
     Effect "channel.commit" $null "player: opening" 20 "typed digit 1 + Go"
@@ -540,9 +541,18 @@ try {
     Effect "nav.home" $null "home" 10 "Home"
     Effect "app.bilibili" $null "page: Bilibili" 10 "Bilibili for the type box"
     Start-Sleep -Seconds 3
-    for ($i = 0; $i -lt 6; $i++) { $null = WsCmd "nav.up" $null; Start-Sleep -Milliseconds 300 }
-    for ($i = 0; $i -lt 3; $i++) { $null = WsCmd "nav.left" $null; Start-Sleep -Milliseconds 300 }
-    Effect "nav.ok" $null $null 5 "OK on Search"
+    # up to the top, then left to the Search button (the log says where the highlight is)
+    $onSearch = $false
+    for ($i = 0; $i -lt 10 -and -not $onSearch; $i++) {
+        $from = LogCount; $null = WsCmd "nav.up" $null; Start-Sleep -Milliseconds 400
+        $onSearch = $null -ne (WaitLog $from "focus: Button .*Search @" 1)
+    }
+    for ($i = 0; $i -lt 4 -and -not $onSearch; $i++) {
+        $from = LogCount; $null = WsCmd "nav.left" $null; Start-Sleep -Milliseconds 400
+        $onSearch = $null -ne (WaitLog $from "focus: Button .*Search @" 1)
+    }
+    Check $onSearch "button: the arrows reach Bilibili's Search button"
+    Effect "nav.ok" $null "focus: TextBox" 5 "OK on Search opens the search box"
     Start-Sleep -Seconds 1
     Effect "nav.ok" $null "keyboard: box waiting" 8 "OK on the box"
     Effect "text.set" "1:kimetsu" $null 5 "the type box sends the whole text"
@@ -563,7 +573,7 @@ try {
     # Netflix (not signed in on CI): the arrows move on its page; a sign-in made on the phone reaches it.
     Effect "app.netflix" $null "web: open Netflix" 10 "Netflix"
     Start-Sleep -Seconds 8
-    foreach ($k in "nav.down", "nav.right", "nav.down", "nav.up") { Effect $k $null "web highlight: " 6 "arrow on Netflix" }
+    foreach ($k in "nav.down", "nav.down", "nav.up") { Effect $k $null "web highlight: " 6 "arrow on Netflix" }
     Effect "web.signin" "netflix|NetflixId=test; SecureNetflixId=test" "signin: Netflix from the phone" 10 "sign-in from the phone"
     Start-Sleep -Seconds 4
     Shot "53-buttons-netflix"

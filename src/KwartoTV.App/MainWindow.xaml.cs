@@ -25,8 +25,20 @@ public partial class MainWindow : Window, IShell
     private IInputElement? _focusBeforeDialog;
 
     private PageBase? _current;
-    private string _lastFocusLog = "";
+    private WeakReference<FrameworkElement>? _lastFocused;
     private int _focusLogCount;
+
+    /// <summary>"Button Search @120,40": the focused control as the log names it.</summary>
+    private static string FocusName(FrameworkElement fe)
+    {
+        var name = System.Windows.Automation.AutomationProperties.GetName(fe);
+        if (string.IsNullOrWhiteSpace(name)) name = fe is ContentControl { Content: string str } ? str : fe is ContentControl { Content: TextBlock tb } ? tb.Text : fe.Tag as string ?? "";
+        var at = "";
+        try { if (Window.GetWindow(fe) is { } w) { var p = fe.TranslatePoint(new Point(0, 0), w); at = $" @{p.X:0},{p.Y:0}"; } } catch { }
+        var line = $"{fe.GetType().Name} {name}".Trim();
+        if (line.Length > 80) line = line[..80];
+        return line + at;
+    }
     private bool _pageStale;
     private string _currentName = "Home";
 
@@ -43,11 +55,10 @@ public partial class MainWindow : Window, IShell
         EventManager.RegisterClassHandler(typeof(FrameworkElement), Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler((s, e) =>
         {
             if (e.NewFocus is not FrameworkElement fe || !ReferenceEquals(s, fe)) return;
-            var name = System.Windows.Automation.AutomationProperties.GetName(fe);
-            if (string.IsNullOrWhiteSpace(name)) name = fe is ContentControl { Content: string str } ? str : fe is ContentControl { Content: TextBlock tb } ? tb.Text : fe.Tag as string ?? "";
-            var line = $"focus: {fe.GetType().Name} {name}".Trim();
-            if (line.Length > 90) line = line[..90];
-            if (line != _lastFocusLog && _focusLogCount++ < 2000) { _lastFocusLog = line; AppPaths.LogLine(line); }
+            if (_lastFocused?.TryGetTarget(out var last) == true && ReferenceEquals(last, fe)) return;
+            _lastFocused = new WeakReference<FrameworkElement>(fe);
+            var line = FocusName(fe);
+            if (_focusLogCount++ < 3000) AppPaths.LogLine("focus: " + line);
         }));
 
         foreach (var (label, action) in new (string, Action)[] { ("Home", GoHome), ("Live TV", ShowLiveTv), ("Library", ShowLibrary), ("Settings", ShowSettings) })
@@ -1090,6 +1101,15 @@ public partial class MainWindow : Window, IShell
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        // An arrow that leaves the highlight where it was is logged (a dead end on a screen shows up in the tests).
+        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right && Keyboard.FocusedElement is FrameworkElement before)
+        {
+            var key = e.Key;
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                if (ReferenceEquals(Keyboard.FocusedElement, before) && _focusLogCount++ < 3000) AppPaths.LogLine($"focus: {key} stayed on {FocusName(before)}");
+            });
+        }
         base.OnPreviewKeyDown(e);
         if (e.Key == Key.Enter && e.IsRepeat && _eatEnterRepeat) { e.Handled = true; return; }
         if (!e.IsRepeat) _eatEnterRepeat = false;
