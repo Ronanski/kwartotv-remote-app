@@ -3,10 +3,9 @@ package com.kwartotv.remote.ui
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.ComposeContentTestRule
-import androidx.compose.ui.test.onRoot
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.core.app.ApplicationProvider
 import com.kwartotv.remote.AppViewModel
 import org.json.JSONArray
@@ -16,7 +15,7 @@ import java.io.File
 import java.util.Base64
 
 /** The phone app as the tests drive it: a paired TV, the TV's messages fed in, the commands sent kept. */
-class PhoneUi(private val rule: ComposeContentTestRule) {
+class PhoneUi(private val rule: AndroidComposeTestRule<ActivityScenarioRule<ComponentActivity>, ComponentActivity>) {
     val app: Application = ApplicationProvider.getApplicationContext()
     val vm: AppViewModel
     init {
@@ -30,8 +29,8 @@ class PhoneUi(private val rule: ComposeContentTestRule) {
         app.getSharedPreferences("kwartotv", Context.MODE_PRIVATE).edit()
             .putString("tvs", JSONArray().put(JSONObject().put("deviceId", "tv1").put("token", "t").put("name", "Living room TV").put("host", "192.168.1.20").put("port", 8765)).toString())
             .putString("selected", "tv1").commit()
+        com.kwartotv.remote.net.RemoteHub.client.record = true   // before the app starts: it never really connects
         vm = AppViewModel(app)
-        vm.client.record = true
         vm.client.sent.clear()
         vm.client.pretendConnected()
     }
@@ -55,7 +54,11 @@ class PhoneUi(private val rule: ComposeContentTestRule) {
     /** The screen as a picture: printed for the CI log (##SHOT name, then base64 JPEG) and saved under build/phone-shots. */
     fun shot(name: String) {
         settle()
-        val bmp = rule.onRoot().captureToImage().asAndroidBitmap()
+        // Drawn straight from the screen (Compose's own capture waits for a frame, which never comes with the clock held).
+        val bmp = rule.runOnUiThread {
+            val v = rule.activity.window.decorView.rootView
+            Bitmap.createBitmap(v.width.coerceAtLeast(1), v.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888).also { v.draw(android.graphics.Canvas(it)) }
+        }
         val out = ByteArrayOutputStream()
         bmp.compress(Bitmap.CompressFormat.JPEG, 72, out)
         val dir = File("build/phone-shots").apply { mkdirs() }

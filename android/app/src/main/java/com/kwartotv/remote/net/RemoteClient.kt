@@ -171,6 +171,7 @@ class RemoteClient {
     }
 
     fun connect(target: SavedTv) {
+        if (record) return   // tests: no real connection
         if (tv?.deviceId != target.deviceId) {
             _lineup.value = null; _lineupUnsupported.value = false
             _catalog.value = null; _catalogUnsupported.value = false

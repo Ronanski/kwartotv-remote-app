@@ -50,7 +50,7 @@ android {
         // The phone UI tests (Robolectric): every button pressed, every screen drawn to a picture.
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
-            it.testLogging { showStandardStreams = true; events("passed", "failed", "started") }; it.maxHeapSize = "2g"
+            it.testLogging { showStandardStreams = true; events("passed", "failed", "started"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }; it.maxHeapSize = "2g"
             // Robolectric downloads its Android jar itself; repo1 answers CI machines with 429 (too many requests).
             it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
         }
@@ -75,6 +75,7 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("org.json:json:20240303")
 }
