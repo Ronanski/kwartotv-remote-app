@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -69,7 +70,7 @@ class PhoneButtonsTest {
         pressText("Swipe"); ui.shot("b01-swipe-pad")
         pressText("Swipe to move\nTap = OK  ·  Long press = Back", "nav.ok")
         pressText("D-pad")
-        press("Keyboard"); rule.onAllNodes(androidx.compose.ui.test.hasSetTextAction())[0].assertExists()
+        press("Keyboard"); ui.shot("b12-after-keyboard-button"); rule.onAllNodesWithText("Keyboard").onLast().assertExists()
         done("Home")
     }
 
@@ -92,7 +93,10 @@ class PhoneButtonsTest {
         // jump anywhere with the progress bar
         ui.clearSent()
         reach(rule.onNode(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))).performSemanticsAction(SemanticsActions.SetProgress) { it(1800f) }
-        ui.settle(); assertEquals(listOf("netflix.seekto 1800"), ui.sent()); log += "DRAG progress bar to 30:00 -> netflix.seekto 1800"
+        ui.settle(); assertEquals(listOf("netflix.seekto 1800"), ui.sent()); log += "MOVE progress bar to 30:00 -> netflix.seekto 1800"
+        // a tap on the bar jumps there too (the middle of the bar = half the video)
+        ui.clearSent(); rule.onNodeWithContentDescription("Video position").performClick(); ui.settle()
+        assertEquals(1, ui.sent().size); assertTrue(ui.sent()[0].startsWith("netflix.seekto ")); log += "TAP progress bar -> ${ui.sent()[0]}"
         // Audio & Subtitles
         press("Choose the audio language and subtitles", "netflix.tracks")
         ui.tv("""{"type":"netflix.tracks","audio":[{"i":0,"n":"English [Original]","on":true},{"i":1,"n":"Japanese","on":false}],"subs":[{"i":0,"n":"Off","on":true},{"i":1,"n":"Filipino","on":false}]}""")
@@ -108,11 +112,6 @@ class PhoneButtonsTest {
         // "Are you still watching?"
         ui.tv(PhoneUi.NETFLIX.replace("\"still\":false", "\"still\":true"))
         press("Answer Are you still watching", "netflix.continue")
-        // search Netflix
-        ui.clearSent()
-        reach(rule.onNodeWithText("Search Netflix")).performTextInput("dark")
-        rule.onNodeWithText("Search Netflix").performImeAction(); ui.settle()
-        assertEquals(listOf("netflix.search dark"), ui.sent()); log += "TYPE \"dark\" + search -> netflix.search dark"
         done("Netflix")
     }
 

@@ -92,6 +92,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -283,6 +287,43 @@ private fun SearchWhereDialog(words: String, close: () -> Unit, search: (String,
     )
 }
 
+/**
+ * A progress bar: the part watched, a knob, drag or tap anywhere to choose a time; [onSeek] when the finger lets go.
+ * Also a slider for TalkBack (and the tests): setting its progress jumps there.
+ */
+@Composable
+internal fun SeekBar(pos: Float, dur: Float, drag: Float?, onDrag: (Float) -> Unit, onSeek: (Float) -> Unit) {
+    val shown = (drag ?: pos).coerceIn(0f, dur.coerceAtLeast(1f))
+    var width by remember { mutableIntStateOf(1) }
+    fun at(x: Float) = (x / width).coerceIn(0f, 1f) * dur
+    Box(
+        Modifier.fillMaxWidth().height(32.dp)
+            .onSizeChanged { width = it.width.coerceAtLeast(1) }
+            .pointerInput(dur) { detectTapGestures { o -> onSeek(at(o.x)) } }
+            .pointerInput(dur) {
+                var last = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { o -> last = at(o.x); onDrag(last) },
+                    onDragEnd = { onSeek(last) },
+                    onDragCancel = { onSeek(last) },
+                ) { change, _ -> change.consume(); last = at(change.position.x); onDrag(last) }
+            }
+            .semantics {
+                contentDescription = "Video position"
+                progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(shown, 0f..dur.coerceAtLeast(1f))
+                setProgress { v -> onSeek(v.coerceIn(0f, dur)); true }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        val f = if (dur > 0f) shown / dur else 0f
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Hairline))
+        Box(Modifier.fillMaxWidth(f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(Accent))
+        Box(Modifier.fillMaxWidth(f.coerceAtLeast(0.001f)), contentAlignment = Alignment.CenterEnd) {
+            Box(Modifier.size(if (drag != null) 22.dp else 16.dp).clip(CircleShape).background(Color.White))
+        }
+    }
+}
+
 /** Netflix on the TV, like its TV app: what plays with a progress bar to jump anywhere, and every player button. */
 @Composable
 internal fun NetflixPanel(vm: AppViewModel, send: (String, String?) -> Unit) {
@@ -297,13 +338,9 @@ internal fun NetflixPanel(vm: AppViewModel, send: (String, String?) -> Unit) {
     ) {
         Text(n.title.ifBlank { "Netflix" }, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (n.episode.isNotBlank()) Text(n.episode, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // Drag to any point, let go: the video jumps there.
+        // Drag (or tap) to any point, let go: the video jumps there.
         var drag by remember { mutableStateOf<Float?>(null) }
-        androidx.compose.material3.Slider(
-            value = (drag ?: n.pos.toFloat()).coerceIn(0f, n.dur.toFloat()), valueRange = 0f..n.dur.toFloat(),
-            onValueChange = { drag = it },
-            onValueChangeFinished = { drag?.let { send(Cmd.NETFLIX_SEEKTO, it.toInt().toString()) }; drag = null },
-        )
+        SeekBar(n.pos.toFloat(), n.dur.toFloat(), drag, onDrag = { drag = it }) { to -> drag = null; send(Cmd.NETFLIX_SEEKTO, to.toInt().toString()) }
         Row(Modifier.fillMaxWidth()) {
             Text(clock((drag ?: n.pos.toFloat()).toInt()), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             if (n.rate != 1.0) Text("${n.rate}×   ", fontSize = 12.sp, color = Accent)
@@ -322,7 +359,8 @@ internal fun NetflixPanel(vm: AppViewModel, send: (String, String?) -> Unit) {
     }
     var nq by rememberSaveable { mutableStateOf("") }
     val sayNetflix = rememberVoice("Search Netflix") { said -> nq = said; send(Cmd.NETFLIX_SEARCH, said) }
-    OutlinedTextField(
+    // While a video plays the search makes room for the D-pad (🎤 at the top still searches Netflix).
+    if (n == null || n.dur == 0) OutlinedTextField(
         value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
         label = { Text("Search Netflix") },
         trailingIcon = { Icon(Icons.Rounded.Mic, "Say it", modifier = Modifier.clip(CircleShape).clickable { sayNetflix() }.padding(8.dp)) },
