@@ -119,15 +119,33 @@ public static class TvWebScript
     for (var i = 0; i < all.length; i++) {
       var el = all[i];
       // a row's own scroll arrows are pressed for you at the end of the row
-      if (visible(el) && meaningful(el) && !covered(el) && !el.closest('.handle,.handleNext,.handlePrev')) out.push(el);
+      if (visible(el) && meaningful(el) && (!covered(el) || isPlay(el)) && !el.closest('.handle,.handleNext,.handlePrev')) out.push(el);
     }
-    // keep the outermost of nested candidates (a card link and the picture link inside it)
-    out = out.filter(function (el) { return !out.some(function (o) { return o !== el && o.contains(el); }); });
+    // keep the outermost of nested candidates (a card link and the picture link inside it); but a title's Play button
+    // stays itself even inside a clickable box (Netflix's pop-up wraps its buttons in one)
+    out = out.filter(function (el) { return isPlay(el) || !out.some(function (o) { return o !== el && o.contains(el); }); });
+    out = out.filter(function (el) { return isPlay(el) || !out.some(function (o) { return o !== el && el.contains(o) && isPlay(o); }); });
     // and one of two that sit on the same spot (a card and its own overlay button): the bigger one
     out.sort(function (a, b) { var ra = rectOf(a), rb = rectOf(b); return rb.width * rb.height - ra.width * ra.height; });
     var kept = [];
     out.forEach(function (el) { var r = rectOf(el); if (!kept.some(function (k) { return overlap(rectOf(k), r) > 0.6; })) kept.push(el); });
     return kept;
+  }
+  // a title's Play / Resume button (Netflix's pop-up and title page)
+  var PLAYSEL = '[data-uia=""play-button""],[data-uia*=""play-button""],[data-uia=""resume-button""]';
+  function isPlay(el) { return !!(NF && el && el.matches && (el.matches(PLAYSEL) || (el.closest && el.closest(PLAYSEL) === el))); }
+  function playIn(s) {
+    var l = s.querySelectorAll(PLAYSEL);
+    for (var i = 0; i < l.length; i++) if (visible(l[i])) return l[i].closest('a,button,[role=button]') || l[i];
+    return null;
+  }
+  // The pop-up scrolls inside itself (not the page): its scrolling box.
+  function scroller(s) {
+    for (var el = cur && s.contains(cur) ? cur : s.firstElementChild; el && el !== document.body; el = el.parentElement) {
+      var st = getComputedStyle(el);
+      if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 4) return el;
+    }
+    return null;
   }
   function onScreen(el) { var r = rectOf(el); return r.top >= 0 && r.top < window.innerHeight && r.left < window.innerWidth; }
   function preferred() {
@@ -576,7 +594,13 @@ public static class TvWebScript
         else { edgeEl = null; openMenu(); }
       }
       else if (dir === 'right') pageRow(dir);
-      else window.scrollBy({ top: (dir === 'down' ? 1 : -1) * window.innerHeight * 0.5, behavior: 'smooth' });
+      else {
+        // In a title's pop-up, Up at the top goes to its Play / Resume button; otherwise the pop-up (or page) scrolls.
+        var sc = scope(), pb = NF && dir === 'up' && sc !== document ? playIn(sc) : null;
+        if (pb && pb !== cur) focus(pb);
+        else { var box = sc !== document ? scroller(sc) : null; var dy = (dir === 'down' ? 1 : -1) * window.innerHeight * 0.5;
+          if (box) box.scrollBy({ top: dy, behavior: 'smooth' }); else window.scrollBy({ top: dy, behavior: 'smooth' }); }
+      }
     } else if (e.key === 'Enter') {
       if (typing(t)) return; // in a text box OK belongs to the box (it sends the search)
       okDown(e);

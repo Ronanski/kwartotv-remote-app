@@ -705,6 +705,7 @@ public partial class MainWindow : Window, IShell
             case "netflix.episodes": _ = NetflixAsync(w, "episodes()"); return;
             case "netflix.episode": _ = NetflixAsync(w, $"playEpisode('{arg}')"); return;
             case "netflix.continue": _ = NetflixAsync(w, "cont()"); return;
+            case "netflix.play": _ = NetflixAsync(w, "play()"); return;
         }
         if (cmd == "netflix.track")
         {
@@ -874,6 +875,100 @@ public partial class MainWindow : Window, IShell
         _sleepAt = minutes > 0 ? DateTime.UtcNow.AddMinutes(minutes) : null;
         AppPaths.LogLine(minutes > 0 ? $"sleep timer: {minutes} min" : "sleep timer: off");
         ShowToast(minutes > 0 ? $"Sleep timer: {minutes} minutes. Then the TV stops and shows the clock." : "Sleep timer off.");
+        SendLockState();
+    }
+
+    // ---------- the phone's Lock workspace: the lock screen's look, with a live preview on the phone
+
+    private IReadOnlyList<string> _lockPhotos = Array.Empty<string>();
+    private string? _lockPhotosFolder;
+
+    /// <summary>The folders the phone may choose for the photos: Pictures, the folders in it, the library folders and the one in use.</summary>
+    private List<string> LockFolders()
+    {
+        var list = new List<string>();
+        var pics = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+        if (!string.IsNullOrEmpty(pics) && Directory.Exists(pics))
+        {
+            list.Add(pics);
+            try { list.AddRange(Directory.EnumerateDirectories(pics).Where(d => (File.GetAttributes(d) & (FileAttributes.Hidden | FileAttributes.System)) == 0).Take(30)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        list.AddRange(_tv.Settings.LibraryFolders.Where(Directory.Exists));
+        if (_tv.Settings.SlideshowFolder is { } cur && Directory.Exists(cur)) list.Add(cur);
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>The photos of the chosen folder (looked up off the UI thread, kept until the folder changes).</summary>
+    private async Task<IReadOnlyList<string>> LockPhotosAsync()
+    {
+        var folder = _tv.Settings.SlideshowFolder;
+        if (folder != _lockPhotosFolder)
+        {
+            _lockPhotosFolder = folder;
+            _lockPhotos = await Task.Run(() => Slideshow.Photos(folder, 7));
+        }
+        return _lockPhotos;
+    }
+
+    private async void SendLockState()
+    {
+        try
+        {
+            var n = (await LockPhotosAsync()).Count;
+            _tv.Server?.Broadcast(LockOptions.StateMessage(_tv.Settings, _locked, n, SleepMinutesLeft));
+        }
+        catch (Exception e) { AppPaths.LogLine("lock: state failed: " + e.Message); }
+    }
+
+    public void Lock(string cmd, string? arg)
+    {
+        switch (cmd)
+        {
+            case "lock.get": SendLockState(); return;
+            case "lock.folders": _tv.Server?.Broadcast(LockOptions.FoldersMessage(LockFolders())); return;
+            case "lock.photo": _ = SendLockPhotoAsync(int.Parse(arg!, System.Globalization.CultureInfo.InvariantCulture)); return;
+            case "lock.set":
+                var folders = LockFolders();
+                if (!LockOptions.TryApply(_tv.Settings, arg, f => folders.Contains(f, StringComparer.OrdinalIgnoreCase)))
+                    throw new UserMessageException("That option is not available on this TV.");
+                // Photos need a folder: the Pictures folder when none was chosen yet.
+                if (_tv.Settings.SlideshowOn && string.IsNullOrWhiteSpace(_tv.Settings.SlideshowFolder) && folders.Count > 0) _tv.Settings.SlideshowFolder = folders[0];
+                _tv.SaveSettings();
+                AppPaths.LogLine("lock: " + arg);
+                _lock?.ApplySettings(); _saver?.ApplySettings();
+                SendLockState();
+                return;
+        }
+    }
+
+    /// <summary>Photo [i] of the folder, small, for the phone's live preview.</summary>
+    private async Task SendLockPhotoAsync(int i)
+    {
+        try
+        {
+            var photos = await LockPhotosAsync();
+            if (photos.Count == 0) { _tv.Server?.Broadcast(LockOptions.PhotoMessage(0, 0, null)); return; }
+            var at = i % photos.Count;
+            var path = photos[at];
+            var jpg = await Task.Run(() =>
+            {
+                try
+                {
+                    var b = new System.Windows.Media.Imaging.BitmapImage();
+                    b.BeginInit(); b.UriSource = new Uri(path); b.DecodePixelWidth = 480;
+                    b.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    b.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreColorProfile;
+                    b.EndInit(); b.Freeze();
+                    var enc = new System.Windows.Media.Imaging.JpegBitmapEncoder { QualityLevel = 70 };
+                    enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(b));
+                    using var ms = new MemoryStream(); enc.Save(ms); return ms.ToArray();
+                }
+                catch (Exception) { return null; }
+            });
+            _tv.Server?.Broadcast(LockOptions.PhotoMessage(at, photos.Count, jpg));
+        }
+        catch (Exception e) { AppPaths.LogLine("lock: photo failed: " + e.Message); }
     }
 
     public int SleepMinutesLeft => _sleepAt is { } at ? Math.Max(1, (int)Math.Ceiling((at - DateTime.UtcNow).TotalMinutes)) : 0;
@@ -913,6 +1008,7 @@ public partial class MainWindow : Window, IShell
         l.Activate();
         // The PC must not go to sleep behind the clock (the phone could not reach it to unlock), and the clock stays on screen.
         Native.KeepAwake(true);
+        SendLockState();
     }
 
     public void ScreenOn()
@@ -924,6 +1020,7 @@ public partial class MainWindow : Window, IShell
         if (l is null) return;
         try { l.Unlock(); } catch { }
         AppPaths.LogLine("screen: unlocked");
+        SendLockState();
         // Give the keyboard back to what is on screen.
         if (_player is { IsVisible: true } p) { p.Activate(); p.Focus(); }
         else if (_web is { IsVisible: true } w) w.Activate();

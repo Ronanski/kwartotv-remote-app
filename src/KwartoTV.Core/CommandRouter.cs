@@ -38,7 +38,9 @@ public sealed class CommandRouter
         // YouTube Music on the TV (it plays on behind the lock screen)
         "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play", "music.signin", "music.home",
         // Netflix's own player from the phone
-        "netflix.skip", "netflix.next", "netflix.search", "netflix.tracks", "netflix.track", "netflix.seekto", "netflix.speed", "netflix.episodes", "netflix.episode", "netflix.continue", "app.search",
+        "netflix.skip", "netflix.next", "netflix.search", "netflix.tracks", "netflix.track", "netflix.seekto", "netflix.speed", "netflix.episodes", "netflix.episode", "netflix.continue", "netflix.play", "app.search",
+        // the phone's Lock workspace: the lock screen's look, its state, a photo for the live preview, the photo folders
+        "lock.set", "lock.get", "lock.photo", "lock.folders",
     };
 
     // While the TV is locked (clock screen) only these work: unlock, power, and volume.
@@ -50,10 +52,12 @@ public sealed class CommandRouter
         "media.playpause", "media.next", "media.prev",
         // music is what the lock screen is for: it can be changed without unlocking
         "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play", "music.home",
+        // the lock screen itself can be changed while it shows (the TV shows the change right away)
+        "lock.set", "lock.get", "lock.photo", "lock.folders",
     };
 
     /// <summary>The message a phone gets for a button pressed while the TV is locked.</summary>
-    public const string LockedMessage = "The TV is locked. Tap Unlock at the top of the phone remote.";
+    public const string LockedMessage = "The TV is locked. Unlock it in the Lock tab of the phone remote.";
 
     /// <summary>True while the TV shows its lock screen. Set by the shell.</summary>
     public Func<bool>? IsLocked { get; set; }
@@ -71,7 +75,7 @@ public sealed class CommandRouter
     {
         if (string.IsNullOrWhiteSpace(c.Cmd) || c.Cmd.Length > 40) return new(false, "bad command");
         // A playlist link from the phone can be long; everything else is short.
-        if (c.Arg is { Length: > 64 } && !(c.Cmd == "playlist.add" && c.Arg.Length <= 1024) && !(c.Cmd == "text.set" && c.Arg.Length <= TextRequest.MaxLength + 2) && !(c.Cmd == "web.signin" && c.Arg.Length <= PhoneSignIn.MaxCookieText + 20)) return new(false, "bad argument");
+        if (c.Arg is { Length: > 64 } && !(c.Cmd == "playlist.add" && c.Arg.Length <= 1024) && !(c.Cmd == "text.set" && c.Arg.Length <= TextRequest.MaxLength + 2) && !(c.Cmd == "lock.set" && c.Arg.Length <= 420) && !(c.Cmd == "web.signin" && c.Arg.Length <= PhoneSignIn.MaxCookieText + 20)) return new(false, "bad argument");
         if (c.Cmd == "playlist.add" && !AppSettings.IsHttpsUrl(c.Arg ?? "") && !(Uri.TryCreate(c.Arg, UriKind.Absolute, out var pu) && M3uParser.IsStreamUri(pu) && pu.Scheme != "file"))
             return new(false, "bad link");
 
@@ -135,6 +139,12 @@ public sealed class CommandRouter
                 break;
             case "netflix.seekto":
                 if (!int.TryParse(c.Arg, System.Globalization.NumberStyles.None, null, out var st) || st > 86400) return new(false, "bad time");
+                break;
+            case "lock.set":
+                if (c.Arg is not { Length: >= 3 } la || la.IndexOf('=') <= 0 || la.Length > 420 || la.Any(char.IsControl)) return new(false, "bad option");
+                break;
+            case "lock.photo":
+                if (!int.TryParse(c.Arg, System.Globalization.NumberStyles.None, null, out var pi) || pi > 100000) return new(false, "bad photo");
                 break;
             case "netflix.speed":
                 if (!NetflixNow.IsSpeed(c.Arg)) return new(false, "bad speed");

@@ -57,6 +57,8 @@ public interface IShell
     bool BackFromVideoPage();
     /// <summary>Sleep timer in minutes (0 = off).</summary>
     void SleepTimer(int minutes);
+    /// <summary>The phone's Lock workspace: lock.set, lock.get, lock.photo, lock.folders.</summary>
+    void Lock(string cmd, string? arg);
 }
 
 /// <summary>Windows implementation of IHostActions: navigation keys, media keys, volume, text, apps and power.</summary>
@@ -71,7 +73,7 @@ public sealed class WindowsHostActions : IHostActions
         var ui = Application.Current.Dispatcher;
 
         // Any button wakes the TV from the screensaver; arrows and OK only wake it (they do not also move or press).
-        if (cmd is not ("power.screenoff" or "power.timer") && !cmd.StartsWith("media.vol", StringComparison.Ordinal) && cmd != "media.mute"
+        if (cmd is not ("power.screenoff" or "power.timer") && !cmd.StartsWith("lock.", StringComparison.Ordinal) && !cmd.StartsWith("media.vol", StringComparison.Ordinal) && cmd != "media.mute"
             && ui.Invoke(shell.CloseScreensaver) && (cmd.StartsWith("nav.", StringComparison.Ordinal) || cmd.StartsWith("key.", StringComparison.Ordinal)))
             return;
 
@@ -161,7 +163,8 @@ public sealed class WindowsHostActions : IHostActions
             case "power.screenon": ui.Invoke(shell.ScreenOn); return;
             case "app.search": ui.Invoke(() => shell.Search(arg!)); return;
             case "netflix.skip" or "netflix.next" or "netflix.search" or "netflix.tracks" or "netflix.track" or "netflix.seekto" or "netflix.speed"
-                or "netflix.episodes" or "netflix.episode" or "netflix.continue": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
+                or "netflix.episodes" or "netflix.episode" or "netflix.continue" or "netflix.play": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
+            case "lock.set" or "lock.get" or "lock.photo" or "lock.folders": ui.Invoke(() => shell.Lock(cmd, arg)); return;
             case "power.timer": ui.Invoke(() => shell.SleepTimer(int.Parse(arg!, CultureInfo.InvariantCulture))); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;

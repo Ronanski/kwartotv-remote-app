@@ -37,6 +37,18 @@ public static class NetflixNow
             var dur = Math.Round(Num(o, "dur", 86400));
             var pos = Math.Min(Math.Round(Num(o, "pos", 86400)), dur > 0 ? dur : 86400);
             var rate = Num(o, "rate", 4);
+            // A title's details open on the TV (not playing): its name, its Play button's label and its number.
+            object? modal = null;
+            if (o.TryGetProperty("modal", out var mo) && mo.ValueKind == JsonValueKind.Object)
+            {
+                var mid = Str(mo, "id") ?? "";
+                modal = new
+                {
+                    title = Clean(Str(mo, "n"), 120),
+                    play = Clean(Str(mo, "p"), 40),
+                    id = mid.Length is >= 1 and <= 12 && mid.All(char.IsAsciiDigit) ? mid : "",
+                };
+            }
             return JsonSerializer.Serialize(new
             {
                 type = "netflix.now",
@@ -46,6 +58,7 @@ public static class NetflixNow
                 paused = Flag(o, "paused"),
                 rate = rate > 0 ? rate : 1,
                 still = Flag(o, "still"),
+                modal,
             });
         }
         catch (JsonException) { return null; }

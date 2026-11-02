@@ -475,6 +475,30 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
         var ne = NetflixNow.EpisodesMessage("{\"show\":\"Dark\",\"seasons\":[{\"n\":\"Season 1\",\"eps\":[{\"id\":\"80100172\",\"n\":\"1. Secrets\",\"on\":false},{\"id\":\"80'1\",\"n\":\"bad\"},{\"id\":80100173,\"n\":\"2. Lies\",\"on\":true}]}]}");
         Check(ne is not null && ne.Contains("\"id\":\"80100172\"") && ne.Contains("\"id\":\"80100173\"") && !ne.Contains("bad") && ne.Contains("\"on\":true"), "netflix: episodes for the phone, bad ids left out (" + ne + ")");
         Check(NetflixNow.EpisodesMessage("{\"seasons\":[]}") is null, "netflix: no episodes, no list");
+        var nm = NetflixNow.Message("{\"modal\":{\"n\":\"Frieren\",\"p\":\"Resume\",\"id\":\"81234\"}}");
+        Check(nm is not null && nm.Contains("\"modal\":{\"title\":\"Frieren\",\"play\":\"Resume\",\"id\":\"81234\"}") && NetflixNow.Message("{\"modal\":{\"n\":\"x\",\"id\":\"8'1\"}}")!.Contains("\"id\":\"\"")
+            && NetflixNow.Message("{\"t\":\"a\"}")!.Contains("\"modal\":null"), "netflix: a title's details open on the TV go to the phone (bad id left out) (" + nm + ")");
+        Check(nr.Handle(new(null, "netflix.play", null)).Ok && nh.Last == "netflix.play:", "netflix: the phone's Resume for the title open on the TV");
+        // the phone's Lock workspace
+        var ls = new AppSettings();
+        Check(LockOptions.TryApply(ls, "clock=big") && ls.LockClock == "big" && LockOptions.TryApply(ls, "color=9db8ff") && ls.LockColor == "9DB8FF"
+            && LockOptions.TryApply(ls, "dim=40") && ls.LockDim == 40 && LockOptions.TryApply(ls, "date=0") && !ls.LockDate && LockOptions.TryApply(ls, "song=off") && !ls.LockSong
+            && LockOptions.TryApply(ls, "verse=0") && ls.VerseEveryMinutes == 0 && LockOptions.TryApply(ls, "verse=1") && ls.VerseEveryMinutes == 60
+            && LockOptions.TryApply(ls, "every=300") && ls.SlideshowSeconds == 300 && LockOptions.TryApply(ls, "saver=0") && ls.ScreensaverMinutes == 0,
+            "lock: every option from the phone is applied");
+        Check(!LockOptions.TryApply(ls, "clock=huge") && !LockOptions.TryApply(ls, "color=FF0000") && !LockOptions.TryApply(ls, "dim=55") && !LockOptions.TryApply(ls, "every=7")
+            && !LockOptions.TryApply(ls, "size=3") && !LockOptions.TryApply(ls, "nope") && !LockOptions.TryApply(ls, "") && ls.LockClock == "big",
+            "lock: values that are not choices change nothing");
+        Check(LockOptions.TryApply(ls, "bg=midnight") && !ls.SlideshowOn && LockOptions.Background(ls) == "midnight" && LockOptions.TryApply(ls, "bg=photos") && ls.SlideshowOn && LockOptions.Background(ls) == "photos"
+            && !LockOptions.TryApply(ls, "folder=C:\\Windows", f => false) && ls.SlideshowFolder is null && LockOptions.TryApply(ls, "folder=D:\\Pics", f => f == "D:\\Pics") && ls.SlideshowFolder == "D:\\Pics",
+            "lock: background, and only a folder the TV offered");
+        var lsm = LockOptions.StateMessage(ls, true, 24, 15);
+        Check(lsm.Contains("\"type\":\"lock.state\"") && lsm.Contains("\"locked\":true") && lsm.Contains("\"clock\":\"big\"") && lsm.Contains("\"bg\":\"photos\"") && lsm.Contains("\"folderName\":\"Pics\"")
+            && lsm.Contains("\"photos\":24") && lsm.Contains("\"timer\":15") && lsm.Contains("\"every\":300"), "lock: the state for the phone (" + lsm + ")");
+        Check(LockOptions.PhotoMessage(2, 24, new byte[] { 1, 2 }).Contains("\"jpg\":\"AQI=\"") && LockOptions.FoldersMessage(new[] { "C:\\Users\\a\\Pictures", "c:\\users\\a\\pictures", "" }).Split("path").Length == 2,
+            "lock: a photo for the preview, and the folders (no repeats)");
+        Check(nr.Handle(new(null, "lock.set", "clock=big")).Ok && nh.Last == "lock.set:clock=big" && !nr.Handle(new(null, "lock.set", "x")).Ok && nr.Handle(new(null, "lock.photo", "3")).Ok
+            && !nr.Handle(new(null, "lock.photo", "-1")).Ok && nr.Handle(new(null, "lock.get", null)).Ok && nr.Handle(new(null, "lock.folders", null)).Ok, "lock: the phone's Lock commands");
         Check(nr.Handle(new(null, "app.search", "youtube|lofi hip hop")).Ok && nh.Last == "app.search:youtube|lofi hip hop" && nr.Handle(new(null, "app.search", "channels|gma")).Ok
             && !nr.Handle(new(null, "app.search", "spotify|x")).Ok && !nr.Handle(new(null, "app.search", "netflix| ")).Ok && !nr.Handle(new(null, "app.search", "netflix")).Ok,
             "voice search: said on the phone for Netflix, YouTube, Bilibili, music or channels");

@@ -71,6 +71,16 @@ public sealed class AppSettings
     /// <summary>Seconds each photo stays. See SlideshowChoices.</summary>
     public int SlideshowSeconds { get; set; } = 20;
     public static readonly int[] SlideshowChoices = { 20, 30, 60, 10 };
+    /// <summary>The clock on the lock screen: "classic" (ring and calendar), "big" (large time) or "corner" (small, bottom left). See LockOptions.</summary>
+    public string LockClock { get; set; } = "classic";
+    /// <summary>The clock's color (hex, no #): one of LockOptions.Colors.</summary>
+    public string LockColor { get; set; } = "FFFFFF";
+    /// <summary>How bright the lock screen is, in percent: 100, 70 or 40.</summary>
+    public int LockDim { get; set; } = 100;
+    public bool LockDate { get; set; } = true;
+    public bool LockSong { get; set; } = true;
+    /// <summary>The background without photos: "black" or "midnight".</summary>
+    public string LockBackground { get; set; } = "black";
 
     public static bool IsPlaylistFile(string path) =>
         Path.IsPathRooted(path) && (path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase));

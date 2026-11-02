@@ -24,6 +24,18 @@ public sealed class LockScreenWindow : Window
     private static readonly Brush Faint = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF));
 
     private readonly TextBlock _time = new() { FontSize = 168, FontWeight = FontWeights.Thin, Foreground = Soft, HorizontalAlignment = HorizontalAlignment.Center };
+    // The look chosen on the phone (Lock workspace): see ApplySettings.
+    private readonly Canvas _face = new() { Width = Ring, Height = Ring };
+    private readonly Grid _clock = new() { Width = Ring, Height = Ring };
+    private readonly StackPanel _row = new() { Orientation = Orientation.Horizontal };
+    private readonly Viewbox _fit = new() { StretchDirection = StretchDirection.DownOnly };
+    private readonly Grid _root = new() { Background = Brushes.Black, ClipToBounds = true };
+    private readonly Grid _photoLayer = new();
+    private readonly Border _veil = new();
+    private readonly Border _dimLayer = new() { Background = Brushes.Black, IsHitTestVisible = false, Opacity = 0 };
+    private readonly StackPanel _center = new() { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+    private KwartoTV.Core.MusicState? _music;
+    private string _slideFolder = "";
     private readonly TextBlock _ampm = new() { FontSize = 30, FontWeight = FontWeights.Light, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, -18, 0, 0) };
     private readonly TextBlock _date = new() { FontSize = 28, FontWeight = FontWeights.Light, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
     private readonly System.Windows.Shapes.Path _arc = new() { Stroke = new SolidColorBrush(Color.FromArgb(0xC8, Accent.R, Accent.G, Accent.B)), StrokeThickness = Stroke, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
@@ -69,7 +81,8 @@ public sealed class LockScreenWindow : Window
     /// <summary>Shows the song playing (or hides the line when the music is off).</summary>
     public void SetMusic(KwartoTV.Core.MusicState s)
     {
-        if (!s.On || s.Title.Length == 0) { _song.Visibility = Visibility.Collapsed; return; }
+        _music = s;
+        if (!s.On || s.Title.Length == 0 || !_settings.LockSong) { _song.Visibility = Visibility.Collapsed; return; }
         _songTitle.Text = s.Title;
         _songArtist.Text = s.Artist;
         _songArtist.Visibility = s.Artist.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -107,19 +120,20 @@ public sealed class LockScreenWindow : Window
         var track = new Ellipse { Width = Ring, Height = Ring, Stroke = Brushes.White, StrokeThickness = 1.5, Opacity = 0.08 };
         track.BeginAnimation(OpacityProperty, new DoubleAnimation(0.05, 0.16, TimeSpan.FromSeconds(6)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() });
         _head.RenderTransform = _headAt;
-        var face = new Canvas { Width = Ring, Height = Ring };
+        var face = _face;
         face.Children.Add(track); face.Children.Add(_arc); face.Children.Add(_head);
-        var center = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        var center = _center;
         center.Children.Add(_time); center.Children.Add(_ampm); center.Children.Add(_date);
-        var clock = new Grid { Width = Ring, Height = Ring };
+        var clock = _clock;
         clock.Children.Add(face); clock.Children.Add(center);
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, RenderTransform = _drift };
+        var row = _row;
+        row.HorizontalAlignment = HorizontalAlignment.Center; row.VerticalAlignment = VerticalAlignment.Center; row.RenderTransform = _drift;
         row.Children.Add(clock); row.Children.Add(_calendar);
 
         var hint = new TextBlock
         {
-            Text = screensaver ? "Press any button to go back" : "🔒  Locked  ·  unlock: tap Unlock at the top of KwartoTV Remote on your phone  ·  music: Music tab on the phone",
+            Text = screensaver ? "Press any button to go back" : "🔒  Locked  ·  unlock: Lock tab of KwartoTV Remote on your phone  ·  music: Music tab on the phone",
             FontSize = 17, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, 36), RenderTransform = _drift,
         };
@@ -140,29 +154,32 @@ public sealed class LockScreenWindow : Window
         _song.Child = songAll;
         _verseBox.Children.Add(_song);
         _verseBox.RenderTransform = _drift;
-        var root = new Grid { Background = Brushes.Black, ClipToBounds = true };
+        var root = _root;
         // The photos have their own layer, so their cross-fade order never covers the clock.
-        var photos = new Grid();
+        var photos = _photoLayer;
         photos.Children.Add(_photoA); photos.Children.Add(_photoB);
         root.Children.Add(photos);
-        root.Children.Add(new Border { Background = new LinearGradientBrush(Color.FromArgb(0x99, 0, 0, 0), Color.FromArgb(0xD9, 0, 0, 0), 90) });
+        _veil.Background = new LinearGradientBrush(Color.FromArgb(0x99, 0, 0, 0), Color.FromArgb(0xD9, 0, 0, 0), 90);
+        root.Children.Add(_veil);
         // Clock and calendar on top (shrunk to fit a small window), the verse under them, the hint at the bottom: they
         // never overlap, whatever the window size.
         var stack = new Grid { Margin = new Thickness(0, 30, 0, 70) };
         stack.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         stack.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var fit = new Viewbox { Child = row, StretchDirection = StretchDirection.DownOnly, Margin = new Thickness(40, 0, 40, 0) };
+        var fit = _fit; fit.Child = row; fit.Margin = new Thickness(40, 0, 40, 0);
         stack.Children.Add(fit);
         Grid.SetRow(_verseBox, 1); stack.Children.Add(_verseBox);
         root.Children.Add(stack); root.Children.Add(hint);
+        root.Children.Add(_dimLayer);
         Content = root;
+        _slides.Tick += (_, _) => NextPhoto();
+        ApplySettings();
 
         _tick.Tick += (_, _) => Draw();
         _wander.Tick += (_, _) => Wander();
         Loaded += (_, _) =>
         {
             Draw(); _tick.Start(); _wander.Start();
-            StartSlideshow();
             root.Opacity = 0;
             root.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromSeconds(1.2)) { EasingFunction = new QuadraticEase() });
         };
@@ -269,17 +286,65 @@ public sealed class LockScreenWindow : Window
         return g;
     }
 
-    private void StartSlideshow()
+    /// <summary>
+    /// The look chosen on the phone: the clock (classic ring and calendar, a big time, or a small one in the corner), its
+    /// color, the brightness, the date and song lines, and the background (photos, black or midnight blue). Called again
+    /// when the phone changes an option, so the TV shows the change right away.
+    /// </summary>
+    public void ApplySettings()
     {
-        if (!_settings.SlideshowOn || string.IsNullOrWhiteSpace(_settings.SlideshowFolder)) return;
-        var folder = _settings.SlideshowFolder;
+        var st = _settings;
+        var color = Color.FromRgb(0xFF, 0xFF, 0xFF);
+        if (KwartoTV.Core.LockOptions.Colors.Contains(st.LockColor))
+            color = (Color)ColorConverter.ConvertFromString("#" + st.LockColor);
+        _time.Foreground = new SolidColorBrush(Color.FromArgb(0xEE, color.R, color.G, color.B));
+        _ampm.Foreground = _date.Foreground = new SolidColorBrush(Color.FromArgb(0xB0, color.R, color.G, color.B));
+        _date.Visibility = st.LockDate ? Visibility.Visible : Visibility.Collapsed;
+        switch (st.LockClock)
+        {
+            case "big":
+                _face.Visibility = Visibility.Collapsed; _calendar.Visibility = Visibility.Collapsed;
+                _clock.Width = double.NaN; _clock.Height = double.NaN;
+                _time.FontSize = 240; _time.FontWeight = FontWeights.ExtraLight;
+                _row.HorizontalAlignment = HorizontalAlignment.Center; _row.VerticalAlignment = VerticalAlignment.Center;
+                _fit.HorizontalAlignment = HorizontalAlignment.Stretch; _fit.VerticalAlignment = VerticalAlignment.Stretch;
+                _center.HorizontalAlignment = HorizontalAlignment.Center;
+                break;
+            case "corner":
+                _face.Visibility = Visibility.Collapsed; _calendar.Visibility = Visibility.Collapsed;
+                _clock.Width = double.NaN; _clock.Height = double.NaN;
+                _time.FontSize = 110; _time.FontWeight = FontWeights.Light;
+                _fit.HorizontalAlignment = HorizontalAlignment.Left; _fit.VerticalAlignment = VerticalAlignment.Bottom;
+                _center.HorizontalAlignment = HorizontalAlignment.Left;
+                break;
+            default:
+                _face.Visibility = Visibility.Visible; _calendar.Visibility = Visibility.Visible;
+                _clock.Width = Ring; _clock.Height = Ring;
+                _time.FontSize = 168; _time.FontWeight = FontWeights.Thin;
+                _fit.HorizontalAlignment = HorizontalAlignment.Stretch; _fit.VerticalAlignment = VerticalAlignment.Stretch;
+                _center.HorizontalAlignment = HorizontalAlignment.Center;
+                break;
+        }
+        foreach (var t in new[] { _time, _ampm, _date })
+            t.HorizontalAlignment = st.LockClock == "corner" ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+        _dimLayer.Opacity = st.LockDim switch { 70 => 0.3, 40 => 0.6, _ => 0 };
+        var photos = st.SlideshowOn && !string.IsNullOrWhiteSpace(st.SlideshowFolder);
+        _root.Background = !photos && st.LockBackground == "midnight" ? new SolidColorBrush(Color.FromRgb(0x0B, 0x14, 0x30)) : Brushes.Black;
+        _photoLayer.Visibility = _veil.Visibility = photos ? Visibility.Visible : Visibility.Collapsed;
+        if (_music is { } m) SetMusic(m);
+        _shownVerse = "\u0000"; // shows (or hides) the verse again on the next tick
+        if (!photos) { _slides.Stop(); _slideFolder = ""; return; }
+        _slides.Interval = TimeSpan.FromSeconds(Math.Max(5, st.SlideshowSeconds));
+        if (_slideFolder == st.SlideshowFolder) return;
+        _slideFolder = st.SlideshowFolder!;
+        _slides.Stop();
+        var folder = _slideFolder;
         var seed = Environment.TickCount;
         _ = Task.Run(() => KwartoTV.Core.Slideshow.Photos(folder, seed)).ContinueWith(t =>
         {
-            if (t.IsFaulted || t.Result.Count == 0) return;
-            _photos = t.Result;
-            _slides.Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.SlideshowSeconds));
-            _slides.Tick += (_, _) => NextPhoto();
+            if (t.IsFaulted || folder != _slideFolder) return;
+            _photos = t.Result; _photoIndex = 0;
+            if (_photos.Count == 0) return;
             NextPhoto(); _slides.Start();
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }

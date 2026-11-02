@@ -58,6 +58,41 @@ public static class NetflixControl
     if (!t && md) { t = md.title || ''; e = e || md.artist || ''; }
     return [t, e];
   }
+  // A title's details open (Netflix's pop-up over the rows, or its title page): its name, the label of its Play
+  // button ("Resume", "Play", "Play S1:E9") and its number, so the phone can show a Resume button for it.
+  var MODAL = '.previewModal--container.detail-modal, .detail-modal-container, [data-uia*=""detail-modal""], [role=dialog][aria-modal=true]';
+  var PLAYSEL = '[data-uia=""play-button""], a[data-uia*=""play-button""], button[data-uia*=""play-button""], [data-uia=""resume-button""], [data-uia*=""play-resume""]';
+  function modalEl() {
+    var l = document.querySelectorAll(MODAL);
+    for (var i = l.length - 1; i >= 0; i--) { var r = l[i].getBoundingClientRect(); if (r.width > innerWidth * 0.3 && r.height > 100) return l[i]; }
+    return /^\/title\/\d+/.test(location.pathname) ? document : null;
+  }
+  function playButton(root) {
+    root = root || modalEl() || document;
+    var l = root.querySelectorAll(PLAYSEL);
+    for (var i = 0; i < l.length; i++) { var r = l[i].getBoundingClientRect(); if (r.width > 4 && r.height > 4) return l[i]; }
+    var bs = root.querySelectorAll('button, a[role=button], a[href*=""/watch/""]');
+    for (var j = 0; j < bs.length; j++) {
+      var t = ((bs[j].innerText || '') + ' ' + (bs[j].getAttribute('aria-label') || '')).trim();
+      if (/^(resume|play|continue|ituloy|i-play|panoorin)\b/i.test(t)) return bs[j];
+    }
+    return null;
+  }
+  function modalId() {
+    var m = /[?&]jbv=(\d+)/.exec(location.search) || /^\/title\/(\d+)/.exec(location.pathname);
+    return m ? m[1] : null;
+  }
+  function modalInfo() {
+    var m = modalEl(); if (!m) return null;
+    var name = '';
+    var logo = m.querySelector('.previewModal--player-titleTreatment-logo, [data-uia*=""titleTreatment""] img, img.title-treatment, .title-logo');
+    if (logo) name = (logo.getAttribute('alt') || logo.getAttribute('title') || '').trim();
+    if (!name) { var h = m.querySelector('.about-header strong, .previewModal--section-header strong, h1, h3.previewModal--player-titleTreatment-title'); if (h) name = (h.innerText || '').trim(); }
+    var b = playButton(m);
+    var label = b ? ((b.innerText || b.getAttribute('aria-label') || '').trim().split('\n')[0]) : '';
+    if (!name && !b) return null;
+    return { n: name.slice(0, 120), p: label.slice(0, 40), id: modalId() || '' };
+  }
   window.__kwRate = 1;
   function report() {
     var o = { t: '', e: '', pos: 0, dur: 0, paused: true, rate: 1, still: false };
@@ -67,13 +102,13 @@ public static class NetflixControl
       try { if (p) { o.pos = p.getCurrentTime() / 1000; o.dur = p.getDuration() / 1000; o.paused = p.isPaused(); } else if (v) { o.pos = v.currentTime; o.dur = v.duration || 0; o.paused = v.paused; } } catch (x) { }
       if (v) { if (window.__kwRate !== 1 && Math.abs(v.playbackRate - window.__kwRate) > 0.01) v.playbackRate = window.__kwRate; o.rate = v.playbackRate || 1; }
       o.still = !!document.querySelector(STILL);
-    }
+    } else { var mi = modalInfo(); if (mi) o.modal = mi; }
     var k = JSON.stringify(o);
     if (k !== window.__kwLastNow) { window.__kwLastNow = k; post('now:' + k); }
   }
   setInterval(report, 1000);
   function episodes() {
-    var id = watchId(); if (!id) { post('episodes:{}'); return 'none'; }
+    var id = watchId() || modalId(); if (!id) { post('episodes:{}'); return 'none'; }
     var urls = ['/nq/website/memberapi/release/metadata?movieid=' + id];
     try { var bid = window.netflix.reactContext.models.serverDefs.data.BUILD_IDENTIFIER; if (bid) urls.push('/api/shakti/' + bid + '/metadata?movieid=' + id); } catch (x) { }
     function next(i) {
@@ -105,6 +140,14 @@ public static class NetflixControl
     playEpisode: function (eid) { if (!/^\d{1,12}$/.test(String(eid))) return 'none'; location.href = 'https://www.netflix.com/watch/' + eid; return 'ok'; },
     seekTo: function (sec) { var p = player(); if (!p) return 'none'; p.seek(Math.max(0, sec) * 1000); return 'player'; },
     speed: function (r) { var v = document.querySelector('video'); if (!v) return 'none'; window.__kwRate = r; v.playbackRate = r; return 'video'; },
+    // The title's Play / Resume (its details open on the TV), as if OK was pressed on it.
+    play: function () {
+      var b = playButton();
+      if (b) { b.click(); return 'clicked'; }
+      var id = modalId();
+      if (id) { location.href = 'https://www.netflix.com/watch/' + id; return 'watch'; }
+      return 'none';
+    },
     cont: function () {
       if (click(STILL)) return 'clicked';
       var b = Array.prototype.filter.call(document.querySelectorAll('button'), function (x) { return /continue watching|continue playing/i.test(x.innerText || ''); })[0];
