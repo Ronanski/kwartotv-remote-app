@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -149,7 +150,7 @@ class PhoneButtonsTest {
         ui.tv(PhoneUi.fg("web-bilibili"))
         press("Back 10 seconds", "media.seek -10"); press("Play or pause the video", "media.playpause"); press("Forward 10 seconds", "media.seek 10")
         ui.tv(PhoneUi.fg("locked"))
-        press("Unlock the TV", "power.screenon"); press("Open the Lock tab"); ui.shot("b20-lock-from-remote"); rule.onNodeWithText("Lock & Screensaver").assertExists()
+        press("Unlock the TV", "power.screenon"); press("Open the Lock tab", "lock.get"); ui.shot("b20-lock-from-remote"); rule.onNodeWithText("Lock & Screensaver").assertExists()
         done("Live TV, music, videos, lock")
     }
 
@@ -183,6 +184,9 @@ class PhoneButtonsTest {
 
     private fun lockPress(what: String, vararg expect: String) {
         ui.clearSent()
+        val found = rule.onAllNodesWithContentDescription(what).fetchSemanticsNodes().size
+        println("lock: \"$what\" found $found")
+        assertEquals("one button \"$what\"", 1, found)
         reach(rule.onNodeWithContentDescription(what)).performClick()
         ui.settle()
         assertEquals("button \"$what\"", expect.toList(), ui.sent().filterNot { it.startsWith("lock.photo") || it == "lock.get" })
