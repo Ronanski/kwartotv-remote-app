@@ -69,12 +69,24 @@ class PhoneButtonsTest {
         pressText("Swipe"); ui.shot("b01-swipe-pad")
         pressText("Swipe to move\nTap = OK  ·  Long press = Back", "nav.ok")
         pressText("D-pad")
-        press("Keyboard"); rule.onNodeWithText("Type on the TV").assertExists()
+        press("Keyboard"); rule.onAllNodes(androidx.compose.ui.test.hasSetTextAction())[0].assertExists()
         done("Home")
+    }
+
+    @Test fun netflixBrowsing() {
+        start(); ui.tv(PhoneUi.fg("netflix"))
+        ui.shot("b10-netflix-browsing")
+        press("Skip the intro or recap", "netflix.skip"); press("Play the next episode", "netflix.next")
+        ui.clearSent()
+        reach(rule.onNodeWithText("Search Netflix")).performTextInput("dark")
+        rule.onNodeWithText("Search Netflix").performImeAction(); ui.settle()
+        assertEquals(listOf("netflix.search dark"), ui.sent()); log += "TYPE \"dark\" + search -> netflix.search dark"
+        done("Netflix browsing")
     }
 
     @Test fun netflix() {
         start(); ui.tv(PhoneUi.fg("netflix"), PhoneUi.NETFLIX)
+        ui.shot("b11-netflix-watching")
         press("Skip the intro or recap", "netflix.skip"); press("Play the next episode", "netflix.next")
         press("Play or pause", "media.playpause")
         // jump anywhere with the progress bar
@@ -123,6 +135,7 @@ class PhoneButtonsTest {
     @Test fun channelsTab() {
         start(); ui.tv(PhoneUi.fg("live"), PhoneUi.channel(1, "GMA 7"), PhoneUi.LINEUP)
         tab("Channels"); ui.clearSent()
+        ui.shot("b09-channels")
         pressText("HBO", "channel.number 5")
         pressText("Keypad")
         press("Open the channel list on the TV", "channel.list"); press("Channel up", "channel.next"); press("Last channel", "channel.last"); press("Channel down", "channel.prev")
@@ -145,7 +158,8 @@ class PhoneButtonsTest {
         start(); ui.tv(PhoneUi.fg("Home"))
         tab("More"); ui.clearSent()
         // Keyboard: letters as typed, Delete, Enter
-        reach(rule.onNodeWithText("Type on the TV")).performTextInput("hi"); ui.settle()
+        ui.shot("b08-keyboard")
+        reach(rule.onAllNodes(androidx.compose.ui.test.hasSetTextAction())[0]).performTextInput("hi"); ui.settle()
         assertEquals(listOf("key.text hi"), ui.sent()); log += "TYPE \"hi\" -> key.text hi"
         press("Backspace", "key.backspace"); press("Enter", "key.enter"); press("Back", "nav.back")
         // Mouse
