@@ -51,13 +51,19 @@ android {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.testLogging { showStandardStreams = true; events("passed", "failed", "started"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }; it.maxHeapSize = "2g"
-            // Robolectric downloads its Android jar itself; repo1 answers CI machines with 429 (too many requests).
-            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            // Robolectric's Android jar comes through Gradle (cached, retried) instead of Robolectric's own download,
+            // which CI machines often get refused (429 too many requests).
+            it.dependsOn("copyRobolectricJars")
+            it.systemProperty("robolectric.offline", "true")
+            it.systemProperty("robolectric.dependency.dir", rootProject.file("app/build/robolectric-jars").absolutePath)
         }
     }
 }
 
+val robolectricJars: Configuration by configurations.creating { isTransitive = false }
+
 dependencies {
+    robolectricJars("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
@@ -78,4 +84,9 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("org.json:json:20240303")
+}
+
+tasks.register<Copy>("copyRobolectricJars") {
+    from(robolectricJars)
+    into(rootProject.file("app/build/robolectric-jars"))
 }
