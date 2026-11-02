@@ -47,7 +47,9 @@ class PhoneButtonsTest {
 
     private fun pressText(text: String, vararg expect: String) {
         ui.clearSent()
-        reach(rule.onAllNodesWithText(text).onLast()).performClick()
+        val n = reach(rule.onAllNodesWithText(text).onLast())
+        // in a pop-up (menu, dialog) the touch cannot always be injected: press it the way TalkBack does
+        try { n.performClick() } catch (_: AssertionError) { n.performSemanticsAction(SemanticsActions.OnClick) }
         ui.settle()
         assertEquals("\"$text\"", expect.toList(), ui.sent())
         log += "TAP \"$text\" -> ${expect.joinToString(" + ").ifEmpty { "(nothing sent)" }}"
@@ -97,8 +99,8 @@ class PhoneButtonsTest {
         ui.shot("b14-netflix-title-episodes")
         pressText("A Powerful Mage", "netflix.episode 81234010")
         // ‹ goes back to the usual remote; the Netflix tile brings Netflix's remote back
-        press("Back to the remote"); rule.onNodeWithContentDescription("Open Live TV").assertExists()
-        press("Open Netflix", "app.netflix"); rule.onNodeWithContentDescription("Play the title open on the TV").assertExists()
+        press("Back to the remote"); ui.shot("b18-netflix-left"); rule.onNodeWithContentDescription("Open Live TV").assertExists()
+        press("Open Netflix", "app.netflix"); ui.shot("b19-netflix-again"); rule.onNodeWithContentDescription("Play the title open on the TV").assertExists()
         done("Netflix browsing")
     }
 
@@ -145,7 +147,7 @@ class PhoneButtonsTest {
         ui.tv(PhoneUi.fg("web-bilibili"))
         press("Back 10 seconds", "media.seek -10"); press("Play or pause the video", "media.playpause"); press("Forward 10 seconds", "media.seek 10")
         ui.tv(PhoneUi.fg("locked"))
-        press("Unlock the TV", "power.screenon"); press("Open the Lock tab"); rule.onNodeWithText("Lock & Screensaver").assertExists()
+        press("Unlock the TV", "power.screenon"); press("Open the Lock tab"); ui.shot("b20-lock-from-remote"); rule.onNodeWithText("Lock & Screensaver").assertExists()
         done("Live TV, music, videos, lock")
     }
 
@@ -153,6 +155,7 @@ class PhoneButtonsTest {
     @Test fun t8_lockTab() {
         start(); ui.tv(PhoneUi.fg("Home"), PhoneUi.SONG)
         tab("Lock")
+        println("sent on the Lock tab: " + ui.sent())
         assertTrue("asks the TV for the lock screen", ui.sent().contains("lock.get"))
         ui.tv("""{"type":"lock.state","locked":false,"clock":"classic","color":"FFFFFF","dim":100,"date":true,"song":true,"verse":true,"bg":"photos","folder":"C:\\Users\\me\\Pictures","folderName":"Pictures","photos":24,"every":20,"saver":10,"timer":0}""")
         ui.tv("""{"type":"lock.photo","i":0,"n":24,"jpg":"$TINY_JPEG"}""")

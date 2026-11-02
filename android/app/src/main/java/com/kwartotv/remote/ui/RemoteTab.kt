@@ -99,27 +99,24 @@ internal fun RemoteTab(vm: AppViewModel, send: (String, String?) -> Unit, onSign
             AppSquare(QuickApp.Netflix, Modifier.weight(1f)) { openNetflix() }
             AppSquare(QuickApp.Bilibili, Modifier.weight(1f)) { send(Cmd.APP_BILIBILI, null) }
         }
-        val card: (@Composable () -> Unit)? = when (what) {
-            OnTv.Locked -> { { NowCard("The TV is locked", "The clock is showing. Music and volume still work.") {
+        val need = listOf("netflix" to "Netflix", "bilibili" to "Bilibili").filter { it.first !in signedIn }
+        val hasCard = what != OnTv.Netflix && (what != OnTv.Home || need.isNotEmpty())
+        if (hasCard) Spacer(Modifier.height(16.dp))
+        when (what) {
+            OnTv.Locked -> NowCard("The TV is locked", "The clock is showing. Music and volume still work.") {
                 Cta("Unlock", "Unlock the TV", kind = CtaKind.White, icon = Icons.Rounded.LockOpen) { send(Cmd.SCREEN_ON, null) }
                 Cta("Lock screen options", "Open the Lock tab", kind = CtaKind.Line) { openLock() }
-            } } }
-            OnTv.Live -> { { LiveCard(vm, send) } }
-            OnTv.Music -> { { MusicCard(vm, send, openMusic) } }
-            OnTv.YouTube -> { { VideoCard("YouTube", send, next = true) } }
-            OnTv.BiliVideo -> { { VideoCard("Bilibili", send, next = false) } }
-            OnTv.OtherApp -> { { VideoCard(tvApp.removePrefix("web-").replaceFirstChar { it.uppercase() }, send, next = true) } }
-            OnTv.Netflix -> null
-            OnTv.Home -> {
-                val need = listOf("netflix" to "Netflix", "bilibili" to "Bilibili").filter { it.first !in signedIn }
-                if (need.isEmpty()) null else { {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        need.forEach { (id, name) -> Pill("Sign in to $name", "Sign in to $name on this phone for the TV", Modifier.weight(1f)) { onSignIn(id) } }
-                    }
-                } }
+            }
+            OnTv.Live -> LiveCard(vm, send)
+            OnTv.Music -> MusicCard(vm, send, openMusic)
+            OnTv.YouTube -> VideoCard("YouTube", send, next = true)
+            OnTv.BiliVideo -> VideoCard("Bilibili", send, next = false)
+            OnTv.OtherApp -> VideoCard(tvApp.removePrefix("web-").replaceFirstChar { it.uppercase() }, send, next = true)
+            OnTv.Netflix -> {}
+            OnTv.Home -> if (need.isNotEmpty()) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                need.forEach { (id, name) -> Pill("Sign in to $name", "Sign in to $name on this phone for the TV", Modifier.weight(1f)) { onSignIn(id) } }
             }
         }
-        if (card != null) { Spacer(Modifier.height(16.dp)); card() }
         Spacer(Modifier.height(24.dp))
         if (swipe) Touchpad(send) else DPad(send)
         Spacer(Modifier.height(24.dp))
