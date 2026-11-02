@@ -101,7 +101,7 @@ public sealed class WebTextTarget : ITextTarget
   }
   function fire(e) { e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }
   window.__kw = {
-    insert: function (s) { var e = field(); if (!e) return; if (!plain(e)) { document.execCommand('insertText', false, s); return; }
+    insert: function (s) { user(); var e = field(); if (!e) return; if (!plain(e)) { document.execCommand('insertText', false, s); return; }
       var r = sel(e);
       try { e.setRangeText(s, r[0], r[1], 'end'); } catch (x) { setValue(e, e.value + s); } fire(e); },
     backspace: function () { var e = field(); if (!e) return; if (!plain(e)) { document.execCommand('delete'); return; }
@@ -109,19 +109,33 @@ public sealed class WebTextTarget : ITextTarget
       if (a === b && a > 0) { try { e.setRangeText('', a - 1, a, 'end'); } catch (x) { setValue(e, e.value.slice(0, -1)); } }
       else if (a !== b) { try { e.setRangeText('', a, b, 'end'); } catch (x) { setValue(e, ''); } }
       fire(e); },
-    clear: function () { var e = field(); if (!e) return; if (!plain(e)) { e.textContent = ''; } else { setValue(e, ''); } fire(e); },
+    clear: function () { user(); var e = field(); if (!e) return; if (!plain(e)) { e.textContent = ''; } else { setValue(e, ''); } fire(e); },
     move: function (d) { var e = field(); if (!e) return;
       if (plain(e)) { try { var r = sel(e), to = r[0] !== r[1] ? (d < 0 ? r[0] : r[1]) : r[0] + d; to = Math.max(0, Math.min(e.value.length, to)); e.setSelectionRange(to, to); } catch (x) { } }
       else { try { window.getSelection().modify('move', d < 0 ? 'backward' : 'forward', 'character'); } catch (x) { } }
       report(); },
     // Enter: the page's own key handlers first (search boxes), then the form, as a real Enter would.
-    submit: function () { var e = field(); if (!e) return;
+    submit: function () { user(); var e = field(); if (!e) return;
       var o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }, go = true;
       try { go = e.dispatchEvent(new KeyboardEvent('keydown', o)); e.dispatchEvent(new KeyboardEvent('keypress', o)); e.dispatchEvent(new KeyboardEvent('keyup', o)); } catch (x) { }
       if (go && e.form && (e.tagName || '').toLowerCase() === 'input') { try { if (e.form.requestSubmit) e.form.requestSubmit(); else e.form.submit(); } catch (x) { } } },
     report: report
   };
-  document.addEventListener('focusin', function () { var e = field(); if (e) { window.chrome.webview.postMessage('textfocus:' + kind(e)); report(); } }, true);
+  // The keyboard opens only for a box the user chose (OK or a click on it, or the next box right after a Go from the
+  // keyboard or the phone), never for a box a page focuses by itself while it loads or when the window gets focus back.
+  // The same box getting the focus back (the keyboard closed, the window came to the front) is not a new request
+  // unless a key or a click came since.
+  var lastUser = 0, lastReal = 0, asked = null, askedAt = 0;
+  function user() { lastUser = Date.now(); }
+  function real() { lastUser = lastReal = Date.now(); }
+  ['keydown', 'mousedown', 'pointerdown', 'touchstart'].forEach(function (t) { document.addEventListener(t, real, true); });
+  function ask() { var e = field(); if (e) { asked = e; askedAt = Date.now(); window.chrome.webview.postMessage('textfocus:' + kind(e)); report(); } }
+  document.addEventListener('focusin', function () {
+    var e = field(); if (!e) return;
+    if (e === asked && lastReal <= askedAt) { report(); return; }
+    if (Date.now() - lastUser < 1500) ask(); else report();
+  }, true);
+  document.addEventListener('click', function (ev) { var e = field(); if (e && (ev.target === e || (e.contains && e.contains(ev.target)))) ask(); }, true);
   document.addEventListener('input', function () { if (field()) report(); }, true);
 })();";
 }

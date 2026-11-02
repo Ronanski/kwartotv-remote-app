@@ -49,6 +49,9 @@ public sealed class MusicView : PageBase
         if (IsLoaded) { Rebuild(Build); if (Window.GetWindow(this) is { IsActive: true }) FocusFirst(); }
     }
 
+    /// <summary>Search said or typed on the phone.</summary>
+    public void SearchFor(string q) => _ = SearchAsync(q);
+
     private async Task SearchAsync(string q)
     {
         _query = q; _found = null; Rebuild(Build);

@@ -111,6 +111,9 @@ public sealed class BilibiliView : PageBase
         if (IsLoaded && Window.GetWindow(this) is { IsActive: true }) FocusFirstOrLast();
     }
 
+    /// <summary>Search said or typed on the phone.</summary>
+    public void SearchFor(string q) => _ = SearchAsync(q);
+
     private async Task SearchAsync(string query)
     {
         _query = query; _found = null; Rebuild(Build);

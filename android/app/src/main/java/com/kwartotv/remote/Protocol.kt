@@ -86,6 +86,18 @@ object Cmd {
     const val NETFLIX_TRACKS = "netflix.tracks"
     /** Picks one: "a:<i>" audio, "s:<i>" subtitles. */
     const val NETFLIX_TRACK = "netflix.track"
+    /** Jump to a time (seconds) in the Netflix video. */
+    const val NETFLIX_SEEKTO = "netflix.seekto"
+    /** Playback speed: 0.5, 0.75, 1, 1.25, 1.5. */
+    const val NETFLIX_SPEED = "netflix.speed"
+    /** Asks for the episodes (the TV answers with "netflix.episodes"). */
+    const val NETFLIX_EPISODES = "netflix.episodes"
+    /** Plays an episode (its Netflix id). */
+    const val NETFLIX_EPISODE = "netflix.episode"
+    /** Answers "Are you still watching?". */
+    const val NETFLIX_CONTINUE = "netflix.continue"
+    /** A search said or typed on the phone: "app|words" (netflix, youtube, bilibili, music, channels). */
+    const val APP_SEARCH = "app.search"
     /** An app of the TV's catalog, by id (arg). */
     const val APP_OPEN = "app.open"
 
@@ -150,6 +162,9 @@ sealed interface TvMessage {
     data class MusicFound(val results: MusicResults) : TvMessage
     /** Netflix's Audio & Subtitles (empty lists: no video playing). */
     data class NetflixTracksNow(val tracks: NetflixTracks) : TvMessage
+    /** What Netflix plays on the TV (every second while a video is open). */
+    data class NetflixNowPlaying(val now: NetflixPlaying) : TvMessage
+    data class NetflixEpisodesNow(val episodes: NetflixEpisodes) : TvMessage
     data object Unknown : TvMessage
 }
 
@@ -167,11 +182,49 @@ fun parseTvMessage(text: String): TvMessage = try {
         "appupdate" -> TvMessage.AppUpdate(o.optLong("versionCode"))
         "fg" -> TvMessage.Foreground(o.optString("app").take(40))
         "music.results" -> TvMessage.MusicFound(parseMusicResults(o))
+        "netflix.now" -> TvMessage.NetflixNowPlaying(NetflixPlaying(o.optString("title").take(120), o.optString("episode").take(120),
+            o.optInt("pos").coerceIn(0, 86400), o.optInt("dur").coerceIn(0, 86400), o.optBoolean("paused"), o.optDouble("rate", 1.0), o.optBoolean("still")))
+        "netflix.episodes" -> TvMessage.NetflixEpisodesNow(parseEpisodes(o))
         "netflix.tracks" -> TvMessage.NetflixTracksNow(NetflixTracks(parseTracks(o, "audio"), parseTracks(o, "subs")))
         else -> TvMessage.Unknown
     }
 } catch (_: Exception) {
     TvMessage.Unknown
+}
+
+/** The Netflix video playing on the TV. [dur] 0: no video open. Times in seconds. */
+data class NetflixPlaying(val title: String, val episode: String, val pos: Int, val dur: Int, val paused: Boolean, val rate: Double, val still: Boolean)
+
+data class NetflixEpisode(val id: String, val name: String, val on: Boolean)
+data class NetflixSeason(val name: String, val episodes: List<NetflixEpisode>)
+/** Netflix's episodes; [onTv]: the phone could not get them, Netflix's own episode list was opened on the TV instead. */
+data class NetflixEpisodes(val show: String, val seasons: List<NetflixSeason>, val onTv: Boolean)
+
+fun parseEpisodes(o: JSONObject): NetflixEpisodes {
+    val ss = o.optJSONArray("seasons")
+    val seasons = (0 until minOf(ss?.length() ?: 0, 30)).mapNotNull { i ->
+        val s = ss!!.optJSONObject(i) ?: return@mapNotNull null
+        val es = s.optJSONArray("eps") ?: return@mapNotNull null
+        val eps = (0 until minOf(es.length(), 200)).mapNotNull { k ->
+            val e = es.optJSONObject(k) ?: return@mapNotNull null
+            val id = e.optString("id")
+            if (id.isEmpty() || id.length > 12 || !id.all { it.isDigit() }) null else NetflixEpisode(id, e.optString("n").take(100).ifBlank { "Episode" }, e.optBoolean("on"))
+        }
+        if (eps.isEmpty()) null else NetflixSeason(s.optString("n").take(60).ifBlank { "Season ${i + 1}" }, eps)
+    }
+    return NetflixEpisodes(o.optString("show").take(120), seasons, o.optBoolean("onTv"))
+}
+
+/** 1:05:09 or 5:09. */
+fun clock(seconds: Int): String {
+    val h = seconds / 3600; val m = seconds % 3600 / 60; val s = seconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
+/** Which app a search said on the phone goes to, from what the TV shows (null: ask which). */
+fun searchAppFor(tvApp: String): String? = when (tvApp) {
+    "netflix" -> "netflix"; "youtube" -> "youtube"; "Bilibili", "web-bilibili" -> "bilibili"; "Music" -> "music"; "live" -> "channels"
+    else -> null
 }
 
 /** One audio or subtitle choice of the Netflix video on the TV. */

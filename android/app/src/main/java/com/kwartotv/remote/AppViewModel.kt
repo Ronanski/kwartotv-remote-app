@@ -152,6 +152,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onStart() {
         client.foreground = true
+        client.appVisible.value = true
         // The app can stay open for days (the remote runs in the background): look for an update each time it comes back.
         if (android.os.SystemClock.elapsedRealtime() - lastUpdateCheck > 20_000L && update.value !is UpdateState.Working) checkForUpdate(manual = false)
         val tv = selected() ?: return
@@ -161,6 +162,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The app left the screen: the background service keeps the connection (it has a Disconnect button). */
     fun onStop() {
+        client.appVisible.value = false
         if (!com.kwartotv.remote.net.RemoteService.running) { client.foreground = false; client.disconnect() }
     }
 

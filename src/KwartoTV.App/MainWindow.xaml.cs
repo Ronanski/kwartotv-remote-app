@@ -460,6 +460,38 @@ public partial class MainWindow : Window, IShell
     public void LaunchBilibiliWebsite() => LaunchWeb(new WebTile("bilibili", "Bilibili", AppLaunchPlans.BilibiliUrl));
 
     /// <summary>Plays a show or video picked on the Bilibili screen: only its video, fullscreen; Back returns to the rows.</summary>
+    /// <summary>A search said or typed on the phone ("app|words"): opens that app on its results.</summary>
+    public void Search(string arg)
+    {
+        if (!AppSearch.TryParse(arg, out var app, out var q)) return;
+        AppPaths.LogLine($"search: {app} \"{q}\"");
+        switch (app)
+        {
+            case "netflix": Netflix("netflix.search", q); break;
+            case "youtube":
+            {
+                // YouTube's TV app opens straight on its results with this address (checked: tools/probe/yt-tv-search.js).
+                var url = "https://www.youtube.com/tv#/search?q=" + Uri.EscapeDataString(q);
+                if (_web is { Kind: ForegroundKind.YouTube } yw) { yw.Go(url); Native.BringToFront(new WindowInteropHelper(yw).Handle); }
+                else OpenWeb(url, "youtube", ForegroundKind.YouTube, WebAppWindow.TvUserAgent, "YouTube", () => _tv.Apps.LaunchYouTube());
+                break;
+            }
+            case "bilibili":
+                LaunchBilibili();
+                (_bilibili ??= new BilibiliView(this)).SearchFor(q);
+                break;
+            case "music":
+                LaunchYouTubeMusic();
+                (_musicView ??= new MusicView(this)).SearchFor(q);
+                _tv.MusicPlayer.Search(q);   // the songs also go to the phone's Music tab
+                break;
+            case "channels":
+                if (_player is not { IsVisible: true }) { ShowLiveTv(); Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _player?.SearchChannels(q)); }
+                else _player.SearchChannels(q);
+                break;
+        }
+    }
+
     public bool BackFromVideoPage()
     {
         if (_web is not { IsVisible: true, PlayerOnly: true } w) return false;
@@ -490,6 +522,17 @@ public partial class MainWindow : Window, IShell
         WebAppWindow.YouTubeRenderMode = _tv.Settings.YouTubeRenderMode;
         AppPaths.LogLine($"web: open {name} ({profile})");
         var w = new WebAppWindow(url, profile, kind, userAgent, videoOnly) { Owner = this, SignInService = playerOnly ? null : signIn, PlayerOnly = playerOnly };
+        if (kind == ForegroundKind.Netflix)
+        {
+            // The phone's Netflix controls: what plays (title, time, "still watching?") and the episodes.
+            w.NetflixNow += j => { if (NetflixNow.Message(j) is { } m) _tv.Server?.Broadcast(m); };
+            w.NetflixEpisodes += j =>
+            {
+                var m = NetflixNow.EpisodesMessage(j);
+                AppPaths.LogLine("netflix: episodes " + (m is null ? "shown on the TV" : "sent"));
+                _tv.Server?.Broadcast(m ?? "{\"type\":\"netflix.episodes\",\"show\":\"\",\"seasons\":[],\"onTv\":true}");
+            };
+        }
         w.SignedOut += id =>
         {
             if (PhoneSignIn.Find(id) is not { } svc) return;
@@ -622,6 +665,14 @@ public partial class MainWindow : Window, IShell
         }
         if (w is null) { ShowToast("Open Netflix first."); return; }
         if (cmd == "netflix.tracks") { _ = SendNetflixTracksAsync(w, 0); return; }
+        switch (cmd)
+        {
+            case "netflix.seekto": _ = NetflixAsync(w, $"seekTo({int.Parse(arg!, System.Globalization.CultureInfo.InvariantCulture)})"); return;
+            case "netflix.speed": _ = NetflixAsync(w, $"speed({arg})"); return;
+            case "netflix.episodes": _ = NetflixAsync(w, "episodes()"); return;
+            case "netflix.episode": _ = NetflixAsync(w, $"playEpisode('{arg}')"); return;
+            case "netflix.continue": _ = NetflixAsync(w, "cont()"); return;
+        }
         if (cmd == "netflix.track")
         {
             if (!NetflixTracks.TryParsePick(arg, out var kind, out var i)) return;

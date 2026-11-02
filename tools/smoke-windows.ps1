@@ -452,12 +452,23 @@ try {
     Phone "netflix.search" "stranger things" "netflix: search" 10 "Netflix search from the phone" "45b-phone-netflix-search"
     Phone "netflix.tracks" $null "netflix: tracks" 10 "Audio & Subtitles asked from the phone (answers even with no video)" $null
     Phone "netflix.track" "s:0" "netflix: subtitles 0" 10 "a subtitle pick from the phone reaches Netflix" $null
+    Phone "netflix.episodes" $null "netflix: episodes" 10 "Episodes asked from the phone (answers even with no show)" $null
+    Phone "netflix.speed" "1.5" "netflix: speed\(1.5\)" 10 "speed from the phone reaches Netflix" $null
+    Phone "netflix.seekto" "60" "netflix: seekTo\(60\)" 10 "jump to a time from the phone reaches Netflix" $null
+    Phone "netflix.continue" $null "netflix: cont\(\)" 10 "Continue watching from the phone reaches Netflix" $null
     Phone "nav.home" $null "web: closed netflix" 10 "Home button leaves Netflix" $null
     Phone "app.open" "primevideo" "app: Prime Video" 10 "More apps: Prime Video opens" $null
     Phone "nav.home" $null "home" 10 "Home button leaves Prime Video" $null
     Phone "app.settings" $null "page: Settings" 10 "Settings opens" "46-phone-settings"
     Phone "nav.down" $null $null 5 "arrows in Settings" $null
     Phone "nav.back" $null "page: Home|home" 10 "Back from Settings goes Home" $null
+    # Voice search (the words come from the phone's speech recognizer): each app opens on its results.
+    Phone "app.search" "youtube|lofi hip hop" "web: open YouTube" 10 "voice search opens YouTube on the results" $null
+    Start-Sleep -Seconds 10; Shot "47c-phone-voice-youtube"
+    Phone "nav.home" $null "web: closed youtube" 10 "Home after the YouTube search" $null
+    Phone "app.search" "bilibili|naruto" 'bilibili: search "naruto"' 25 "voice search on Bilibili" "47d-phone-voice-bilibili"
+    Phone "app.search" "music|Ben&Ben Maybe the Night" 'music: search "Ben&Ben Maybe the Night"' 25 "voice search on YouTube Music" "47e-phone-voice-music"
+    Phone "nav.home" $null "home" 10 "Home after the voice searches" $null
     Phone "music.play" "dQw4w9WgXcQ" "page: Music" 10 "a song picked on the phone shows the TV's YouTube Music screen" "47b-phone-music-screen"
     $fgMsg = WsReceiveUntil "fg" 5
     Warn ($null -ne $fgMsg -and $fgMsg.app -eq "Music") "phone: the phone is told the TV shows YouTube Music ($(if ($fgMsg) { $fgMsg.app }))"

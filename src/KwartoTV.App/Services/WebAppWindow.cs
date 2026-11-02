@@ -91,6 +91,13 @@ public sealed class WebAppWindow : Window
 
     /// <summary>A page finished loading (its address).</summary>
     public event Action<string>? Navigated;
+    /// <summary>Netflix's report of what plays (NetflixControl, every second while a video is open), JSON.</summary>
+    public event Action<string>? NetflixNow;
+    /// <summary>Netflix's episodes for the phone's picker (NetflixControl episodes()), JSON.</summary>
+    public event Action<string>? NetflixEpisodes;
+
+    /// <summary>Opens another address in this window (a search from the phone).</summary>
+    public void Go(string url) { try { _web.CoreWebView2?.Navigate(url); } catch (Exception ex) { AppPaths.LogLine("web: " + ex.Message); } }
 
     /// <summary>User pressed F1 inside the page.</summary>
     public event Action? HomeRequested;
@@ -259,6 +266,8 @@ public sealed class WebAppWindow : Window
                 else if (msg == "chdown") Dispatcher.BeginInvoke(() => ChannelDown?.Invoke());
                 else if (msg?.StartsWith("tvfocus:") == true && _focusLogs++ < 40) AppPaths.LogLine("web highlight: " + msg[8..]);
                 else if (msg?.StartsWith("player:") == true && _focusLogs++ < 40) AppPaths.LogLine("web player: " + msg[7..]);
+                else if (msg?.StartsWith("netflix:now:") == true) { var j = msg[12..]; Dispatcher.BeginInvoke(() => NetflixNow?.Invoke(j)); }
+                else if (msg?.StartsWith("netflix:episodes:") == true) { var j = msg[17..]; Dispatcher.BeginInvoke(() => NetflixEpisodes?.Invoke(j)); }
                 else if (msg?.StartsWith("netflix:") == true) AppPaths.LogLine("netflix: " + msg[8..]);
                 else if (msg?.StartsWith("textfocus") == true && Kind != ForegroundKind.YouTube)
                 {

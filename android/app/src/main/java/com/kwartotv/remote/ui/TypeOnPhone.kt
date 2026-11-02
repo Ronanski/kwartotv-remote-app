@@ -53,7 +53,19 @@ fun TypeOnPhone(vm: AppViewModel) {
             autofillHintFor(r)?.let { setAutofillHints(it) }
         }
     }
+    // What is typed here shows on the TV as it is typed (one text box, not two keyboards that fight).
+    val live = remember(r) { android.os.Handler(android.os.Looper.getMainLooper()) }
+    val sendLive = remember(r) { Runnable { client.sendText(field.text.toString(), false) } }
+    remember(r) {
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { live.removeCallbacks(sendLive); live.postDelayed(sendLive, 250) }
+        })
+    }
+    val voice = rememberVoice(r.title ?: titleFor(r)) { said -> field.setText(said); field.setSelection(field.text.length) }
     fun send(go: Boolean) {
+        live.removeCallbacks(sendLive)
         Haptics.click(context)
         if (client.sendText(field.text.toString(), go)) client.dismissText()
         else { Toast.makeText(context, "Not connected to the TV. Reconnecting…", Toast.LENGTH_SHORT).show(); vm.reconnect() }
@@ -70,6 +82,7 @@ fun TypeOnPhone(vm: AppViewModel) {
                     else "The TV is waiting for text. Type it here (or let your phone fill it), then Send.",
                     fontSize = 13.sp, color = colors.onSurfaceVariant,
                 )
+                if (r.kind != "password") TextButton(onClick = { Haptics.click(context); voice() }) { Text("🎤  Say it") }
                 AndroidView(factory = {
                     field.also { f ->
                         f.post {

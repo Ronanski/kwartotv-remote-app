@@ -38,7 +38,7 @@ public sealed class CommandRouter
         // YouTube Music on the TV (it plays on behind the lock screen)
         "music.open", "music.playpause", "music.next", "music.prev", "music.stop", "music.search", "music.play", "music.signin", "music.home",
         // Netflix's own player from the phone
-        "netflix.skip", "netflix.next", "netflix.search", "netflix.tracks", "netflix.track",
+        "netflix.skip", "netflix.next", "netflix.search", "netflix.tracks", "netflix.track", "netflix.seekto", "netflix.speed", "netflix.episodes", "netflix.episode", "netflix.continue", "app.search",
     };
 
     // While the TV is locked (clock screen) only these work: unlock, power, and volume.
@@ -129,6 +129,18 @@ public sealed class CommandRouter
                 break;
             case "netflix.search":
                 if (!Music.IsQuery(c.Arg)) return new(false, "Type what to search.");
+                break;
+            case "app.search":
+                if (!AppSearch.TryParse(c.Arg, out _, out _)) return new(false, "Say or type what to search.");
+                break;
+            case "netflix.seekto":
+                if (!int.TryParse(c.Arg, System.Globalization.NumberStyles.None, null, out var st) || st > 86400) return new(false, "bad time");
+                break;
+            case "netflix.speed":
+                if (!NetflixNow.IsSpeed(c.Arg)) return new(false, "bad speed");
+                break;
+            case "netflix.episode":
+                if (c.Arg is not { Length: >= 1 and <= 12 } ep || !ep.All(char.IsAsciiDigit)) return new(false, "bad episode");
                 break;
             case "netflix.track":
                 if (!NetflixTracks.TryParsePick(c.Arg, out _, out _)) return new(false, "bad track");

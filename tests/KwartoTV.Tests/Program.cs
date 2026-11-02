@@ -464,6 +464,21 @@ Check(RemoteServer.PortsToTry(18765).SequenceEqual(new[] { 18765, 8765, 8766, 87
         Check(tm is not null && tm.Contains("\"type\":\"netflix.tracks\"") && tm.Contains("\"n\":\"English [Original]\",\"on\":true") && tm.Contains("\"n\":\"Japanese\",\"on\":false") && tm.Contains("\"n\":\"Track 1\"") && !tm.Contains("via"),
             "netflix: track lists are cleaned for the phone (" + tm + ")");
         Check(NetflixTracks.Message("{\"audio\":[],\"subs\":[]}") is null && NetflixTracks.Message("nope") is null && NetflixTracks.Message(null) is null, "netflix: no lists, no message");
+        Check(nr.Handle(new(null, "netflix.seekto", "1800")).Ok && nh.Last == "netflix.seekto:1800" && !nr.Handle(new(null, "netflix.seekto", "-5")).Ok && !nr.Handle(new(null, "netflix.seekto", "99999")).Ok
+            && nr.Handle(new(null, "netflix.speed", "1.5")).Ok && !nr.Handle(new(null, "netflix.speed", "3")).Ok && !nr.Handle(new(null, "netflix.speed", "1);alert(1")).Ok
+            && nr.Handle(new(null, "netflix.episodes", null)).Ok && nr.Handle(new(null, "netflix.episode", "80100173")).Ok && !nr.Handle(new(null, "netflix.episode", "8010'x")).Ok
+            && nr.Handle(new(null, "netflix.continue", null)).Ok, "netflix: seek to a time, speed, episodes, continue watching (bad values refused)");
+        var nn = NetflixNow.Message("{\"t\":\"Dark\",\"e\":\"S1:E2 \\u0007Lies\",\"pos\":125.4,\"dur\":3000,\"paused\":false,\"rate\":1.5,\"still\":true}");
+        Check(nn is not null && nn.Contains("\"type\":\"netflix.now\"") && nn.Contains("\"title\":\"Dark\"") && nn.Contains("\"episode\":\"S1:E2 Lies\"") && nn.Contains("\"pos\":125") && nn.Contains("\"dur\":3000") && nn.Contains("\"rate\":1.5") && nn.Contains("\"still\":true"),
+            "netflix: what plays goes to the phone, cleaned (" + nn + ")");
+        Check(NetflixNow.Message("nope") is null && NetflixNow.Message("{\"pos\":-4,\"dur\":1e9}")!.Contains("\"pos\":0,\"dur\":0"), "netflix: bad times are zero");
+        var ne = NetflixNow.EpisodesMessage("{\"show\":\"Dark\",\"seasons\":[{\"n\":\"Season 1\",\"eps\":[{\"id\":\"80100172\",\"n\":\"1. Secrets\",\"on\":false},{\"id\":\"80'1\",\"n\":\"bad\"},{\"id\":80100173,\"n\":\"2. Lies\",\"on\":true}]}]}");
+        Check(ne is not null && ne.Contains("\"id\":\"80100172\"") && ne.Contains("\"id\":\"80100173\"") && !ne.Contains("bad") && ne.Contains("\"on\":true"), "netflix: episodes for the phone, bad ids left out (" + ne + ")");
+        Check(NetflixNow.EpisodesMessage("{\"seasons\":[]}") is null, "netflix: no episodes, no list");
+        Check(nr.Handle(new(null, "app.search", "youtube|lofi hip hop")).Ok && nh.Last == "app.search:youtube|lofi hip hop" && nr.Handle(new(null, "app.search", "channels|gma")).Ok
+            && !nr.Handle(new(null, "app.search", "spotify|x")).Ok && !nr.Handle(new(null, "app.search", "netflix| ")).Ok && !nr.Handle(new(null, "app.search", "netflix")).Ok,
+            "voice search: said on the phone for Netflix, YouTube, Bilibili, music or channels");
+        Check(AppSearch.TryParse("music|Ben&Ben Maybe the Night", out var sa, out var sq) && sa == "music" && sq == "Ben&Ben Maybe the Night", "voice search: the words keep | and & safe");
     }
     Check(mr2.Handle(new(null, "power.timer", "30")).Ok && mh2.Last == "power.timer:30" && !mr2.Handle(new(null, "power.timer", "999")).Ok && !mr2.Handle(new(null, "power.timer", "x")).Ok, "sleep timer works while locked, bad values refused");
     Check(new AppSettings().ScreensaverMinutes == 10 && AppSettings.DescribeScreensaver(0) == "Off" && AppSettings.ScreensaverChoices.Contains(0), "screensaver after 10 idle minutes by default, can be turned off");

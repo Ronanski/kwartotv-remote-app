@@ -75,6 +75,9 @@ class RemoteClient {
     val catalogUnsupported: StateFlow<Boolean> = _catalogUnsupported
     private var catalogRequest: String? = null
 
+    /** The remote app is on the phone's screen (when it is not, a text request comes as a notification). */
+    val appVisible = MutableStateFlow(false)
+
     private val _textRequest = MutableStateFlow<TextRequest?>(null)
     /** A text box on the TV waiting for text (the phone opens its keyboard), or null. */
     val textRequest: StateFlow<TextRequest?> = _textRequest
@@ -93,6 +96,13 @@ class RemoteClient {
     private val _tvApp = MutableStateFlow("")
     /** What the TV shows now ("netflix", "youtube", "live", "Home"…). */
     val tvApp: StateFlow<String> = _tvApp
+
+    private val _netflixNow = MutableStateFlow<com.kwartotv.remote.NetflixPlaying?>(null)
+    /** What Netflix plays on the TV (null or dur 0: no video). */
+    val netflixNow: StateFlow<com.kwartotv.remote.NetflixPlaying?> = _netflixNow
+    private val _netflixEpisodes = MutableStateFlow<com.kwartotv.remote.NetflixEpisodes?>(null)
+    val netflixEpisodes: StateFlow<com.kwartotv.remote.NetflixEpisodes?> = _netflixEpisodes
+    fun askNetflixEpisodes(): Boolean { _netflixEpisodes.value = null; return send(Cmd.NETFLIX_EPISODES, null) }
 
     private val _netflixTracks = MutableStateFlow<NetflixTracks?>(null)
     /** Netflix's Audio & Subtitles, after the phone asked (null: not asked yet / waiting). */
@@ -204,8 +214,10 @@ class RemoteClient {
                         is TvMessage.SignInWanted -> _signIn.value = m.request
                         is TvMessage.MusicNow -> _music.value = m.music
                         is TvMessage.AppUpdate -> _tvSeesApk.value = m.versionCode
-                        is TvMessage.Foreground -> _tvApp.value = m.app
+                        is TvMessage.Foreground -> { _tvApp.value = m.app; if (m.app != "netflix") _netflixNow.value = null }
                         is TvMessage.NetflixTracksNow -> _netflixTracks.value = m.tracks
+                        is TvMessage.NetflixNowPlaying -> _netflixNow.value = m.now
+                        is TvMessage.NetflixEpisodesNow -> _netflixEpisodes.value = m.episodes
                         is TvMessage.MusicFound -> { _musicResults.value = m.results; _musicSearching.value = false }
                         is TvMessage.Scanning -> _catalog.value = _catalog.value?.copy(scan = m.scan)
                             ?: Catalog(emptyList(), 0, 0, m.scan.total, m.scan)

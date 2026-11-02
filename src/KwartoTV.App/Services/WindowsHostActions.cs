@@ -51,6 +51,8 @@ public interface IShell
     void ScreenOn();
     /// <summary>Closes the screensaver; true when it was up (the button that woke the TV does nothing else).</summary>
     bool CloseScreensaver();
+    /// <summary>A search said or typed on the phone: "app|words" (AppSearch).</summary>
+    void Search(string arg);
     /// <summary>Back while a video plays alone (a Bilibili episode): back to the rows, even while the page still loads. False: not that.</summary>
     bool BackFromVideoPage();
     /// <summary>Sleep timer in minutes (0 = off).</summary>
@@ -157,7 +159,9 @@ public sealed class WindowsHostActions : IHostActions
             // The window handle can only be read on the UI thread; this runs on the remote server's thread.
             case "power.screenoff": ui.Invoke(shell.ScreenOff); return;
             case "power.screenon": ui.Invoke(shell.ScreenOn); return;
-            case "netflix.skip" or "netflix.next" or "netflix.search" or "netflix.tracks" or "netflix.track": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
+            case "app.search": ui.Invoke(() => shell.Search(arg!)); return;
+            case "netflix.skip" or "netflix.next" or "netflix.search" or "netflix.tracks" or "netflix.track" or "netflix.seekto" or "netflix.speed"
+                or "netflix.episodes" or "netflix.episode" or "netflix.continue": ui.Invoke(() => shell.Netflix(cmd, arg)); return;
             case "power.timer": ui.Invoke(() => shell.SleepTimer(int.Parse(arg!, CultureInfo.InvariantCulture))); return;
             case "power.shutdown": PowerActions.Shutdown(); return;
             case "power.restart": PowerActions.Restart(); return;

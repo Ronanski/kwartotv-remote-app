@@ -521,6 +521,13 @@ public sealed class PlayerWindow : Window
         DrawGuide();
     }
 
+    /// <summary>Search said or typed on the phone: the channel list opens on the matches.</summary>
+    public void SearchChannels(string q)
+    {
+        if (!_guideOpen) OpenGuide();
+        SearchChanged(q, true);
+    }
+
     private void OpenSearchKeyboard()
     {
         if (_searchKeyboard is not null) return;

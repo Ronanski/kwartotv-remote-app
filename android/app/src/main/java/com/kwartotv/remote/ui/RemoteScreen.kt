@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -102,6 +103,9 @@ import com.kwartotv.remote.LineupChannel
 import com.kwartotv.remote.filterLineup
 import com.kwartotv.remote.lineupGroups
 import com.kwartotv.remote.Haptics
+import com.kwartotv.remote.NetflixTrack
+import com.kwartotv.remote.clock
+import com.kwartotv.remote.searchAppFor
 import com.kwartotv.remote.net.Conn
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -207,8 +211,19 @@ fun RemoteScreen(vm: AppViewModel) {
                         DropdownMenuItem(text = { Text("Forget ${tv.name}") }, onClick = { menu = false; vm.forget(tv) })
                     }
                 }
-                // Lock / screensaver, always in sight (the TV says when it is locked).
+                // Voice search for every app: said on the phone, searched in the app on the TV (asks which on Home).
                 val tvNow by vm.client.tvApp.collectAsState()
+                var heard by remember { mutableStateOf<String?>(null) }
+                val ctx = LocalContext.current
+                val say = rememberVoice("Say what to search") { said ->
+                    val app = searchAppFor(tvNow)
+                    if (app != null) { send(Cmd.APP_SEARCH, "$app|$said"); Toast.makeText(ctx, "Searching “$said”", Toast.LENGTH_SHORT).show() }
+                    else heard = said
+                }
+                Icon(Icons.Rounded.Mic, "Voice search", tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(end = 6.dp).size(40.dp).clip(CircleShape).background(Card).clickable { Haptics.click(ctx); say() }.padding(9.dp))
+                heard?.let { words -> SearchWhereDialog(words, { heard = null }) { app, q -> send(Cmd.APP_SEARCH, "$app|$q"); heard = null } }
+                // Lock / screensaver, always in sight (the TV says when it is locked).
                 val locked = tvNow == "locked"
                 Row(
                     Modifier.clip(RoundedCornerShape(20.dp)).background(if (locked) Accent else Card).border(1.dp, Hairline, RoundedCornerShape(20.dp))
@@ -290,32 +305,126 @@ private fun NavTab(vm: AppViewModel, send: (String, String?) -> Unit, onSignIn: 
             RemoteKey("", "Forward 10 seconds", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.Rounded.Forward10) { send(Cmd.SEEK, "10") }
             RemoteKey("", "Next", Modifier.weight(1f), height = 52.dp, icon = Icons.Rounded.SkipNext) { send(Cmd.NEXT, null) }
         }
-        // Netflix's own buttons, only while Netflix is on the TV.
-        if (tvApp == "netflix") {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_SKIP, null) }
-                RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_NEXT, null) }
-            }
-            // Audio & Subtitles, like the menu of the Netflix TV app.
-            var tracksOpen by remember { mutableStateOf(false) }
-            RemoteKey("Audio & Subtitles", "Choose the audio language and subtitles", Modifier.fillMaxWidth(), fontSize = 15, height = 48.dp, icon = Icons.Rounded.Subtitles) {
-                vm.client.askNetflixTracks(); tracksOpen = true
-            }
-            if (tracksOpen) NetflixTracksDialog(vm, send) { tracksOpen = false }
-            var nq by rememberSaveable { mutableStateOf("") }
-            OutlinedTextField(
-                value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search Netflix") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { if (nq.isNotBlank()) send(Cmd.NETFLIX_SEARCH, nq.trim()) }),
-            )
-        }
+        // Netflix's own controls, only while Netflix is on the TV.
+        if (tvApp == "netflix") NetflixPanel(vm, send)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             RemoteKey("", "Volume down", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeDown) { send(Cmd.VOL_DOWN, null) }
             RemoteKey("", "Mute", Modifier.weight(1f), height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeOff) { send(Cmd.MUTE, null) }
             RemoteKey("", "Volume up", Modifier.weight(1f), repeat = true, height = 52.dp, icon = Icons.AutoMirrored.Rounded.VolumeUp) { send(Cmd.VOL_UP, null) }
         }
     }
+}
+
+/** Something said on the phone while the TV shows Home: which app to search it in (the words can be corrected). */
+@Composable
+private fun SearchWhereDialog(words: String, close: () -> Unit, search: (String, String) -> Unit) {
+    var q by remember(words) { mutableStateOf(words) }
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text("Search where?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = q, onValueChange = { q = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                listOf("youtube" to "YouTube", "netflix" to "Netflix", "music" to "YouTube Music", "bilibili" to "Bilibili", "channels" to "Live TV channels").forEach { (id, name) ->
+                    RemoteKey(name, "Search $name", Modifier.fillMaxWidth(), fontSize = 15, height = 46.dp) { if (q.isNotBlank()) search(id, q.trim()) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = close) { Text("Cancel") } },
+    )
+}
+
+/** Netflix on the TV, like its TV app: what plays with a progress bar to jump anywhere, and every player button. */
+@Composable
+private fun NetflixPanel(vm: AppViewModel, send: (String, String?) -> Unit) {
+    val now by vm.client.netflixNow.collectAsState()
+    var tracksOpen by remember { mutableStateOf(false) }
+    var episodesOpen by remember { mutableStateOf(false) }
+    var speedOpen by remember { mutableStateOf(false) }
+    val n = now
+    if (n != null && n.dur > 0) Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Card).border(1.dp, Hairline, RoundedCornerShape(18.dp)).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(n.title.ifBlank { "Netflix" }, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (n.episode.isNotBlank()) Text(n.episode, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Drag to any point, let go: the video jumps there.
+        var drag by remember { mutableStateOf<Float?>(null) }
+        androidx.compose.material3.Slider(
+            value = (drag ?: n.pos.toFloat()).coerceIn(0f, n.dur.toFloat()), valueRange = 0f..n.dur.toFloat(),
+            onValueChange = { drag = it },
+            onValueChangeFinished = { drag?.let { send(Cmd.NETFLIX_SEEKTO, it.toInt().toString()) }; drag = null },
+        )
+        Row(Modifier.fillMaxWidth()) {
+            Text(clock((drag ?: n.pos.toFloat()).toInt()), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            if (n.rate != 1.0) Text("${n.rate}×   ", fontSize = 12.sp, color = Accent)
+            Text("−" + clock(n.dur - n.pos), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (n.still) RemoteKey("Yes, continue watching", "Answer Are you still watching", Modifier.fillMaxWidth(), primary = true, fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_CONTINUE, null) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        RemoteKey("Skip intro", "Skip the intro or recap", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_SKIP, null) }
+        RemoteKey("Next episode", "Play the next episode", Modifier.weight(1f), fontSize = 15, height = 48.dp) { send(Cmd.NETFLIX_NEXT, null) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        RemoteKey("Audio & Subs", "Choose the audio language and subtitles", Modifier.weight(1f), fontSize = 14, height = 48.dp) { vm.client.askNetflixTracks(); tracksOpen = true }
+        RemoteKey("Episodes", "Choose an episode", Modifier.weight(1f), fontSize = 14, height = 48.dp) { vm.client.askNetflixEpisodes(); episodesOpen = true }
+        RemoteKey("Speed", "Playback speed", Modifier.weight(1f), fontSize = 14, height = 48.dp) { speedOpen = true }
+    }
+    var nq by rememberSaveable { mutableStateOf("") }
+    val sayNetflix = rememberVoice("Search Netflix") { said -> nq = said; send(Cmd.NETFLIX_SEARCH, said) }
+    OutlinedTextField(
+        value = nq, onValueChange = { nq = it.take(60) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        label = { Text("Search Netflix") },
+        trailingIcon = { Icon(Icons.Rounded.Mic, "Say it", modifier = Modifier.clip(CircleShape).clickable { sayNetflix() }.padding(8.dp)) },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { if (nq.isNotBlank()) send(Cmd.NETFLIX_SEARCH, nq.trim()) }),
+    )
+    if (tracksOpen) NetflixTracksDialog(vm, send) { tracksOpen = false }
+    if (episodesOpen) NetflixEpisodesDialog(vm, send) { episodesOpen = false }
+    if (speedOpen) AlertDialog(
+        onDismissRequest = { speedOpen = false },
+        title = { Text("Playback speed") },
+        text = {
+            Column {
+                listOf("0.5", "0.75", "1", "1.25", "1.5").forEach { r ->
+                    val on = (n?.rate ?: 1.0) == r.toDouble()
+                    TrackRow(NetflixTrack(0, if (r == "1") "1× (normal)" else "$r×", on)) { send(Cmd.NETFLIX_SPEED, r); speedOpen = false }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { speedOpen = false }) { Text("Done") } },
+    )
+}
+
+@Composable
+private fun NetflixEpisodesDialog(vm: AppViewModel, send: (String, String?) -> Unit, close: () -> Unit) {
+    val eps by vm.client.netflixEpisodes.collectAsState()
+    var season by remember { mutableIntStateOf(-1) }
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text(eps?.show?.ifBlank { null } ?: "Episodes") },
+        text = {
+            val e = eps
+            when {
+                e == null -> Text("Asking Netflix on the TV…")
+                e.seasons.isEmpty() && e.onTv -> Text("Netflix's episode list is open on the TV: choose with the arrows and OK.")
+                e.seasons.isEmpty() -> Text("Play a show on Netflix first.")
+                else -> {
+                    val cur = if (season in e.seasons.indices) season else e.seasons.indexOfFirst { s -> s.episodes.any { it.on } }.coerceAtLeast(0)
+                    Column {
+                        if (e.seasons.size > 1) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(e.seasons.size) { i -> FilterChip(selected = i == cur, onClick = { season = i }, label = { Text(e.seasons[i].name) }) }
+                        }
+                        LazyColumn(Modifier.height(360.dp)) {
+                            items(e.seasons[cur].episodes) { ep -> TrackRow(NetflixTrack(0, ep.name, ep.on)) { send(Cmd.NETFLIX_EPISODE, ep.id); close() } }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = close) { Text("Done") } },
+    )
 }
 
 @Composable
@@ -344,7 +453,7 @@ private fun NetflixTracksDialog(vm: AppViewModel, send: (String, String?) -> Uni
 }
 
 @Composable
-private fun TrackRow(t: com.kwartotv.remote.NetflixTrack, pick: () -> Unit) {
+private fun TrackRow(t: NetflixTrack, pick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = pick)
             .background(if (t.on) Accent.copy(alpha = 0.16f) else Color.Transparent).padding(horizontal = 12.dp, vertical = 12.dp),

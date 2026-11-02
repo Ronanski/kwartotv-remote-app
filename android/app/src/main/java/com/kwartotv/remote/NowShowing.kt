@@ -14,11 +14,14 @@ private val VOLUME = listOf(NotifButton(Cmd.VOL_DOWN, "Vol −"), NotifButton(Cm
  * [tvApp] is what the TV reports ("netflix", "youtube", "live", "locked", "Home"…). A video or channel on screen wins;
  * otherwise the music (also behind the lock screen); otherwise the plain connection line.
  */
-fun nowShowing(connected: Boolean, status: String, channelNumber: Int, channelName: String?, music: MusicState, tvApp: String): NowShowing {
+fun nowShowing(connected: Boolean, status: String, channelNumber: Int, channelName: String?, music: MusicState, tvApp: String, netflix: NetflixPlaying? = null): NowShowing {
     if (!connected) return NowShowing(ShowMode.Plain, "KwartoTV Remote", status, false, emptyList())
     val videoApp = when (tvApp) { "netflix" -> "Netflix"; "youtube" -> "YouTube"; else -> null }
     return when {
-        videoApp != null -> NowShowing(ShowMode.Video, "Watching $videoApp", "On the TV", true, listOf(
+        videoApp != null -> NowShowing(ShowMode.Video,
+            netflix?.title?.takeIf { videoApp == "Netflix" && netflix.dur > 0 && it.isNotBlank() } ?: "Watching $videoApp",
+            netflix?.takeIf { videoApp == "Netflix" && it.dur > 0 }?.let { listOf(it.episode, "${clock(it.pos)} / ${clock(it.dur)}").filter { x -> x.isNotBlank() }.joinToString(" · ") } ?: "On the TV",
+            netflix?.takeIf { videoApp == "Netflix" && it.dur > 0 }?.paused?.not() ?: true, listOf(
             NotifButton(Cmd.SEEK + ":-10", "−10 s"), NotifButton(Cmd.PLAY_PAUSE, "Play/Pause"), NotifButton(Cmd.SEEK + ":10", "+10 s")) + VOLUME)
         tvApp == "live" -> NowShowing(ShowMode.Live, if (channelNumber > 0) "$channelNumber  ${channelName.orEmpty()}".trim() else "Live TV", "Live TV on the TV", true, listOf(
             NotifButton(Cmd.CH_PREV, "Ch −"), NotifButton(Cmd.PLAY_PAUSE, "Play/Pause"), NotifButton(Cmd.CH_NEXT, "Ch +")) + VOLUME)

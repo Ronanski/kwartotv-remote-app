@@ -163,6 +163,45 @@ const check = (ok, name) => { console.log((ok ? 'PASS ' : 'FAIL ') + name); if (
   await m.evaluate(() => window.__kwNetflix.setTrack('s', 1));
   check((await m.evaluate(() => window.__picked)).join() === 'English (CC)', 'netflix: picking from the menu clicks Netflix\'s own item');
 
+  // Watching from the phone: what plays (title, time), seek to a time, speed, episodes, "Are you still watching?".
+  const w = await browser.newPage();
+  await w.route('https://www.netflix.com/**', r => {
+    if (r.request().url().includes('/metadata?movieid=')) return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ video: { title: 'Dark', currentEpisode: 80100173,
+      seasons: [{ seq: 1, title: 'Season 1', episodes: [{ episodeId: 80100172, seq: 1, title: 'Secrets' }, { episodeId: 80100173, seq: 2, title: 'Lies' }] },
+                { seq: 2, title: 'Season 2', episodes: [{ episodeId: 80200001, seq: 1, title: 'Beginnings and Endings' }] }] } }) });
+    return r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' });
+  });
+  await w.goto('https://www.netflix.com/watch/80100173');
+  await w.evaluate(() => {
+    window.__msgs = []; window.chrome = { webview: { postMessage: m => window.__msgs.push(String(m)) } };
+    const p = window.__wp = { t: 125000, paused: false, getCurrentTime() { return this.t; }, getDuration: () => 3000000, isPaused() { return this.paused; }, seek(ms) { this.t = ms; }, play() {}, pause() {} };
+    window.netflix = { appContext: { state: { playerApp: { getAPI: () => ({ videoPlayer: { getAllPlayerSessionIds: () => ['watch-1'], getVideoPlayerBySessionId: () => p } }) } } } };
+    document.body.innerHTML = '<video></video><div data-uia="video-title"><h4>Dark</h4><span>S1:E2</span><span>Lies</span></div>';
+  });
+  await w.evaluate(nscript);
+  await w.waitForTimeout(1300);
+  const nowOf = async () => { const m = (await w.evaluate(() => window.__msgs)).filter(x => x.startsWith('netflix:now:')).pop(); return m ? JSON.parse(m.slice(12)) : null; };
+  let now1 = await nowOf();
+  check(now1 && now1.t === 'Dark' && now1.e === 'S1:E2 · Lies' && Math.round(now1.pos) === 125 && now1.dur === 3000 && !now1.paused && !now1.still,
+    `netflix: the phone is told what plays and where (${JSON.stringify(now1)})`);
+  await w.evaluate(() => window.__kwNetflix.seekTo(1800));
+  check(await w.evaluate(() => window.__wp.t) === 1800000, 'netflix: the phone\'s progress bar jumps to a time (30:00)');
+  await w.evaluate(() => window.__kwNetflix.speed(1.5));
+  check(await w.evaluate(() => document.querySelector('video').playbackRate) === 1.5, 'netflix: speed 1.5x from the phone');
+  await w.evaluate(() => window.__kwNetflix.episodes());
+  await w.waitForTimeout(800);
+  const epm = (await w.evaluate(() => window.__msgs)).filter(x => x.startsWith('netflix:episodes:')).pop();
+  const ep = epm ? JSON.parse(epm.slice(17)) : null;
+  check(ep && ep.show === 'Dark' && ep.seasons.length === 2 && ep.seasons[0].eps.map(e => e.n).join() === '1. Secrets,2. Lies' && ep.seasons[0].eps[1].on && ep.seasons[1].eps[0].id === '80200001',
+    `netflix: the episodes and seasons go to the phone (${epm})`);
+  await w.evaluate(() => { document.body.insertAdjacentHTML('beforeend', '<button data-uia="interrupt-autoplay-continue" onclick="window.__cont = 1; this.remove()">Continue Watching</button>'); });
+  await w.waitForTimeout(1300);
+  check((await nowOf()).still, 'netflix: "Are you still watching?" shows on the phone');
+  check(await w.evaluate(() => window.__kwNetflix.cont()) === 'clicked' && await w.evaluate(() => window.__cont) === 1, 'netflix: Continue watching from the phone');
+  await w.evaluate(() => window.__kwNetflix.playEpisode('80200001'));
+  await w.waitForTimeout(800);
+  check(w.url() === 'https://www.netflix.com/watch/80200001', `netflix: an episode picked on the phone plays (${w.url()})`);
+
   await n.evaluate(() => window.__kwNetflix.search('stranger things'));
   await n.waitForTimeout(800);
   check(n.url() === 'https://www.netflix.com/search?q=stranger%20things', `netflix: search from the phone opens the results (${n.url()})`);

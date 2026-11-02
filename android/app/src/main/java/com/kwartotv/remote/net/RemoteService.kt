@@ -51,6 +51,8 @@ class RemoteService : Service() {
     companion object {
         private const val CHANNEL = "remote"
         private const val ID = 7
+        private const val TYPE_ID = 8
+        private const val TYPE_CHANNEL = "type"
         private const val ACTION_STOP = "com.kwartotv.remote.STOP"
         private const val ACTION_CMD = "com.kwartotv.remote.CMD"
         private const val EXTRA_CMD = "cmd"
@@ -106,8 +108,28 @@ class RemoteService : Service() {
             val tvs = store.load()
             (tvs.firstOrNull { it.deviceId == store.selectedId } ?: tvs.firstOrNull())?.let { client.ensureConnected(it) }
         }
+        // The TV waits for text while the remote app is not on screen: a notification that opens the type box.
+        if (Build.VERSION.SDK_INT >= 26) {
+            nm.createNotificationChannel(NotificationChannel(TYPE_CHANNEL, "TV wants text", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "When a box on the TV waits for text (search, sign-in)"
+            })
+        }
         scope.launch {
-            combine(client.conn, client.now, client.music, client.tvApp) { c, n, m, app -> showing(c, n, m, app) }.collect { s ->
+            combine(client.textRequest, client.appVisible) { r, visible -> if (visible) null else r }.collect { r ->
+                if (r == null) { nm.cancel(TYPE_ID); return@collect }
+                val n = Notification.Builder(this@RemoteService, TYPE_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_remote)
+                    .setContentTitle(r.title ?: "The TV is waiting for text")
+                    .setContentText("Tap to type it on the phone")
+                    .setContentIntent(openApp())
+                    .setAutoCancel(true)
+                    .setCategory(Notification.CATEGORY_MESSAGE)
+                    .build()
+                try { nm.notify(TYPE_ID, n) } catch (_: SecurityException) { }
+            }
+        }
+        scope.launch {
+            combine(client.conn, client.now, client.music, client.tvApp, client.netflixNow) { c, n, m, app, nf -> showing(c, n, m, app, nf) }.collect { s ->
                 shown = s
                 update(s)
                 try { nm.notify(ID, build(s)) } catch (_: SecurityException) { }
@@ -116,14 +138,14 @@ class RemoteService : Service() {
         }
     }
 
-    private fun showing(c: Conn, n: Now, m: com.kwartotv.remote.MusicState, app: String): NowShowing {
+    private fun showing(c: Conn, n: Now, m: com.kwartotv.remote.MusicState, app: String, nf: com.kwartotv.remote.NetflixPlaying? = null): NowShowing {
         val status = when (c) {
             Conn.Connected -> if (n.number > 0) "Connected · ${n.number}  ${n.name.orEmpty()}" else "Connected to the TV"
             Conn.Connecting, Conn.Retrying -> "Reconnecting to the TV…"
             is Conn.Rejected -> c.reason
             Conn.Idle -> "Not connected. Tap to open the remote."
         }
-        return nowShowing(c == Conn.Connected, status, n.number, n.name, m, app)
+        return nowShowing(c == Conn.Connected, status, n.number, n.name, m, app, nf)
     }
 
     /** One of the three main buttons of what is shown (0 left, 1 play/pause, 2 right). */
@@ -200,7 +222,7 @@ class RemoteService : Service() {
             ACTION_CMD -> intent.getStringExtra(EXTRA_CMD)?.let { sendCmd(it) }
         }
         val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
-        val s = shown ?: showing(client.conn.value, client.now.value, client.music.value, client.tvApp.value)
+        val s = shown ?: showing(client.conn.value, client.now.value, client.music.value, client.tvApp.value, client.netflixNow.value)
         try { ServiceCompat.startForeground(this, ID, build(s), type) } catch (_: Exception) { stopSelf() }
         return START_STICKY
     }

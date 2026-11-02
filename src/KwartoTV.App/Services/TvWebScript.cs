@@ -244,7 +244,25 @@ public static class TvWebScript
   function typing(el) { return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable); }
   function netflixWatch() { return /netflix\./.test(location.host) && /\/watch\//.test(location.pathname); }
   function fullVideo() { var f = document.fullscreenElement; return !!f && (f.tagName === 'VIDEO' || !!f.querySelector('video')); }
-  function watching() { return netflixWatch() || fullVideo(); }
+  // Netflix's player controls, like the Netflix TV app: ▲ or ▼ while watching shows them and the highlight moves on
+  // its buttons (Audio & Subtitles, Episodes, Next, Speed...); Back or 8 s without a key hides them again.
+  var ctlUntil = 0;
+  function inControls() { return netflixWatch() && Date.now() < ctlUntil; }
+  function wakeControls() {
+    var t = document.querySelector('.watch-video, [data-uia=""player""]') || document.body, r = t.getBoundingClientRect();
+    try { t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.left + r.width / 2 + Math.random() * 6, clientY: r.top + r.height / 2 })); } catch (x) { }
+  }
+  function enterControls(dir) {
+    ctlUntil = Date.now() + 8000; wakeControls();
+    setTimeout(function () {
+      var want = document.querySelector('[data-uia=""interrupt-autoplay-continue""]') ||
+        document.querySelector(dir === 'down' ? '[data-uia=""control-audio-subtitle""]' : '[data-uia=""control-play-pause-pause""],[data-uia=""control-play-pause-play""]') ||
+        document.querySelector('[data-uia^=""control-""]');
+      if (want) focus(want);
+    }, 250);
+  }
+  setInterval(function () { if (inControls()) wakeControls(); }, 2000);
+  function watching() { return (netflixWatch() && !inControls()) || fullVideo(); }
   function theVideo() { var f = document.fullscreenElement, v = (f && (f.tagName === 'VIDEO' ? f : f.querySelector('video'))) || document.querySelector('video'); return v; }
   // A site's home page (/, /browse, /en, /en-us/ ...): Back from here returns to KwartoTV.
   function atRoot() { return /^\/(browse|[a-z]{2}(-[a-z]{2})?)?\/?$/i.test(location.pathname); }
@@ -405,7 +423,11 @@ public static class TvWebScript
   function holdBack() { okLong = true; if (menuOpen) closeMenu(); back(); }
   function okShort() {
     if (menuOpen) { runItem(); return; }
-    if (watching()) { var v = theVideo(); if (v) { if (v.paused) v.play(); else v.pause(); } return; }
+    if (watching()) {
+      // On Netflix: ""Are you still watching?"" is answered by OK; play/pause goes through Netflix's own player.
+      if (netflixWatch() && window.__kwNetflix) { if (window.__kwNetflix.cont() === 'none') window.__kwNetflix.toggle(); return; }
+      var v = theVideo(); if (v) { if (v.paused) v.play(); else v.pause(); } return;
+    }
     var el = cur && document.contains(cur) ? cur : (document.activeElement !== document.body ? document.activeElement : null);
     if (!el) return;
     if (el.tagName === 'VIDEO') playFull(el); else { if (typing(el)) el.focus(); el.click(); }
@@ -433,8 +455,15 @@ public static class TvWebScript
       else if (e.key === 'ArrowRight' || isBack || e.key === 'Backspace') closeMenu();
       return;
     }
-    // While a video plays: OK pauses/plays, hold OK or Back leaves, ◀ ▶ skip 10 s. On Netflix its own player keys also work.
+    // Netflix's controls shown: the highlight moves on them; Back hides them (and stays in the video).
+    if (inControls()) {
+      ctlUntil = Date.now() + 8000; wakeControls();
+      if (isBack || e.key === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); ctlUntil = 0; cur = null; try { document.activeElement && document.activeElement.blur(); } catch (x) { } return; }
+    }
+    // While a video plays: OK pauses/plays, hold OK or Back leaves, ◀ ▶ skip 10 s. On Netflix its own player keys also
+    // work; ▲ ▼ show Netflix's controls (as on the Netflix TV app).
     if (watching()) {
+      if (netflixWatch() && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); e.stopImmediatePropagation(); enterControls(e.key === 'ArrowDown' ? 'down' : 'up'); return; }
       var v = theVideo();
       if (isBack || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); back(); }
       else if (e.key === 'Enter') okDown(e);
