@@ -40,7 +40,7 @@ class PhoneButtonsTest {
     private fun press(what: String, vararg expect: String) {
         ui.clearSent()
         reach(rule.onNodeWithContentDescription(what)).performClick()
-        ui.settle()
+        ui.settle(); ui.settle()
         assertEquals("button \"$what\"", expect.toList(), ui.sent())
         log += "PRESS \"$what\" -> ${expect.joinToString(" + ").ifEmpty { "(nothing sent)" }}"
     }
@@ -49,13 +49,15 @@ class PhoneButtonsTest {
         ui.clearSent()
         val n = reach(rule.onAllNodesWithText(text).onLast())
         // in a pop-up (menu, dialog) the touch cannot always be injected: press it the way TalkBack does
-        try { n.performClick() } catch (_: AssertionError) { n.performSemanticsAction(SemanticsActions.OnClick) }
+        try { n.performClick() } catch (_: AssertionError) {
+            if (rule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()) rule.onAllNodesWithText(text).onLast().performSemanticsAction(SemanticsActions.OnClick)
+        }
         ui.settle()
         assertEquals("\"$text\"", expect.toList(), ui.sent())
         log += "TAP \"$text\" -> ${expect.joinToString(" + ").ifEmpty { "(nothing sent)" }}"
     }
 
-    private fun tab(name: String) { rule.onAllNodesWithText(name).onLast().performClick(); ui.settle() }
+    private fun tab(name: String) { rule.onAllNodesWithText(name).onLast().performClick(); ui.settle(); ui.settle() }
 
     private fun start(): PhoneUi { ui = PhoneUi(rule); ui.show(); return ui }
 

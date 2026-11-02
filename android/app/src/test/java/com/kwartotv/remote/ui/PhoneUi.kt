@@ -57,7 +57,20 @@ class PhoneUi(private val rule: AndroidComposeTestRule<ActivityScenarioRule<Comp
         // Drawn straight from the screen (Compose's own capture waits for a frame, which never comes with the clock held).
         val bmp = rule.runOnUiThread {
             val v = rule.activity.window.decorView.rootView
-            Bitmap.createBitmap(v.width.coerceAtLeast(1), v.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888).also { v.draw(android.graphics.Canvas(it)) }
+            val b = Bitmap.createBitmap(v.width.coerceAtLeast(1), v.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(b)
+            // every window, in order: the app, then its pop-ups (bottom sheets, menus, dialogs) on top
+            val windows = try {
+                val wmg = Class.forName("android.view.WindowManagerGlobal").getMethod("getInstance").invoke(null)
+                @Suppress("UNCHECKED_CAST")
+                (wmg.javaClass.getDeclaredField("mViews").apply { isAccessible = true }.get(wmg) as List<android.view.View>).toList()
+            } catch (_: Exception) { listOf(v) }
+            (if (v in windows) windows else listOf(v) + windows).forEach { w ->
+                if (w.width <= 0 || w.height <= 0 || !w.isShown) return@forEach
+                val at = IntArray(2); w.getLocationOnScreen(at)
+                canvas.save(); canvas.translate(at[0].toFloat(), at[1].toFloat()); w.draw(canvas); canvas.restore()
+            }
+            b
         }
         val out = ByteArrayOutputStream()
         bmp.compress(Bitmap.CompressFormat.JPEG, 72, out)

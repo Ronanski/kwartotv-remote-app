@@ -179,6 +179,13 @@ private fun Preview(s: LockState, jpeg: ByteArray?, songOn: Boolean, song: Strin
             Image(bitmap, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
         }
+        // the classic clock sits in a thin ring, as on the TV
+        if (s.clock == "classic") androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val r = size.height * 0.42f
+            drawCircle(Color.White.copy(alpha = 0.12f), r, center, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
+            drawArc(Color(0xFFFF7A45).copy(alpha = 0.8f), -90f, 120f, false, androidx.compose.ui.geometry.Offset(center.x - r, center.y - r),
+                androidx.compose.ui.geometry.Size(r * 2, r * 2), style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
+        }
         val corner = s.clock == "corner"
         Column(
             Modifier.fillMaxSize().padding(16.dp),
@@ -187,7 +194,6 @@ private fun Preview(s: LockState, jpeg: ByteArray?, songOn: Boolean, song: Strin
         ) {
             val size = when (s.clock) { "big" -> 56.sp; "corner" -> 30.sp; else -> 40.sp }
             Row(verticalAlignment = Alignment.Bottom) {
-                if (s.clock == "classic") Box(Modifier.size(10.dp))
                 Text(now.format(DateTimeFormatter.ofPattern("h:mm")), color = color, fontFamily = Figtree, fontSize = size, lineHeight = size,
                     fontWeight = if (s.clock == "big") FontWeight.Normal else FontWeight.Medium)
                 Text(" " + now.format(DateTimeFormatter.ofPattern("a")).lowercase(), color = color.copy(alpha = 0.7f), style = T.mini, modifier = Modifier.padding(bottom = 4.dp))
