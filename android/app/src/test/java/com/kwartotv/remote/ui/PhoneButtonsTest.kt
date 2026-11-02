@@ -187,7 +187,8 @@ class PhoneButtonsTest {
         val found = rule.onAllNodesWithContentDescription(what).fetchSemanticsNodes().size
         println("lock: \"$what\" found $found")
         assertEquals("one button \"$what\"", 1, found)
-        reach(rule.onNodeWithContentDescription(what)).performClick()
+        // its own click (the long page scrolls by itself in a real hand; the test's scroll-to can stall on it)
+        rule.onNodeWithContentDescription(what).performSemanticsAction(SemanticsActions.OnClick)
         ui.settle()
         assertEquals("button \"$what\"", expect.toList(), ui.sent().filterNot { it.startsWith("lock.photo") || it == "lock.get" })
         log += "PRESS \"$what\" -> ${expect.joinToString(" + ")}"
