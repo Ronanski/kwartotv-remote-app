@@ -5,6 +5,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  yt-tv-search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm i playwright@1.47.2 && npx playwright install --with-deps chromium
+      - run: node tools/probe/yt-tv-search.js "$(grep -A1 'TvUserAgent =' src/KwartoTV.App/Services/WebAppWindow.cs | tail -1 | sed -E 's/^ *"(.*)";.*$/\1/')"
+
   epg:
     runs-on: ubuntu-latest
     steps:
