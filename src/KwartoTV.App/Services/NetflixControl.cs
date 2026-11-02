@@ -142,7 +142,8 @@ public static class NetflixControl
     speed: function (r) { var v = document.querySelector('video'); if (!v) return 'none'; window.__kwRate = r; v.playbackRate = r; return 'video'; },
     // The title's Play / Resume (its details open on the TV), as if OK was pressed on it.
     play: function () {
-      var b = playButton();
+      var m = modalEl(); if (!m) return 'none';   // only a title's own Play / Resume, never another button on the page
+      var b = playButton(m);
       if (b) { b.click(); return 'clicked'; }
       var id = modalId();
       if (id) { location.href = 'https://www.netflix.com/watch/' + id; return 'watch'; }
